@@ -20,7 +20,7 @@ export default function Home() {
     <main>
       <header className="nav-shell">
         <Link href="/" className="brand" aria-label="FG TOW, inicio">
-          <Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority />
+          <Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized />
         </Link>
         <nav aria-label="Navegación principal">
           <a href="#soluciones">Soluciones</a>
@@ -96,7 +96,7 @@ export default function Home() {
         <LeadForm />
       </section>
 
-      <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/catalogo">Catálogo</Link><a href="#cotizar">Cotizar</a></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
+      <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/catalogo">Catálogo</Link><a href="#cotizar">Cotizar</a></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
     </main>
   );
 }
