@@ -1,0 +1,24 @@
+import Link from "next/link";
+import Image from "next/image";
+
+const catalog = [
+  { id: "utility", family: "Carga", model: "Utility 800", price: "$36,900", size: "1.50 × 2.45 m", axle: "1 eje", capacity: "A definir por ingeniería", uses: "Herramienta, jardinería, carga ligera", includes: ["Plataforma de acero", "Puntos de amarre", "Iluminación reglamentaria", "Tirón y cadenas de seguridad"] },
+  { id: "atv", family: "Aventura", model: "ATV Uno", price: "$41,900", size: "1.50 × 3.05 m", axle: "1 eje", capacity: "Configurada al vehículo", uses: "1 cuatrimoto o hasta 2 motocicletas", includes: ["Rampa de acceso", "4 puntos de amarre", "Piso antiderrapante", "Salpicaderas reforzadas"] },
+  { id: "rzr", family: "Aventura", model: "RZR Sport", price: "$49,900", size: "1.94 × 3.60 m", axle: "1 eje / tándem opcional", capacity: "Configurada al UTV", uses: "RZR, Can-Am y UTV compactos", includes: ["Cama baja", "Rampas reforzadas", "Anclajes regulables", "Opciones de freno y malacate"] },
+  { id: "adventure", family: "Aventura", model: "Adventure Tándem", price: "$69,900", size: "2.07 × 4.20 m", axle: "2 ejes", capacity: "Según configuración", uses: "UTV largo, dos ATV y carga mixta", includes: ["Doble eje", "Mayor estabilidad", "Rampas reforzadas", "Frenos y malacate opcionales"] },
+  { id: "food", family: "Negocio", model: "Food Start", price: "$129,900", size: "2.40 × 1.80 m", axle: "1 eje", capacity: "Conceptos compactos", uses: "Café, bebidas, snacks y postres", includes: ["Ventana de servicio", "Instalación eléctrica base", "Cubierta de trabajo", "Espacio listo para rotulación"] },
+  { id: "food-pro", family: "Negocio", model: "Food Pro", price: "$229,900", size: "3.60 × 2.00 m", axle: "2 ejes", capacity: "Cocina móvil personalizada", uses: "Hamburguesas, tacos, cocina caliente", includes: ["Superficies grado alimenticio", "Sistema eléctrico e hidráulico", "Preparación para gas y extracción", "Distribución según menú"] },
+  { id: "custom", family: "Especial", model: "Custom", price: "Cotización", size: "A medida", axle: "Según proyecto", capacity: "Según ingeniería", uses: "Tienda móvil, activación, taller, oficina", includes: ["Diseño conceptual", "Distribución personalizada", "Acabados de marca", "Integración de accesorios"] },
+];
+
+export const metadata = { title: "Catálogo de remolques", description: "Modelos base FG TOW para carga, aventura, food trailers y proyectos especiales." };
+
+export default function Catalogo() {
+  return <main className="catalog-page">
+    <header className="nav-shell"><Link href="/" className="brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority /></Link><nav><Link href="/">Inicio</Link><a href="#modelos">Modelos</a><Link href="/#proceso">Proceso</Link></nav><Link className="button button-small" href="/#cotizar">Cotizar proyecto</Link></header>
+    <section className="catalog-hero"><span className="eyebrow">Catálogo base 2026</span><h1>El punto de partida<br /><em>para tu remolque.</em></h1><p>Siete configuraciones para cotizar rápido. Cada una puede ajustarse en medidas, ejes, carga, accesos, amarres, acabados y equipamiento.</p></section>
+    <section className="catalog-list" id="modelos">{catalog.map((item, index) => <article id={item.id} className="catalog-item" key={item.model}><div className="catalog-number">{String(index + 1).padStart(2, "0")}</div><div className="catalog-main"><span>{item.family}</span><h2>FG {item.model}</h2><p>{item.uses}</p><ul>{item.includes.map(feature => <li key={feature}>{feature}</li>)}</ul></div><div className="catalog-spec"><dl><div><dt>Medida base</dt><dd>{item.size}</dd></div><div><dt>Tren rodante</dt><dd>{item.axle}</dd></div><div><dt>Capacidad</dt><dd>{item.capacity}</dd></div></dl><small>Precio de referencia desde</small><strong>{item.price}</strong><Link className="button" href={`/#cotizar`}>Configurar este modelo →</Link></div></article>)}</section>
+    <section className="catalog-note"><div><span className="eyebrow">Importante</span><h2>La capacidad no se adivina.</h2></div><p>Antes de fabricar confirmamos peso de carga, distribución, vehículo de arrastre, tipo de camino y accesorios. Los precios son referencias comerciales y cambian según ingeniería, materiales, equipamiento, impuestos y entrega.</p></section>
+    <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/">Inicio</Link><Link href="/#cotizar">Cotizar</Link></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
+  </main>;
+}
