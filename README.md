@@ -1,4 +1,8 @@
-# vinext-starter
+# FG TOW
+
+Sitio comercial y cotizador 2D de remolques FG TOW. Consulta `IMPLEMENTACION.md` para la configuración de Supabase, correo y Cloudflare.
+
+## Base técnica
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and

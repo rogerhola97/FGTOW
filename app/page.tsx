@@ -6,7 +6,7 @@ const products = [
   { code: "01", name: "Utility 800", use: "Carga ligera y trabajo diario", size: "1.50 × 2.45 m", price: "$36,900", className: "utility" },
   { code: "02", name: "ATV Uno", use: "Cuatrimoto o hasta 2 motocicletas", size: "1.50 × 3.05 m", price: "$41,900", className: "atv" },
   { code: "03", name: "RZR Sport", use: "RZR, Can-Am y UTV", size: "1.94 × 3.60 m", price: "$49,900", className: "rzr" },
-  { code: "04", name: "Food Start", use: "Café, snacks y conceptos compactos", size: "2.40 × 1.80 m", price: "$129,900", className: "food" },
+  { code: "04", name: "Food Start", use: "Café, snacks y conceptos compactos", size: "1.80 × 2.00 m", price: "$49,000", className: "food" },
 ];
 
 const reasons = [
@@ -26,8 +26,9 @@ export default function Home() {
           <a href="#soluciones">Soluciones</a>
           <a href="#proceso">Proceso</a>
           <Link href="/catalogo">Catálogo</Link>
+          <Link href="/cotizador">Cotizador 2D</Link>
         </nav>
-        <a className="button button-small" href="#cotizar">Cotizar proyecto</a>
+        <Link className="button button-small" href="/cotizador">Diseñar remolque</Link>
       </header>
 
       <section className="hero">
@@ -36,7 +37,7 @@ export default function Home() {
           <h1>Tu proyecto,<br /><em>listo para avanzar.</em></h1>
           <p>Remolques compactos para negocio, aventura y trabajo. Diseñamos cada solución alrededor de lo que necesitas mover.</p>
           <div className="hero-actions">
-            <a className="button" href="#cotizar">Diseñar mi remolque <span>→</span></a>
+            <Link className="button" href="/cotizador">Diseñar mi remolque <span>→</span></Link>
             <Link className="text-link" href="/catalogo">Explorar catálogo <span>↗</span></Link>
           </div>
           <div className="trust-row">
@@ -92,7 +93,7 @@ export default function Home() {
       </section>
 
       <section className="quote-section" id="cotizar">
-        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Déjanos los datos básicos. Te contactaremos para afinar medidas, carga, equipamiento y fecha objetivo.</p><div className="quote-promise"><strong>Respuesta personal</strong><span>Sin configuradores genéricos ni cotizaciones automáticas.</span></div></div>
+        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Para un food trailer puedes crear primero tu distribución en el plano 2D. Para plataformas, RZR, cuatrimotos y proyectos especiales, déjanos los datos básicos.</p><Link className="button quote-config-button" href="/cotizador">Abrir cotizador 2D →</Link><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
         <LeadForm />
       </section>
 

@@ -1,13 +1,16 @@
-import { getDb } from "../../../db";
-import { leads } from "../../../db/schema";
-
 type Payload = Record<string, unknown>;
-const clean = (value: unknown, max = 500) => typeof value === "string" ? value.trim().slice(0, max) : "";
+
+const clean = (value: unknown, max = 500) =>
+  typeof value === "string" ? value.trim().slice(0, max) : "";
 
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as Payload;
-    if (clean(payload.company)) return Response.json({ ok: true }, { status: 201 });
+
+    // Campo señuelo: los bots suelen llenarlo, pero una persona nunca lo ve.
+    if (clean(payload.company)) {
+      return Response.json({ ok: true }, { status: 201 });
+    }
 
     const name = clean(payload.name, 100);
     const phone = clean(payload.phone, 40);
@@ -19,17 +22,59 @@ export async function POST(request: Request) {
     const consent = clean(payload.consent) === "yes";
 
     if (!name || !phone || !city || !productType || !message || !consent) {
-      return Response.json({ error: "Completa los campos obligatorios." }, { status: 400 });
-    }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return Response.json({ error: "El correo no es válido." }, { status: 400 });
+      return Response.json(
+        { error: "Completa los campos obligatorios." },
+        { status: 400 },
+      );
     }
 
-    const db = getDb();
-    const [lead] = await db.insert(leads).values({ name, phone, email: email || null, city, productType, budget: budget || null, message, consent }).returning({ id: leads.id });
-    return Response.json({ ok: true, id: lead.id }, { status: 201 });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return Response.json(
+        { error: "El correo no es válido." },
+        { status: 400 },
+      );
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
+    const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+    if (!supabaseUrl || !supabasePublishableKey) {
+      throw new Error("Supabase no está configurado.");
+    }
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/leads`, {
+      method: "POST",
+      headers: {
+        apikey: supabasePublishableKey,
+        "content-type": "application/json",
+        prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        name,
+        phone,
+        email: email || null,
+        city,
+        product_type: productType,
+        budget: budget || null,
+        message,
+        consent,
+        source: "website",
+        status: "new",
+      }),
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      console.error("Supabase rechazó el registro:", response.status, details);
+      throw new Error("No fue posible guardar la solicitud en Supabase.");
+    }
+
+    return Response.json({ ok: true }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Error inesperado";
-    return Response.json({ error: message.includes("no such table") ? "La base de cotizaciones aún no está inicializada." : "No fue posible guardar la solicitud." }, { status: 500 });
+    console.error("Error al guardar una solicitud:", error);
+    return Response.json(
+      { error: "No fue posible guardar la solicitud." },
+      { status: 500 },
+    );
   }
 }
