@@ -3,7 +3,7 @@
 ## Qué incluye
 
 - Inicio y catálogo adaptables a celular, tableta y computadora.
-- Cotizador 2D para food trailers en `/cotizador`.
+- Cotizador 2D para food trucks en `/cotizador`.
 - Nueve medidas permitidas, desde 1.80 × 2.00 m hasta 2.20 × 6.00 m.
 - Biblioteca de planchas, baño María, freidora, quemadores, tarja, mesas, campana, repisas y otros componentes.
 - Arrastre, giro y ajuste de medidas dentro del plano.

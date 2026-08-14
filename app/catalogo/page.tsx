@@ -13,7 +13,7 @@ const catalog = [
   { id: "custom", family: "Especial", model: "Custom", price: "Cotización", size: "A medida", axle: "Según proyecto", capacity: "Según ingeniería", uses: "Tienda móvil, activación, taller, oficina", includes: ["Diseño conceptual", "Distribución personalizada", "Acabados de marca", "Integración de accesorios"] },
 ];
 
-export const metadata = { title: "Catálogo de remolques", description: "Modelos base FG TOW para carga, aventura, food trailers y proyectos especiales." };
+export const metadata = { title: "Catálogo de remolques", description: "Modelos base FG TOW para carga, aventura, food trucks y proyectos especiales." };
 
 export default function Catalogo() {
   return <main className="catalog-page">

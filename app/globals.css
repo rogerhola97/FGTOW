@@ -303,8 +303,8 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
   .price-panel>* { grid-column:auto!important; grid-row:auto!important; }
   .price-base { padding:18px 0; border-left:0; border-right:0; border-bottom:1px solid var(--line); }
   .equipment-library { display:grid; grid-template-columns:1fr 1fr; max-height:420px; }
-  .plan-scroll { min-height:520px; justify-content:flex-start; }
-  .trailer-plan { min-width:440px; }
+  .plan-scroll { min-height:0; padding:14px; justify-content:center; }
+  .trailer-plan { width:100%; min-width:0; max-width:100%; max-height:70vh; }
   .workspace-head { align-items:flex-start; flex-direction:column; gap:10px; }
   .item-editor { grid-template-columns:1fr 1fr; }
   .item-editor>div { grid-column:1/-1; }
@@ -317,18 +317,26 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
   .document-head>div { text-align:left; }
   .document-banner { grid-template-columns:1fr; }
   .document-customer { grid-template-columns:1fr; gap:10px; }
-  .document-plan-wrap { grid-template-columns:1fr; }
+  .document-plan-wrap { grid-template-columns:1fr; min-height:0; }
   .document-plan { max-height:420px; }
   .document-grid { grid-template-columns:1fr; gap:20px; }
   .document-total { width:100%; }
   .quote-actions { margin:0 16px 70px; align-items:stretch; flex-direction:column; }
 }
+@media (max-width:600px) {
+  .config-sidebar,.price-panel { padding:16px; }
+  .equipment-library { max-height:340px; }
+  .equipment-library button strong { font-size:10px; }
+  .equipment-library button small { font-size:7px; }
+}
 @media (max-width:480px) {
   .configurator-intro h1 { font-size:40px; }
   .equipment-library { grid-template-columns:1fr; }
   .plan-scroll { padding:8px; }
-  .item-editor { grid-template-columns:1fr 1fr; padding:14px; }
+  .trailer-plan { max-height:62vh; }
+  .item-editor { grid-template-columns:1fr 1fr; padding:14px; gap:8px; }
   .item-editor>button { padding:0 7px; }
+  .price-lines { max-height:220px; }
   .quote-document { padding:22px 14px; }
   .document-head img { width:175px; }
 }

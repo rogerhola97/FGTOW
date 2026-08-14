@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TrailerConfigurator } from "../components/TrailerConfigurator";
 
 export const metadata = {
-  title: "Cotizador 2D de food trailers",
-  description: "Diseña la distribución de tu food trailer FG TOW en un plano 2D y recibe una cotización aproximada.",
+  title: "Cotizador 2D de food trucks",
+  description: "Diseña la distribución de tu food truck FG TOW en un plano 2D y recibe una cotización aproximada.",
 };
 
 export default function CotizadorPage() {

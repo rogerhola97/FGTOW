@@ -93,7 +93,7 @@ export default function Home() {
       </section>
 
       <section className="quote-section" id="cotizar">
-        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Para un food trailer puedes crear primero tu distribución en el plano 2D. Para plataformas, RZR, cuatrimotos y proyectos especiales, déjanos los datos básicos.</p><Link className="button quote-config-button" href="/cotizador">Abrir cotizador 2D →</Link><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
+        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Para un food truck puedes crear primero tu distribución en el plano 2D. Para plataformas, RZR, cuatrimotos y proyectos especiales, déjanos los datos básicos.</p><Link className="button quote-config-button" href="/cotizador">Abrir cotizador 2D →</Link><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
         <LeadForm />
       </section>
 
