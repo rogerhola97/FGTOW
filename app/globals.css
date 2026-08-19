@@ -303,8 +303,8 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
   .price-panel>* { grid-column:auto!important; grid-row:auto!important; }
   .price-base { padding:18px 0; border-left:0; border-right:0; border-bottom:1px solid var(--line); }
   .equipment-library { display:grid; grid-template-columns:1fr 1fr; max-height:420px; }
-  .plan-scroll { min-height:0; padding:14px; justify-content:center; }
-  .trailer-plan { width:100%; min-width:0; max-width:100%; max-height:70vh; }
+  .plan-scroll { min-height:0; padding:14px; align-items:flex-start; justify-content:center; }
+  .trailer-plan { width:100%; min-width:0; max-width:100%; height:auto; }
   .workspace-head { align-items:flex-start; flex-direction:column; gap:10px; }
   .item-editor { grid-template-columns:1fr 1fr; }
   .item-editor>div { grid-column:1/-1; }
@@ -333,7 +333,6 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
   .configurator-intro h1 { font-size:40px; }
   .equipment-library { grid-template-columns:1fr; }
   .plan-scroll { padding:8px; }
-  .trailer-plan { max-height:62vh; }
   .item-editor { grid-template-columns:1fr 1fr; padding:14px; gap:8px; }
   .item-editor>button { padding:0 7px; }
   .price-lines { max-height:220px; }
