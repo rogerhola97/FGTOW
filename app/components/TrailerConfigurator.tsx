@@ -3,12 +3,14 @@
 import Image from "next/image";
 import { FormEvent, PointerEvent, useMemo, useRef, useState } from "react";
 import {
-  EQUIPMENT,
+  MODEL_META,
+  ModelId,
   PlacedEquipment,
-  TRAILER_PRESETS,
   calculateQuote,
   getEquipment,
+  getEquipmentForModel,
   getPreset,
+  getPresetsForModel,
   money,
   validateLayout,
 } from "../lib/quoteCatalog";
@@ -23,7 +25,26 @@ function overlaps(a: PlacedEquipment, b: PlacedEquipment) {
   return a.xCm < b.xCm + b.widthCm && a.xCm + a.widthCm > b.xCm && a.yCm < b.yCm + b.depthCm && a.yCm + a.depthCm > b.yCm;
 }
 
-function starterLayout(): PlacedEquipment[] {
+function starterLayout(modelId: ModelId): PlacedEquipment[] {
+  if (modelId === "cargo") {
+    return [
+      { instanceId: uid(), typeId: "caja-herramientas", xCm: 10, yCm: 10, widthCm: 60, depthCm: 40, rotation: 0 },
+      { instanceId: uid(), typeId: "amarres", xCm: 150, yCm: 10, widthCm: 20, depthCm: 20, rotation: 0 },
+      { instanceId: uid(), typeId: "salpicaderas", xCm: 5, yCm: 150, widthCm: 20, depthCm: 30, rotation: 0 },
+      { instanceId: uid(), typeId: "salpicaderas", xCm: 155, yCm: 150, widthCm: 20, depthCm: 30, rotation: 0 },
+      { instanceId: uid(), typeId: "amarres", xCm: 10, yCm: 270, widthCm: 20, depthCm: 20, rotation: 0 },
+      { instanceId: uid(), typeId: "rampa", xCm: 15, yCm: 310, widthCm: 150, depthCm: 45, rotation: 0 },
+    ];
+  }
+  if (modelId === "rzr") {
+    return [
+      { instanceId: uid(), typeId: "anclajes", xCm: 10, yCm: 10, widthCm: 20, depthCm: 20, rotation: 0 },
+      { instanceId: uid(), typeId: "anclajes", xCm: 164, yCm: 10, widthCm: 20, depthCm: 20, rotation: 0 },
+      { instanceId: uid(), typeId: "portallantas", xCm: 77, yCm: 10, widthCm: 40, depthCm: 40, rotation: 0 },
+      { instanceId: uid(), typeId: "freno-inercia", xCm: 40, yCm: 60, widthCm: 30, depthCm: 20, rotation: 0 },
+      { instanceId: uid(), typeId: "rampa-reforzada", xCm: 7, yCm: 300, widthCm: 180, depthCm: 50, rotation: 0 },
+    ];
+  }
   return [
     { instanceId: uid(), typeId: "plancha", xCm: 0, yCm: 18, widthCm: 50, depthCm: 90, rotation: 90 },
     { instanceId: uid(), typeId: "bano-maria", xCm: 0, yCm: 116, widthCm: 50, depthCm: 90, rotation: 90 },
@@ -34,9 +55,12 @@ function starterLayout(): PlacedEquipment[] {
   ];
 }
 
-export function TrailerConfigurator() {
-  const [presetId, setPresetId] = useState("ft-200-300");
-  const [items, setItems] = useState<PlacedEquipment[]>(starterLayout);
+export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
+  const meta = MODEL_META[modelId];
+  const presets = useMemo(() => getPresetsForModel(modelId), [modelId]);
+  const equipmentList = useMemo(() => getEquipmentForModel(modelId), [modelId]);
+  const [presetId, setPresetId] = useState(presets[0].id);
+  const [items, setItems] = useState<PlacedEquipment[]>(() => starterLayout(modelId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState>(null);
   const [includeIva, setIncludeIva] = useState(false);
@@ -186,20 +210,20 @@ export function TrailerConfigurator() {
   return (
     <>
       <section className="configurator-intro no-print">
-        <span className="eyebrow">Cotizador interactivo FG TOW</span>
-        <h1>Diseña tu food truck<br /><em>sobre un plano real.</em></h1>
-        <p>Elige una medida, agrega equipos y arrástralos dentro del remolque. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.</p>
-        <div className="source-badges"><span>Medidas desde 1.80 × 2.00 m</span><span>1 o 2 ejes</span><span>Precios aproximados MXN</span></div>
+        <span className="eyebrow">Cotizador interactivo · {meta.label}</span>
+        <h1>{meta.heroTitleLine}<br /><em>{meta.heroEm}</em></h1>
+        <p>{meta.intro}</p>
+        <div className="source-badges">{meta.sourceBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
       </section>
 
       <section className="configurator-shell no-print">
         <aside className="config-sidebar">
           <div className="config-step"><span>01</span><div><strong>Medida del remolque</strong><small>Dimensiones interiores de trabajo</small></div></div>
-          <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{TRAILER_PRESETS.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
+          <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{presets.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
           <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{preset.axles === 2 ? "Doble eje" : "1 eje"}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
 
-          <div className="config-step equipment-heading"><span>02</span><div><strong>Equipamiento</strong><small>Toca para añadir al plano</small></div></div>
-          <div className="equipment-library">{EQUIPMENT.map((equipment) => <button type="button" key={equipment.id} onClick={() => addEquipment(equipment.id)}><i style={{ background: equipment.color }} /><span><strong>{equipment.name}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span><b>+</b></button>)}</div>
+          <div className="config-step equipment-heading"><span>02</span><div><strong>{meta.equipmentHeading}</strong><small>{meta.equipmentSub}</small></div></div>
+          <div className="equipment-library">{equipmentList.map((equipment) => <button type="button" key={equipment.id} onClick={() => addEquipment(equipment.id)}><i style={{ background: equipment.color }} /><span><strong>{equipment.name}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span><b>+</b></button>)}</div>
         </aside>
 
         <div className="plan-workspace">
@@ -247,7 +271,7 @@ export function TrailerConfigurator() {
 
         <aside className="price-panel">
           <div className="config-step"><span>03</span><div><strong>Cotización estimada</strong><small>Actualizada en tiempo real</small></div></div>
-          <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye estructura, chasis, laminado, tren rodante, instalación base y hasta {quote.preset.includedEquipment} equipos principales.</span></div>
+          <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
           <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : line.linePrice ? `+${money(line.linePrice)}` : "$0"}</strong></li>)}</ol>
           {!items.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
           <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(quote.iva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
@@ -261,7 +285,7 @@ export function TrailerConfigurator() {
         <form className="quote-customer-form" onSubmit={submitQuote}>
           <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
           <div className="form-row"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label></div>
-          <label>Notas para el equipo<textarea name="notes" rows={4} placeholder="Cuéntanos qué venderás, tipo de gas, equipos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
+          <label>Notas para el equipo<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
           <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>
           <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>
           <button className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Enviando cotización…" : layoutErrors.length ? "Corrige el plano para enviar" : "Enviar a FG TOW →"}</button>
@@ -271,10 +295,10 @@ export function TrailerConfigurator() {
 
       <section className="quote-document" aria-label="Formato imprimible de cotización">
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
-        <div className="document-banner"><div><small>MODELO</small><strong>Food Truck {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{preset.axles === 2 ? "Doble eje" : "1 eje completo"}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
+        <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{preset.axles === 2 ? "Doble eje" : "1 eje completo"}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
         <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div></div>
         <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}</svg></div>
-        <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div><div><dt>Equipos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Chasis y estructura, piso antiderrapante, laminado interior/exterior, tirón, cadenas, luces, instalación eléctrica y de gas base, superficies de trabajo y hasta {preset.includedEquipment} equipos principales.</p></div></div>
+        <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div><div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
         <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div><div><span>IVA</span><strong>{money(quote.iva)}</strong></div><div><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>

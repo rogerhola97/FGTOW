@@ -2,25 +2,40 @@ import Link from "next/link";
 import Image from "next/image";
 
 const catalog = [
-  { id: "utility", family: "Carga", model: "Utility 800", price: "$36,900", size: "1.50 × 2.45 m", axle: "1 eje", capacity: "A definir por ingeniería", uses: "Herramienta, jardinería, carga ligera", includes: ["Plataforma de acero", "Puntos de amarre", "Iluminación reglamentaria", "Tirón y cadenas de seguridad"] },
-  { id: "atv", family: "Aventura", model: "ATV Uno", price: "$41,900", size: "1.50 × 3.05 m", axle: "1 eje", capacity: "Configurada al vehículo", uses: "1 cuatrimoto o hasta 2 motocicletas", includes: ["Rampa de acceso", "4 puntos de amarre", "Piso antiderrapante", "Salpicaderas reforzadas"] },
-  { id: "rzr", family: "Aventura", model: "RZR Sport", price: "$49,900", size: "1.94 × 3.60 m", axle: "1 eje / tándem opcional", capacity: "Configurada al UTV", uses: "RZR, Can-Am y UTV compactos", includes: ["Cama baja", "Rampas reforzadas", "Anclajes regulables", "Opciones de freno y malacate"] },
-  { id: "adventure", family: "Aventura", model: "Adventure Tándem", price: "$69,900", size: "2.07 × 4.20 m", axle: "2 ejes", capacity: "Según configuración", uses: "UTV largo, dos ATV y carga mixta", includes: ["Doble eje", "Mayor estabilidad", "Rampas reforzadas", "Frenos y malacate opcionales"] },
-  { id: "food", family: "Negocio", model: "Food Start", price: "$49,000", size: "1.80 × 2.00 m", axle: "1 eje", capacity: "2 equipos principales incluidos", uses: "Café, bebidas, snacks y conceptos compactos", includes: ["Ventana de servicio", "Instalación eléctrica y de gas base", "Piso antiderrapante", "Hasta 2 equipos principales"] },
-  { id: "food-pro", family: "Negocio", model: "Food 2×3", price: "$69,000", size: "2.00 × 3.00 m", axle: "1 eje", capacity: "Hasta 1,500 kg de referencia", uses: "Tacos, hamburguesas, cocina caliente y servicio completo", includes: ["Hasta 5 equipos principales", "Superficies de acero inoxidable", "Instalación eléctrica y de gas base", "Distribución personalizable en 2D"] },
-  { id: "food-tandem", family: "Negocio", model: "Food Tándem", price: "$107,000", size: "2.20 × 5.00 m", axle: "2 ejes", capacity: "Hasta 3,000 kg de referencia", uses: "Cocina móvil de alta producción y múltiples estaciones", includes: ["Doble eje", "Hasta 5 equipos principales", "Cuatro ventanas configurables", "Preparación para extracción y refrigeración"] },
-  { id: "food-max", family: "Negocio", model: "Food Max", price: "$117,000", size: "2.20 × 6.00 m", axle: "2 ejes", capacity: "Hasta 3,000 kg de referencia", uses: "Operación intensiva con asador, planchas y zonas de refrigeración", includes: ["Doble eje", "Hasta 5 equipos principales", "Amplias mesas de trabajo", "Distribución personalizada según menú"] },
-  { id: "custom", family: "Especial", model: "Custom", price: "Cotización", size: "A medida", axle: "Según proyecto", capacity: "Según ingeniería", uses: "Tienda móvil, activación, taller, oficina", includes: ["Diseño conceptual", "Distribución personalizada", "Acabados de marca", "Integración de accesorios"] },
+  {
+    id: "food",
+    className: "food",
+    tagline: "Cocina móvil",
+    title: "FG Food Truck",
+    description: "Distribuye tu cocina, ventana de servicio e instalaciones sobre un plano 2D real antes de fabricar. Para café, snacks, tacos y operaciones de servicio completo.",
+    tags: ["Plano 2D editable", "Equipamiento de cocina", "1 o 2 ejes"],
+  },
+  {
+    id: "cargo",
+    className: "cargo",
+    tagline: "Carga y trabajo",
+    title: "FG Cargo",
+    description: "Plataforma robusta para herramienta, mudanza y carga diaria. Configura medidas, ejes y aditamentos como rampas, racks y amarres según tu operación.",
+    tags: ["Rampas y compuertas", "Racks y almacenaje", "1 o 2 ejes"],
+  },
+  {
+    id: "rzr",
+    className: "rzr",
+    tagline: "Aventura y transporte de UTV",
+    title: "FG RZR Sport",
+    description: "Un solo concepto para mover RZR, Can-Am, UTV, motos y cuatrimotos. Configura tamaño, ejes y aditamentos como rampas reforzadas, anclajes y malacate.",
+    tags: ["Rampas reforzadas", "Anclajes y malacate", "1 o 2 ejes"],
+  },
 ];
 
-export const metadata = { title: "Catálogo de remolques", description: "Modelos base FG TOW para carga, aventura, food trucks y proyectos especiales." };
+export const metadata = { title: "Catálogo de remolques", description: "Tres modelos base FG TOW —food truck, cargo y RZR sport— cada uno configurable en medidas, ejes y aditamentos." };
 
 export default function Catalogo() {
   return <main className="catalog-page">
-    <header className="nav-shell"><Link href="/" className="brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized /></Link><nav><Link href="/">Inicio</Link><a href="#modelos">Modelos</a><Link href="/#proceso">Proceso</Link><Link href="/cotizador">Cotizador 2D</Link></nav><Link className="button button-small" href="/cotizador">Diseñar remolque</Link></header>
-    <section className="catalog-hero"><span className="eyebrow">Catálogo base 2026</span><h1>El punto de partida<br /><em>para tu remolque.</em></h1><p>Configuraciones para cotizar rápido. Cada una puede ajustarse en medidas, ejes, carga, accesos, amarres, acabados y equipamiento.</p></section>
-    <section className="catalog-list" id="modelos">{catalog.map((item, index) => <article id={item.id} className="catalog-item" key={item.model}><div className="catalog-number">{String(index + 1).padStart(2, "0")}</div><div className="catalog-main"><span>{item.family}</span><h2>FG {item.model}</h2><p>{item.uses}</p><ul>{item.includes.map(feature => <li key={feature}>{feature}</li>)}</ul></div><div className="catalog-spec"><dl><div><dt>Medida base</dt><dd>{item.size}</dd></div><div><dt>Tren rodante</dt><dd>{item.axle}</dd></div><div><dt>Capacidad</dt><dd>{item.capacity}</dd></div></dl><small>Precio de referencia desde</small><strong>{item.price}</strong><Link className="button" href={item.id.startsWith("food") ? "/cotizador" : "/#cotizar"}>Configurar este modelo →</Link></div></article>)}</section>
-    <section className="catalog-note"><div><span className="eyebrow">Importante</span><h2>La capacidad no se adivina.</h2></div><p>Antes de fabricar confirmamos peso de carga, distribución, vehículo de arrastre, tipo de camino y accesorios. Los precios son referencias comerciales y cambian según ingeniería, materiales, equipamiento, impuestos y entrega.</p></section>
-    <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/">Inicio</Link><Link href="/cotizador">Cotizador 2D</Link></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
+    <header className="nav-shell"><Link href="/" className="brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized /></Link><nav><Link href="/">Inicio</Link><a href="#modelos">Modelos</a><Link href="/#proceso">Proceso</Link></nav><a className="button button-small" href="#modelos">Ver modelos</a></header>
+    <section className="catalog-hero"><span className="eyebrow">Catálogo base 2026</span><h1>Tres modelos,<br /><em>un punto de partida.</em></h1><p>Elige el concepto que se parece a lo que necesitas y configúralo a tu proyecto: medidas, ejes y aditamentos.</p></section>
+    <section className="catalog-list" id="modelos">{catalog.map((item, index) => <article id={item.id} className="catalog-item" key={item.id}><div className="catalog-number">{String(index + 1).padStart(2, "0")}</div><div className="catalog-visual"><div className={`product-visual ${item.className}`}><span>FG / {String(index + 1).padStart(2, "0")}</span><div className="mini-trailer" /></div></div><div className="catalog-main"><span>{item.tagline}</span><h2>{item.title}</h2><p>{item.description}</p><ul>{item.tags.map(tag => <li key={tag}>{tag}</li>)}</ul><Link className="button" href={`/cotizador/${item.id}`}>Configurar este modelo →</Link></div></article>)}</section>
+    <section className="catalog-note"><div><span className="eyebrow">Importante</span><h2>La capacidad no se adivina.</h2></div><p>Antes de fabricar confirmamos peso de carga, distribución, vehículo de arrastre, tipo de camino y accesorios. Los precios que verás al configurar son referencias comerciales y cambian según ingeniería, materiales, equipamiento, impuestos y entrega.</p></section>
+    <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/">Inicio</Link><a href="#modelos">Modelos</a></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
   </main>;
 }

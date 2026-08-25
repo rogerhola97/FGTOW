@@ -3,10 +3,9 @@ import Image from "next/image";
 import { LeadForm } from "./components/LeadForm";
 
 const products = [
-  { code: "01", name: "Utility 800", use: "Carga ligera y trabajo diario", size: "1.50 × 2.45 m", price: "$36,900", className: "utility" },
-  { code: "02", name: "ATV Uno", use: "Cuatrimoto o hasta 2 motocicletas", size: "1.50 × 3.05 m", price: "$41,900", className: "atv" },
-  { code: "03", name: "RZR Sport", use: "RZR, Can-Am y UTV", size: "1.94 × 3.60 m", price: "$49,900", className: "rzr" },
-  { code: "04", name: "Food Start", use: "Café, snacks y conceptos compactos", size: "1.80 × 2.00 m", price: "$49,000", className: "food" },
+  { code: "01", id: "food", name: "Food Truck", use: "Cocina móvil para café, snacks y servicio completo", className: "food" },
+  { code: "02", id: "cargo", name: "Cargo", use: "Plataforma para herramienta, mudanza y carga diaria", className: "cargo" },
+  { code: "03", id: "rzr", name: "RZR Sport", use: "Transporte para RZR, UTV, motos y cuatrimotos", className: "rzr" },
 ];
 
 const reasons = [
@@ -26,9 +25,8 @@ export default function Home() {
           <a href="#soluciones">Soluciones</a>
           <a href="#proceso">Proceso</a>
           <Link href="/catalogo">Catálogo</Link>
-          <Link href="/cotizador">Cotizador 2D</Link>
         </nav>
-        <Link className="button button-small" href="/cotizador">Diseñar remolque</Link>
+        <Link className="button button-small" href="/catalogo">Diseñar remolque</Link>
       </header>
 
       <section className="hero">
@@ -36,23 +34,17 @@ export default function Home() {
           <span className="eyebrow">Remolques fabricados en Monterrey</span>
           <h1>Tu proyecto,<br /><em>listo para avanzar.</em></h1>
           <p>Remolques compactos para negocio, aventura y trabajo. Diseñamos cada solución alrededor de lo que necesitas mover.</p>
-          <div className="hero-actions">
-            <Link className="button" href="/cotizador">Diseñar mi remolque <span>→</span></Link>
-            <Link className="text-link" href="/catalogo">Explorar catálogo <span>↗</span></Link>
-          </div>
           <div className="trust-row">
             <span>Hecho en México</span><span>Proyecto a medida</span><span>Atención directa</span>
           </div>
         </div>
         <div className="hero-visual" aria-label="Ilustración de remolque FG TOW">
-          <div className="blueprint-mark">FG / 01</div>
           <div className="trailer trailer-hero">
-            <div className="trailer-body"><b>FG</b><small>TOW / UTILITY</small></div>
+            <div className="trailer-body"><b>FG</b></div>
             <div className="trailer-frame" />
             <div className="wheel wheel-a" /><div className="wheel wheel-b" />
             <div className="hitch" />
           </div>
-          <div className="spec-card"><small>CONFIGURACIÓN</small><strong>Utility / Sport</strong><span>Acero estructural · Acabado automotriz</span></div>
         </div>
       </section>
 
@@ -70,11 +62,10 @@ export default function Home() {
           {products.map((product) => (
             <article className="product-card" key={product.name}>
               <div className={`product-visual ${product.className}`}><span>{product.code}</span><div className="mini-trailer" /></div>
-              <div className="product-info"><small>{product.use}</small><h3>FG {product.name}</h3><dl><div><dt>Base</dt><dd>{product.size}</dd></div><div><dt>Desde*</dt><dd>{product.price}</dd></div></dl><Link href={`/catalogo#${product.className}`}>Ver configuración <span>→</span></Link></div>
+              <div className="product-info"><small>{product.use}</small><h3>FG {product.name}</h3><Link href={`/catalogo#${product.id}`}>Ver configuración <span>→</span></Link></div>
             </article>
           ))}
         </div>
-        <div className="price-note">*Precios de referencia en MXN. La cotización final depende de capacidad, ejes, frenos, equipamiento, acabados e impuestos.</div>
       </section>
 
       <section className="dark-section" id="proceso">
@@ -93,7 +84,7 @@ export default function Home() {
       </section>
 
       <section className="quote-section" id="cotizar">
-        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Para un food truck puedes crear primero tu distribución en el plano 2D. Para plataformas, RZR, cuatrimotos y proyectos especiales, déjanos los datos básicos.</p><Link className="button quote-config-button" href="/cotizador">Abrir cotizador 2D →</Link><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
+        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food truck, cargo o RZR sport— y arma tu distribución en un plano 2D interactivo.</p><Link className="button quote-config-button" href="/catalogo">Elegir modelo y configurar →</Link><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
         <LeadForm />
       </section>
 
