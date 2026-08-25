@@ -30,7 +30,7 @@ import {
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
-type DragState = { kind: "item"; instanceId: string; pointerId: number } | { kind: "door"; pointerId: number } | null;
+type DragState = { kind: "item"; instanceId: string; pointerId: number } | { kind: "door"; pointerId: number } | { kind: "pan"; pointerId: number; lastClientY: number } | null;
 
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -330,9 +330,22 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
 
   function moveDrag(event: PointerEvent<SVGSVGElement>) {
     if (!drag) return;
+    if (drag.kind === "pan") {
+      window.scrollBy(0, drag.lastClientY - event.clientY);
+      setDrag({ ...drag, lastClientY: event.clientY });
+      return;
+    }
     const point = pointInPlan(event);
     if (drag.kind === "item") moveItemTo(drag.instanceId, point.x, point.y);
     else moveDoorTo(point.x, point.y);
+  }
+
+  function startBackgroundPan(event: PointerEvent<SVGSVGElement>) {
+    setSelectedId(null);
+    setDoorSelected(false);
+    if (event.pointerType !== "touch") return;
+    svgRef.current?.setPointerCapture(event.pointerId);
+    setDrag({ kind: "pan", pointerId: event.pointerId, lastClientY: event.clientY });
   }
 
   function stopDrag() {
@@ -413,7 +426,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
               onPointerMove={moveDrag}
               onPointerUp={stopDrag}
               onPointerCancel={stopDrag}
-              onPointerDown={() => { setSelectedId(null); setDoorSelected(false); }}
+              onPointerDown={startBackgroundPan}
             >
               <defs><pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#dce5e5" strokeWidth="0.7" /></pattern><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#smallGrid)" /><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b9c9cc" strokeWidth="1.3" /></pattern></defs>
               <g className="plan-interactive" onPointerDown={(event) => event.preventDefault()}>
