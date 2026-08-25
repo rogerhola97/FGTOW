@@ -13,6 +13,7 @@ export type ModelMeta = {
   equipmentSub: string;
   equipmentLabel: string;
   includesNote: string;
+  defaultPresetId: string;
 };
 
 export const MODEL_META: Record<ModelId, ModelMeta> = {
@@ -29,6 +30,7 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "equipos principales",
     includesNote: "estructura, chasis, laminado, tren rodante, instalación eléctrica y de gas base",
+    defaultPresetId: "ft-200-300",
   },
   cargo: {
     id: "cargo",
@@ -43,6 +45,7 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "aditamentos principales",
     includesNote: "estructura, chasis, piso antiderrapante, tren rodante, luces reglamentarias, tirón y cadenas de seguridad",
+    defaultPresetId: "cg-180-365",
   },
   rzr: {
     id: "rzr",
@@ -57,8 +60,81 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "aditamentos principales",
     includesNote: "estructura, chasis, cama baja, tren rodante, luces reglamentarias, tirón y cadenas de seguridad",
+    defaultPresetId: "rz-194-360",
   },
 };
+
+export type Wall = "front" | "back" | "left" | "right";
+
+export type DoorConfig = {
+  wall: Wall;
+  offsetCm: number;
+  widthCm: number;
+};
+
+export const DOOR_DEFAULT_WIDTH_CM = 80;
+export const DOOR_MIN_WIDTH_CM = 60;
+export const DOOR_MAX_WIDTH_CM = 150;
+export const DOOR_CLEARANCE_CM = 70;
+
+export const WALL_LABEL: Record<Wall, string> = {
+  front: "Frontal (frente / tirón)",
+  back: "Trasera",
+  left: "Lateral izquierdo",
+  right: "Lateral derecho",
+};
+
+export function defaultDoor(trailerWidthCm: number): DoorConfig {
+  return { wall: "back", offsetCm: Math.max(0, (trailerWidthCm - DOOR_DEFAULT_WIDTH_CM) / 2), widthCm: DOOR_DEFAULT_WIDTH_CM };
+}
+
+export function wallLengthCm(wall: Wall, trailerWidthCm: number, trailerLengthCm: number) {
+  return wall === "front" || wall === "back" ? trailerWidthCm : trailerLengthCm;
+}
+
+export function wallForPoint(xCm: number, yCm: number, trailerWidthCm: number, trailerLengthCm: number): Wall {
+  const distFront = yCm;
+  const distBack = trailerLengthCm - yCm;
+  const distLeft = xCm;
+  const distRight = trailerWidthCm - xCm;
+  const min = Math.min(distFront, distBack, distLeft, distRight);
+  if (min === distLeft) return "left";
+  if (min === distRight) return "right";
+  if (min === distFront) return "front";
+  return "back";
+}
+
+export function placeOnWall(wall: Wall, offsetCm: number, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, mount: "inside" | "outside" = "inside") {
+  const rotation: 0 | 90 = wall === "front" || wall === "back" ? 0 : 90;
+  const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
+  const maxOffset = Math.max(0, span - alongCm);
+  const offset = Math.min(Math.max(offsetCm, 0), maxOffset);
+  let xCm = 0;
+  let yCm = 0;
+  if (wall === "front") { xCm = offset; yCm = mount === "outside" ? -depthCm : 0; }
+  else if (wall === "back") { xCm = offset; yCm = mount === "outside" ? trailerLengthCm : trailerLengthCm - depthCm; }
+  else if (wall === "left") { yCm = offset; xCm = mount === "outside" ? -depthCm : 0; }
+  else { yCm = offset; xCm = mount === "outside" ? trailerWidthCm : trailerWidthCm - depthCm; }
+  return {
+    xCm,
+    yCm,
+    widthCm: rotation === 0 ? alongCm : depthCm,
+    depthCm: rotation === 0 ? depthCm : alongCm,
+    rotation,
+    offset,
+  };
+}
+
+export function doorClearanceRect(door: DoorConfig, trailerWidthCm: number, trailerLengthCm: number) {
+  if (door.wall === "front") return { xCm: door.offsetCm, yCm: 0, widthCm: door.widthCm, depthCm: DOOR_CLEARANCE_CM };
+  if (door.wall === "back") return { xCm: door.offsetCm, yCm: Math.max(0, trailerLengthCm - DOOR_CLEARANCE_CM), widthCm: door.widthCm, depthCm: DOOR_CLEARANCE_CM };
+  if (door.wall === "left") return { xCm: 0, yCm: door.offsetCm, widthCm: DOOR_CLEARANCE_CM, depthCm: door.widthCm };
+  return { xCm: Math.max(0, trailerWidthCm - DOOR_CLEARANCE_CM), yCm: door.offsetCm, widthCm: DOOR_CLEARANCE_CM, depthCm: door.widthCm };
+}
+
+export function rectsOverlap(a: { xCm: number; yCm: number; widthCm: number; depthCm: number }, b: { xCm: number; yCm: number; widthCm: number; depthCm: number }) {
+  return a.xCm < b.xCm + b.widthCm && a.xCm + a.widthCm > b.xCm && a.yCm < b.yCm + b.depthCm && a.yCm + a.depthCm > b.yCm;
+}
 
 export type TrailerPreset = {
   id: string;
@@ -90,6 +166,7 @@ export type EquipmentDefinition = {
   includedEligible: boolean;
   color: string;
   description: string;
+  mount?: "inside" | "outside";
 };
 
 export type PlacedEquipment = {
@@ -139,7 +216,7 @@ export const EQUIPMENT: EquipmentDefinition[] = [
   { id: "refrigerador", model: "food", name: "Espacio para refrigerador", shortName: "Refrigerador", category: "trabajo", widthCm: 70, depthCm: 70, minWidthCm: 50, maxWidthCm: 180, minDepthCm: 50, maxDepthCm: 90, surcharge: 0, includedEligible: false, color: "#546ab1", description: "Reserva de espacio; el equipo no se incluye en el precio." },
   { id: "campana", model: "food", name: "Campana con extracción", shortName: "Campana", category: "especial", widthCm: 180, depthCm: 55, minWidthCm: 90, maxWidthCm: 450, minDepthCm: 45, maxDepthCm: 75, surcharge: 4000, includedEligible: false, color: "#714d82", description: "Campana con extractores; base calculada con dos abanicos." },
   { id: "repisa", model: "food", name: "Repisa baja", shortName: "Repisa", category: "especial", widthCm: 120, depthCm: 35, minWidthCm: 50, maxWidthCm: 300, minDepthCm: 25, maxDepthCm: 50, surcharge: 1000, includedEligible: false, color: "#7d6a4c", description: "Repisa bajo mesa de trabajo." },
-  { id: "barra-abatible", model: "food", name: "Barra abatible", shortName: "Barra", category: "especial", widthCm: 218, depthCm: 25, minWidthCm: 100, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, surcharge: 2500, includedEligible: false, color: "#2f5d70", description: "Barra cromada o antiderrapante abatible para servicio." },
+  { id: "barra-abatible", model: "food", name: "Barra abatible", shortName: "Barra", category: "especial", widthCm: 218, depthCm: 25, minWidthCm: 100, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, surcharge: 2500, includedEligible: false, color: "#2f5d70", description: "Barra cromada o antiderrapante abatible para servicio; va montada por fuera del remolque.", mount: "outside" },
   { id: "base-gas", model: "food", name: "Base para gas", shortName: "Base gas", category: "especial", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, surcharge: 800, includedEligible: false, color: "#6f6f6f", description: "Base exterior para cilindro; la ubicación final requiere validación." },
 
   { id: "rampa", model: "cargo", name: "Rampa de acceso", shortName: "Rampa", category: "acceso", widthCm: 150, depthCm: 45, minWidthCm: 100, maxWidthCm: 220, minDepthCm: 35, maxDepthCm: 60, surcharge: 1800, includedEligible: true, color: "#c45d35", description: "Rampa abatible para carga y descarga por la parte trasera." },
@@ -199,14 +276,16 @@ export function calculateQuote(presetId: string, items: PlacedEquipment[], inclu
   return { preset, lines, includedUsed, extras, subtotal, iva, total: subtotal + iva };
 }
 
-export function validateLayout(preset: TrailerPreset, items: PlacedEquipment[]) {
+export function validateLayout(preset: TrailerPreset, items: PlacedEquipment[], door?: DoorConfig) {
   const errors: string[] = [];
+  const clearance = door ? doorClearanceRect(door, preset.widthCm, preset.lengthCm) : null;
   for (const item of items) {
     const definition = getEquipment(item.typeId);
     if (!definition) {
       errors.push("Hay un equipo desconocido en el plano.");
       continue;
     }
+    const mount = definition.mount ?? "inside";
     const minWidth = item.rotation === 90 ? definition.minDepthCm : definition.minWidthCm;
     const maxWidth = item.rotation === 90 ? definition.maxDepthCm : definition.maxWidthCm;
     const minDepth = item.rotation === 90 ? definition.minWidthCm : definition.minDepthCm;
@@ -214,16 +293,18 @@ export function validateLayout(preset: TrailerPreset, items: PlacedEquipment[]) 
     if (item.widthCm < minWidth || item.widthCm > maxWidth || item.depthCm < minDepth || item.depthCm > maxDepth) {
       errors.push(`${definition.name} tiene medidas fuera del rango permitido.`);
     }
-    if (item.xCm < 0 || item.yCm < 0 || item.xCm + item.widthCm > preset.widthCm || item.yCm + item.depthCm > preset.lengthCm) {
+    if (mount === "inside" && (item.xCm < 0 || item.yCm < 0 || item.xCm + item.widthCm > preset.widthCm || item.yCm + item.depthCm > preset.lengthCm)) {
       errors.push(`${definition.name} está fuera del remolque.`);
+    }
+    if (mount === "inside" && clearance && rectsOverlap(item, clearance)) {
+      errors.push(`${definition.name} bloquea el acceso de la puerta.`);
     }
   }
   for (let i = 0; i < items.length; i += 1) {
     for (let j = i + 1; j < items.length; j += 1) {
       const a = items[i];
       const b = items[j];
-      const overlap = a.xCm < b.xCm + b.widthCm && a.xCm + a.widthCm > b.xCm && a.yCm < b.yCm + b.depthCm && a.yCm + a.depthCm > b.yCm;
-      if (overlap) errors.push(`${getEquipment(a.typeId)?.name ?? "Equipo"} se cruza con ${getEquipment(b.typeId)?.name ?? "otro equipo"}.`);
+      if (rectsOverlap(a, b)) errors.push(`${getEquipment(a.typeId)?.name ?? "Equipo"} se cruza con ${getEquipment(b.typeId)?.name ?? "otro equipo"}.`);
     }
   }
   return [...new Set(errors)];

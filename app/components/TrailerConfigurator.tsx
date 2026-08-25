@@ -3,66 +3,127 @@
 import Image from "next/image";
 import { FormEvent, PointerEvent, useMemo, useRef, useState } from "react";
 import {
+  DOOR_CLEARANCE_CM,
+  DOOR_MAX_WIDTH_CM,
+  DOOR_MIN_WIDTH_CM,
+  DoorConfig,
   MODEL_META,
   ModelId,
   PlacedEquipment,
+  TrailerPreset,
+  WALL_LABEL,
+  Wall,
   calculateQuote,
+  defaultDoor,
+  doorClearanceRect,
   getEquipment,
   getEquipmentForModel,
   getPreset,
   getPresetsForModel,
   money,
+  placeOnWall,
+  rectsOverlap,
   validateLayout,
+  wallForPoint,
+  wallLengthCm,
 } from "../lib/quoteCatalog";
 
+type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
-type DragState = { instanceId: string; offsetX: number; offsetY: number; pointerId: number } | null;
+type DragState = { kind: "item"; instanceId: string; pointerId: number } | { kind: "door"; pointerId: number } | null;
 
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-function overlaps(a: PlacedEquipment, b: PlacedEquipment) {
-  return a.xCm < b.xCm + b.widthCm && a.xCm + a.widthCm > b.xCm && a.yCm < b.yCm + b.depthCm && a.yCm + a.depthCm > b.yCm;
+function ticksFor(maxCm: number, step: number) {
+  const values: number[] = [];
+  for (let v = 0; v <= maxCm; v += step) values.push(v);
+  if (values[values.length - 1] !== maxCm) values.push(maxCm);
+  return values;
 }
 
-function starterLayout(modelId: ModelId): PlacedEquipment[] {
-  if (modelId === "cargo") {
-    return [
-      { instanceId: uid(), typeId: "caja-herramientas", xCm: 10, yCm: 10, widthCm: 60, depthCm: 40, rotation: 0 },
-      { instanceId: uid(), typeId: "amarres", xCm: 150, yCm: 10, widthCm: 20, depthCm: 20, rotation: 0 },
-      { instanceId: uid(), typeId: "salpicaderas", xCm: 5, yCm: 150, widthCm: 20, depthCm: 30, rotation: 0 },
-      { instanceId: uid(), typeId: "salpicaderas", xCm: 155, yCm: 150, widthCm: 20, depthCm: 30, rotation: 0 },
-      { instanceId: uid(), typeId: "amarres", xCm: 10, yCm: 270, widthCm: 20, depthCm: 20, rotation: 0 },
-      { instanceId: uid(), typeId: "rampa", xCm: 15, yCm: 310, widthCm: 150, depthCm: 45, rotation: 0 },
-    ];
-  }
-  if (modelId === "rzr") {
-    return [
-      { instanceId: uid(), typeId: "anclajes", xCm: 10, yCm: 10, widthCm: 20, depthCm: 20, rotation: 0 },
-      { instanceId: uid(), typeId: "anclajes", xCm: 164, yCm: 10, widthCm: 20, depthCm: 20, rotation: 0 },
-      { instanceId: uid(), typeId: "portallantas", xCm: 77, yCm: 10, widthCm: 40, depthCm: 40, rotation: 0 },
-      { instanceId: uid(), typeId: "freno-inercia", xCm: 40, yCm: 60, widthCm: 30, depthCm: 20, rotation: 0 },
-      { instanceId: uid(), typeId: "rampa-reforzada", xCm: 7, yCm: 300, widthCm: 180, depthCm: 50, rotation: 0 },
-    ];
-  }
-  return [
-    { instanceId: uid(), typeId: "plancha", xCm: 0, yCm: 18, widthCm: 50, depthCm: 90, rotation: 90 },
-    { instanceId: uid(), typeId: "bano-maria", xCm: 0, yCm: 116, widthCm: 50, depthCm: 90, rotation: 90 },
-    { instanceId: uid(), typeId: "freidora", xCm: 0, yCm: 214, widthCm: 40, depthCm: 40, rotation: 0 },
-    { instanceId: uid(), typeId: "parrilla", xCm: 150, yCm: 18, widthCm: 50, depthCm: 50, rotation: 0 },
-    { instanceId: uid(), typeId: "mesa", xCm: 150, yCm: 76, widthCm: 50, depthCm: 120, rotation: 90 },
-    { instanceId: uid(), typeId: "tarja", xCm: 160, yCm: 214, widthCm: 40, depthCm: 40, rotation: 0 },
-  ];
+function doorGeometry(door: DoorConfig, preset: TrailerPreset) {
+  const { wall, offsetCm, widthCm } = door;
+  if (wall === "front") return { x1: offsetCm, y1: 0, x2: offsetCm + widthCm, y2: 0, labelX: offsetCm + widthCm / 2, labelY: 18, rotate: 0 };
+  if (wall === "back") return { x1: offsetCm, y1: preset.lengthCm, x2: offsetCm + widthCm, y2: preset.lengthCm, labelX: offsetCm + widthCm / 2, labelY: preset.lengthCm - 12, rotate: 0 };
+  if (wall === "left") return { x1: 0, y1: offsetCm, x2: 0, y2: offsetCm + widthCm, labelX: 18, labelY: offsetCm + widthCm / 2, rotate: -90 };
+  return { x1: preset.widthCm, y1: offsetCm, x2: preset.widthCm, y2: offsetCm + widthCm, labelX: preset.widthCm - 18, labelY: offsetCm + widthCm / 2, rotate: 90 };
 }
+
+function makeItem(typeId: string, wall: Wall, offsetCm: number, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, mount: "inside" | "outside"): PlacedItem {
+  const rect = placeOnWall(wall, offsetCm, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount);
+  return { instanceId: uid(), typeId, wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
+}
+
+function offsetOfItem(item: PlacedItem) {
+  return item.wall === "front" || item.wall === "back" ? item.xCm : item.yCm;
+}
+
+function avoidDoor(wall: Wall, offset: number, alongCm: number, mount: "inside" | "outside", door: DoorConfig, span: number) {
+  if (mount !== "inside" || wall !== door.wall) return offset;
+  const forbiddenStart = door.offsetCm - alongCm;
+  const forbiddenEnd = door.offsetCm + door.widthCm;
+  if (offset <= forbiddenStart || offset >= forbiddenEnd) return offset;
+  const distToStart = Math.abs(offset - forbiddenStart);
+  const distToEnd = Math.abs(offset - forbiddenEnd);
+  const candidate = distToStart < distToEnd ? forbiddenStart : forbiddenEnd;
+  return clamp(candidate, 0, Math.max(0, span - alongCm));
+}
+
+function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
+  let working: PlacedItem[] = [];
+  for (const typeId of typeIds) {
+    const definition = getEquipment(typeId);
+    if (!definition) continue;
+    const placement = findOpenPlacement(definition, trailerWidthCm, trailerLengthCm, working, door);
+    const next = makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, trailerWidthCm, trailerLengthCm, definition.mount ?? "inside");
+    working = [...working, next];
+  }
+  return working;
+}
+
+function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
+  if (modelId === "cargo") return buildStarterLayout(["caja-herramientas", "amarres", "salpicaderas", "salpicaderas", "rampa"], trailerWidthCm, trailerLengthCm, door);
+  if (modelId === "rzr") return buildStarterLayout(["anclajes", "anclajes", "portallantas", "freno-inercia", "rampa-reforzada"], trailerWidthCm, trailerLengthCm, door);
+  return buildStarterLayout(["plancha", "bano-maria", "freidora", "parrilla", "mesa", "tarja"], trailerWidthCm, trailerLengthCm, door);
+}
+
+function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig) {
+  const mount = definition!.mount ?? "inside";
+  const walls: Wall[] = mount === "outside" ? ["back", "front", "left", "right"] : ["back", "left", "right", "front"];
+  const clearance = mount === "inside" ? doorClearanceRect(door, trailerWidthCm, trailerLengthCm) : null;
+  for (const wall of walls) {
+    const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
+    const alongCm = Math.max(definition!.minWidthCm, Math.min(definition!.maxWidthCm, Math.min(definition!.widthCm, span)));
+    if (alongCm > span) continue;
+    const depthCm = definition!.depthCm;
+    for (let offset = 0; offset <= span - alongCm + 0.01; offset += 5) {
+      const rect = placeOnWall(wall, offset, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount);
+      const candidate = { xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm };
+      const blockedByDoor = clearance ? rectsOverlap(candidate, clearance) : false;
+      const blockedByItem = existing.some((item) => rectsOverlap(candidate, item));
+      if (!blockedByDoor && !blockedByItem) return { wall, offsetCm: rect.offset, alongCm, depthCm };
+    }
+  }
+  const fallbackWall = walls[0];
+  const fallbackSpan = wallLengthCm(fallbackWall, trailerWidthCm, trailerLengthCm);
+  return { wall: fallbackWall, offsetCm: 0, alongCm: Math.min(definition!.widthCm, fallbackSpan), depthCm: definition!.depthCm };
+}
+
+const WALL_ORDER: Wall[] = ["front", "right", "back", "left"];
 
 export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   const meta = MODEL_META[modelId];
   const presets = useMemo(() => getPresetsForModel(modelId), [modelId]);
   const equipmentList = useMemo(() => getEquipmentForModel(modelId), [modelId]);
-  const [presetId, setPresetId] = useState(presets[0].id);
-  const [items, setItems] = useState<PlacedEquipment[]>(() => starterLayout(modelId));
+  const [presetId, setPresetId] = useState(meta.defaultPresetId);
+  const preset = getPreset(presetId);
+  const [door, setDoor] = useState<DoorConfig>(() => defaultDoor(preset.widthCm));
+  const [items, setItems] = useState<PlacedItem[]>(() => starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [doorSelected, setDoorSelected] = useState(false);
   const [drag, setDrag] = useState<DragState>(null);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [includeIva, setIncludeIva] = useState(false);
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
@@ -70,88 +131,145 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", city: "Monterrey, N.L.", notes: "" });
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const preset = getPreset(presetId);
   const quote = useMemo(() => calculateQuote(presetId, items, includeIva), [presetId, items, includeIva]);
-  const layoutErrors = useMemo(() => validateLayout(preset, items), [preset, items]);
+  const layoutErrors = useMemo(() => validateLayout(preset, items, door), [preset, items, door]);
   const selected = items.find((item) => item.instanceId === selectedId) ?? null;
   const selectedDefinition = selected ? getEquipment(selected.typeId) : null;
-  const selectedWidthLimits = selected && selectedDefinition ? { min: selected.rotation === 90 ? selectedDefinition.minDepthCm : selectedDefinition.minWidthCm, max: selected.rotation === 90 ? selectedDefinition.maxDepthCm : selectedDefinition.maxWidthCm } : null;
-  const selectedDepthLimits = selected && selectedDefinition ? { min: selected.rotation === 90 ? selectedDefinition.minWidthCm : selectedDefinition.minDepthCm, max: selected.rotation === 90 ? selectedDefinition.maxWidthCm : selectedDefinition.maxDepthCm } : null;
+  const selectedAlongLimits = selectedDefinition ? { min: selectedDefinition.minWidthCm, max: selectedDefinition.maxWidthCm } : null;
+  const selectedDepthLimits = selectedDefinition ? { min: selectedDefinition.minDepthCm, max: selectedDefinition.maxDepthCm } : null;
   const collisionIds = useMemo(() => {
     const ids = new Set<string>();
-    for (let i = 0; i < items.length; i += 1) for (let j = i + 1; j < items.length; j += 1) if (overlaps(items[i], items[j])) {
+    for (let i = 0; i < items.length; i += 1) for (let j = i + 1; j < items.length; j += 1) if (rectsOverlap(items[i], items[j])) {
       ids.add(items[i].instanceId); ids.add(items[j].instanceId);
     }
+    const clearance = doorClearanceRect(door, preset.widthCm, preset.lengthCm);
+    for (const item of items) {
+      const definition = getEquipment(item.typeId);
+      if ((definition?.mount ?? "inside") === "inside" && rectsOverlap(item, clearance)) ids.add(item.instanceId);
+    }
     return ids;
-  }, [items]);
+  }, [items, door, preset]);
 
   function updatePreset(nextId: string) {
     const next = getPreset(nextId);
     setPresetId(nextId);
-    setItems((current) => current.map((item) => ({
-      ...item,
-      widthCm: Math.min(item.widthCm, next.widthCm),
-      depthCm: Math.min(item.depthCm, next.lengthCm),
-      xCm: clamp(item.xCm, 0, Math.max(0, next.widthCm - Math.min(item.widthCm, next.widthCm))),
-      yCm: clamp(item.yCm, 0, Math.max(0, next.lengthCm - Math.min(item.depthCm, next.lengthCm))),
-    })));
+    setItems((current) => current.map((item) => {
+      const definition = getEquipment(item.typeId);
+      const mount = definition?.mount ?? "inside";
+      const alongCm = item.rotation === 0 ? item.widthCm : item.depthCm;
+      const depthCm = item.rotation === 0 ? item.depthCm : item.widthCm;
+      const rect = placeOnWall(item.wall, offsetOfItem(item), alongCm, depthCm, next.widthCm, next.lengthCm, mount);
+      return { ...item, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
+    }));
+    setDoor((current) => {
+      const rect = placeOnWall(current.wall, current.offsetCm, current.widthCm, 1, next.widthCm, next.lengthCm);
+      return { wall: current.wall, offsetCm: rect.offset, widthCm: current.widthCm };
+    });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
-  function findOpenSpot(widthCm: number, depthCm: number) {
-    for (let y = 8; y <= preset.lengthCm - depthCm; y += 10) {
-      for (let x = 0; x <= preset.widthCm - widthCm; x += 10) {
-        const candidate: PlacedEquipment = { instanceId: "candidate", typeId: "", xCm: x, yCm: y, widthCm, depthCm, rotation: 0 };
-        if (!items.some((item) => overlaps(candidate, item))) return { x, y };
-      }
-    }
-    return { x: Math.max(0, (preset.widthCm - widthCm) / 2), y: Math.max(0, (preset.lengthCm - depthCm) / 2) };
-  }
-
-  function addEquipment(typeId: string) {
+  function addEquipment(typeId: string, quantity: number) {
     const definition = getEquipment(typeId);
-    if (!definition) return;
-    let widthCm = definition.widthCm;
-    let depthCm = definition.depthCm;
-    let rotation: 0 | 90 = 0;
-    if (widthCm > preset.widthCm && depthCm <= preset.widthCm && widthCm <= preset.lengthCm) {
-      [widthCm, depthCm] = [depthCm, widthCm]; rotation = 90;
+    if (!definition || quantity < 1) return;
+    let working = items;
+    let lastId: string | null = null;
+    for (let i = 0; i < quantity; i += 1) {
+      const placement = findOpenPlacement(definition, preset.widthCm, preset.lengthCm, working, door);
+      const next = makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, preset.widthCm, preset.lengthCm, definition.mount ?? "inside");
+      working = [...working, next];
+      lastId = next.instanceId;
     }
-    widthCm = Math.min(widthCm, preset.widthCm);
-    depthCm = Math.min(depthCm, preset.lengthCm);
-    const position = findOpenSpot(widthCm, depthCm);
-    const next = { instanceId: uid(), typeId, xCm: position.x, yCm: position.y, widthCm, depthCm, rotation };
-    setItems((current) => [...current, next]);
-    setSelectedId(next.instanceId);
+    setItems(working);
+    if (lastId) { setSelectedId(lastId); setDoorSelected(false); }
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
-  function updateItem(instanceId: string, changes: Partial<PlacedEquipment>) {
+  function updateItemSize(instanceId: string, part: "along" | "depth", value: number) {
+    if (!Number.isFinite(value) || value <= 0) return;
     setItems((current) => current.map((item) => {
       if (item.instanceId !== instanceId) return item;
-      const widthCm = changes.widthCm ?? item.widthCm;
-      const depthCm = changes.depthCm ?? item.depthCm;
-      return {
-        ...item,
-        ...changes,
-        widthCm,
-        depthCm,
-        xCm: clamp(changes.xCm ?? item.xCm, 0, Math.max(0, preset.widthCm - widthCm)),
-        yCm: clamp(changes.yCm ?? item.yCm, 0, Math.max(0, preset.lengthCm - depthCm)),
-      };
+      const definition = getEquipment(item.typeId);
+      const mount = definition?.mount ?? "inside";
+      const currentAlong = item.rotation === 0 ? item.widthCm : item.depthCm;
+      const currentDepth = item.rotation === 0 ? item.depthCm : item.widthCm;
+      const alongCm = part === "along" ? value : currentAlong;
+      const depthCm = part === "depth" ? value : currentDepth;
+      const rect = placeOnWall(item.wall, offsetOfItem(item), alongCm, depthCm, preset.widthCm, preset.lengthCm, mount);
+      return { ...item, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
     }));
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
-  function rotateSelected() {
-    if (!selected) return;
-    updateItem(selected.instanceId, { widthCm: selected.depthCm, depthCm: selected.widthCm, rotation: selected.rotation === 0 ? 90 : 0 });
+  function cycleWall(instanceId: string) {
+    setItems((current) => current.map((item) => {
+      if (item.instanceId !== instanceId) return item;
+      const definition = getEquipment(item.typeId);
+      const mount = definition?.mount ?? "inside";
+      const alongCm = item.rotation === 0 ? item.widthCm : item.depthCm;
+      const depthCm = item.rotation === 0 ? item.depthCm : item.widthCm;
+      const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(item.wall) + 1) % WALL_ORDER.length];
+      const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
+      const clampedAlong = Math.min(alongCm, span);
+      const centeredOffset = avoidDoor(nextWall, Math.max(0, (span - clampedAlong) / 2), clampedAlong, mount, door, span);
+      const rect = placeOnWall(nextWall, centeredOffset, clampedAlong, depthCm, preset.widthCm, preset.lengthCm, mount);
+      return { ...item, wall: nextWall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
+    }));
+    setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
   function removeSelected() {
     if (!selectedId) return;
     setItems((current) => current.filter((item) => item.instanceId !== selectedId));
     setSelectedId(null); setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  function moveItemTo(instanceId: string, pointX: number, pointY: number) {
+    setItems((current) => current.map((item) => {
+      if (item.instanceId !== instanceId) return item;
+      const definition = getEquipment(item.typeId);
+      const mount = definition?.mount ?? "inside";
+      const alongCm = item.rotation === 0 ? item.widthCm : item.depthCm;
+      const depthCm = item.rotation === 0 ? item.depthCm : item.widthCm;
+      const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
+      const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
+      const desired = clamp((wall === "front" || wall === "back" ? pointX : pointY) - alongCm / 2, 0, Math.max(0, span - alongCm));
+      const offset = avoidDoor(wall, desired, alongCm, mount, door, span);
+      const rect = placeOnWall(wall, offset, alongCm, depthCm, preset.widthCm, preset.lengthCm, mount);
+      return { ...item, wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
+    }));
+  }
+
+  function moveDoorTo(pointX: number, pointY: number) {
+    setDoor((current) => {
+      const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
+      const desired = (wall === "front" || wall === "back" ? pointX : pointY) - current.widthCm / 2;
+      const rect = placeOnWall(wall, desired, current.widthCm, 1, preset.widthCm, preset.lengthCm);
+      return { wall, offsetCm: rect.offset, widthCm: current.widthCm };
+    });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  function cycleDoorWall() {
+    setDoor((current) => {
+      const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(current.wall) + 1) % WALL_ORDER.length];
+      const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
+      const clampedWidth = Math.min(current.widthCm, span);
+      const centeredOffset = Math.max(0, (span - clampedWidth) / 2);
+      const rect = placeOnWall(nextWall, centeredOffset, clampedWidth, 1, preset.widthCm, preset.lengthCm);
+      return { wall: nextWall, offsetCm: rect.offset, widthCm: clampedWidth };
+    });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  function updateDoorWidth(value: number) {
+    if (!Number.isFinite(value) || value <= 0) return;
+    setDoor((current) => {
+      const span = wallLengthCm(current.wall, preset.widthCm, preset.lengthCm);
+      const clampedWidth = Math.min(Math.max(value, DOOR_MIN_WIDTH_CM), Math.min(DOOR_MAX_WIDTH_CM, span));
+      const rect = placeOnWall(current.wall, current.offsetCm, clampedWidth, 1, preset.widthCm, preset.lengthCm);
+      return { wall: current.wall, offsetCm: rect.offset, widthCm: clampedWidth };
+    });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
   function pointInPlan(event: PointerEvent<SVGElement>) {
@@ -162,20 +280,27 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     return { x: transformed.x, y: transformed.y };
   }
 
-  function startDrag(event: PointerEvent<SVGGElement>, item: PlacedEquipment) {
+  function startItemDrag(event: PointerEvent<SVGGElement>, item: PlacedItem) {
     event.preventDefault(); event.stopPropagation();
-    const point = pointInPlan(event);
     svgRef.current?.setPointerCapture(event.pointerId);
     setSelectedId(item.instanceId);
-    setDrag({ instanceId: item.instanceId, offsetX: point.x - item.xCm, offsetY: point.y - item.yCm, pointerId: event.pointerId });
+    setDoorSelected(false);
+    setDrag({ kind: "item", instanceId: item.instanceId, pointerId: event.pointerId });
+  }
+
+  function startDoorDrag(event: PointerEvent<SVGGElement>) {
+    event.preventDefault(); event.stopPropagation();
+    svgRef.current?.setPointerCapture(event.pointerId);
+    setSelectedId(null);
+    setDoorSelected(true);
+    setDrag({ kind: "door", pointerId: event.pointerId });
   }
 
   function moveDrag(event: PointerEvent<SVGSVGElement>) {
     if (!drag) return;
-    const item = items.find((candidate) => candidate.instanceId === drag.instanceId);
-    if (!item) return;
     const point = pointInPlan(event);
-    updateItem(item.instanceId, { xCm: Math.round(point.x - drag.offsetX), yCm: Math.round(point.y - drag.offsetY) });
+    if (drag.kind === "item") moveItemTo(drag.instanceId, point.x, point.y);
+    else moveDoorTo(point.x, point.y);
   }
 
   function stopDrag() {
@@ -195,7 +320,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       const response = await fetch("/api/quote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...values, presetId, items, includeIva }),
+        body: JSON.stringify({ ...values, presetId, items, door, includeIva }),
       });
       const result = await response.json() as { error?: string; quoteNumber?: string; emailSent?: boolean; message?: string };
       if (!response.ok) throw new Error(result.error || "No fue posible enviar la cotización.");
@@ -206,6 +331,10 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       setSendState("error"); setSendMessage(error instanceof Error ? error.message : "No fue posible enviar la cotización.");
     }
   }
+
+  const doorGeo = doorGeometry(door, preset);
+  const doorHitRect = placeOnWall(door.wall, door.offsetCm, door.widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
+  const doorClearance = doorClearanceRect(door, preset.widthCm, preset.lengthCm);
 
   return (
     <>
@@ -222,23 +351,37 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
           <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{presets.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
           <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{preset.axles === 2 ? "Doble eje" : "1 eje"}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
 
-          <div className="config-step equipment-heading"><span>02</span><div><strong>{meta.equipmentHeading}</strong><small>{meta.equipmentSub}</small></div></div>
-          <div className="equipment-library">{equipmentList.map((equipment) => <button type="button" key={equipment.id} onClick={() => addEquipment(equipment.id)}><i style={{ background: equipment.color }} /><span><strong>{equipment.name}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span><b>+</b></button>)}</div>
+          <div className="config-step equipment-heading"><span>02</span><div><strong>{meta.equipmentHeading}</strong><small>Elige cuántos y toca “Agregar”</small></div></div>
+          <div className="equipment-library">{equipmentList.map((equipment) => {
+            const qty = quantities[equipment.id] ?? 1;
+            return (
+              <div className="equipment-row" key={equipment.id}>
+                <i style={{ background: equipment.color }} />
+                <span><strong>{equipment.name}{equipment.mount === "outside" ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
+                <div className="qty-stepper">
+                  <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
+                  <span>{qty}</span>
+                  <button type="button" aria-label="Agregar uno más" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.min(12, (current[equipment.id] ?? 1) + 1) }))}>+</button>
+                </div>
+                <button type="button" className="qty-add" onClick={() => addEquipment(equipment.id, qty)}>Agregar {qty > 1 ? `×${qty}` : ""}</button>
+              </div>
+            );
+          })}</div>
         </aside>
 
         <div className="plan-workspace">
-          <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span></div></div>
+          <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
           <div className="plan-scroll">
             <svg
               ref={svgRef}
               className="trailer-plan"
-              viewBox={`${-35} ${-80} ${preset.widthCm + 70} ${preset.lengthCm + 120}`}
+              viewBox={`${-60} ${-80} ${preset.widthCm + 110} ${preset.lengthCm + 150}`}
               role="img"
               aria-label={`Plano editable de remolque de ${preset.widthCm} por ${preset.lengthCm} centímetros`}
               onPointerMove={moveDrag}
               onPointerUp={stopDrag}
               onPointerCancel={stopDrag}
-              onPointerDown={() => setSelectedId(null)}
+              onPointerDown={() => { setSelectedId(null); setDoorSelected(false); }}
             >
               <defs><pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#dce5e5" strokeWidth="0.7" /></pattern><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#smallGrid)" /><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b9c9cc" strokeWidth="1.3" /></pattern></defs>
               <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
@@ -247,26 +390,64 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
               <rect x="-23" y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
               <rect x={preset.widthCm} y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
               <text x={preset.widthCm / 2} y="-17" textAnchor="middle" className="plan-label">FRENTE / TIRÓN</text>
-              <text x={preset.widthCm / 2} y={preset.lengthCm + 28} textAnchor="middle" className="plan-measure">ANCHO {(preset.widthCm / 100).toFixed(2)} m</text>
-              <text x="-27" y={preset.lengthCm / 2} transform={`rotate(-90 -27 ${preset.lengthCm / 2})`} textAnchor="middle" className="plan-measure">LARGO {(preset.lengthCm / 100).toFixed(2)} m</text>
-              <line x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
+
+              {doorSelected && <rect x={doorClearance.xCm} y={doorClearance.yCm} width={doorClearance.widthCm} height={doorClearance.depthCm} fill="rgba(214,162,41,.14)" stroke="#d6a229" strokeDasharray="6 5" strokeWidth="1.2" />}
+
               {items.map((item, index) => {
                 const definition = getEquipment(item.typeId);
                 if (!definition) return null;
                 const bad = collisionIds.has(item.instanceId);
                 const active = selectedId === item.instanceId;
-                return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""}`} onPointerDown={(event) => startDrag(event, item)}>
+                return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
                   <rect width={item.widthCm} height={item.depthCm} rx="3" fill={definition.color} fillOpacity=".92" />
                   <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : "#0a3550"} strokeWidth={active ? 4 : 2} />
                   <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className="item-label"><tspan x={item.widthCm / 2}>{index + 1}. {definition.shortName}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
                 </g>;
               })}
+
+              <g className={`plan-door ${doorSelected ? "selected" : ""}`} onPointerDown={startDoorDrag}>
+                <rect x={doorHitRect.xCm} y={doorHitRect.yCm} width={doorHitRect.widthCm} height={doorHitRect.depthCm} fill="transparent" />
+                <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" strokeLinecap="butt" />
+                <text x={doorGeo.labelX} y={doorGeo.labelY} textAnchor="middle" className="door-label" transform={doorGeo.rotate ? `rotate(${doorGeo.rotate} ${doorGeo.labelX} ${doorGeo.labelY})` : undefined}>PUERTA {door.widthCm}cm</text>
+              </g>
+
+              <line x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
+
+              <g className="ruler ruler-bottom">
+                <line x1={0} y1={preset.lengthCm + 6} x2={preset.widthCm} y2={preset.lengthCm + 6} className="ruler-line" />
+                {ticksFor(preset.widthCm, 10).map((v) => <line key={`bw-${v}`} x1={v} y1={preset.lengthCm + 6} x2={v} y2={preset.lengthCm + (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
+                {ticksFor(preset.widthCm, 50).map((v) => <text key={`bwl-${v}`} x={v} y={preset.lengthCm + 27} textAnchor="middle" className="ruler-label">{v}</text>)}
+              </g>
+              <g className="ruler ruler-left">
+                <line x1={-6} y1={0} x2={-6} y2={preset.lengthCm} className="ruler-line" />
+                {ticksFor(preset.lengthCm, 10).map((v) => <line key={`lh-${v}`} x1={-6} y1={v} x2={-(v % 50 === 0 ? 16 : 10)} y2={v} className="ruler-tick" />)}
+                {ticksFor(preset.lengthCm, 50).map((v) => <text key={`lhl-${v}`} x={-24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 -24 ${v})`}>{v}</text>)}
+              </g>
+
+              <text x={preset.widthCm / 2} y={preset.lengthCm + 48} textAnchor="middle" className="plan-measure">ANCHO {(preset.widthCm / 100).toFixed(2)} m</text>
+              <text x="-44" y={preset.lengthCm / 2} transform={`rotate(-90 -44 ${preset.lengthCm / 2})`} textAnchor="middle" className="plan-measure">LARGO {(preset.lengthCm / 100).toFixed(2)} m</text>
             </svg>
           </div>
 
-          <div className={`layout-status ${layoutErrors.length ? "has-errors" : "ready"}`}><strong>{layoutErrors.length ? `${layoutErrors.length} ajuste${layoutErrors.length > 1 ? "s" : ""} pendiente${layoutErrors.length > 1 ? "s" : ""}` : "Distribución lista para cotizar"}</strong><span>{layoutErrors[0] ?? "Todos los equipos están dentro del remolque y sin cruces."}</span></div>
+          <div className={`layout-status ${layoutErrors.length ? "has-errors" : "ready"}`}><strong>{layoutErrors.length ? `${layoutErrors.length} ajuste${layoutErrors.length > 1 ? "s" : ""} pendiente${layoutErrors.length > 1 ? "s" : ""}` : "Distribución lista para cotizar"}</strong><span>{layoutErrors[0] ?? "Todos los equipos están dentro del remolque, contra las orillas y sin cruces."}</span></div>
 
-          {selected && selectedDefinition && selectedWidthLimits && selectedDepthLimits ? <div className="item-editor"><div><span>ELEMENTO SELECCIONADO</span><strong>{selectedDefinition.name}</strong><small>{selectedDefinition.description}</small></div><label>Ancho<input type="number" min={selectedWidthLimits.min} max={Math.min(selectedWidthLimits.max, preset.widthCm)} value={selected.widthCm} onChange={(event) => updateItem(selected.instanceId, { widthCm: Number(event.target.value) })} /><b>cm</b></label><label>Fondo<input type="number" min={selectedDepthLimits.min} max={Math.min(selectedDepthLimits.max, preset.lengthCm)} value={selected.depthCm} onChange={(event) => updateItem(selected.instanceId, { depthCm: Number(event.target.value) })} /><b>cm</b></label><button type="button" onClick={rotateSelected}>Girar 90°</button><button type="button" className="danger-button" onClick={removeSelected}>Eliminar</button></div> : <div className="item-editor empty"><span>Selecciona un elemento del plano para ajustar su medida, girarlo o eliminarlo.</span></div>}
+          {selected && selectedDefinition && selectedAlongLimits && selectedDepthLimits ? (
+            <div className="item-editor">
+              <div><span>ELEMENTO SELECCIONADO</span><strong>{selectedDefinition.name}</strong><small>{selectedDefinition.description} {(selectedDefinition.mount ?? "inside") === "outside" ? "Va montado por fuera del remolque." : `Pared actual: ${WALL_LABEL[selected.wall]}.`}</small></div>
+              <label>Ancho<input type="number" min={selectedAlongLimits.min} max={Math.min(selectedAlongLimits.max, wallLengthCm(selected.wall, preset.widthCm, preset.lengthCm))} value={selected.rotation === 0 ? selected.widthCm : selected.depthCm} onChange={(event) => updateItemSize(selected.instanceId, "along", Number(event.target.value))} /><b>cm</b></label>
+              <label>Fondo<input type="number" min={selectedDepthLimits.min} max={selectedDepthLimits.max} value={selected.rotation === 0 ? selected.depthCm : selected.widthCm} onChange={(event) => updateItemSize(selected.instanceId, "depth", Number(event.target.value))} /><b>cm</b></label>
+              <button type="button" onClick={() => cycleWall(selected.instanceId)}>Cambiar de pared ↻</button>
+              <button type="button" className="danger-button" onClick={removeSelected}>Eliminar</button>
+            </div>
+          ) : doorSelected ? (
+            <div className="item-editor door-editor">
+              <div><span>PUERTA DEL REMOLQUE</span><strong>{WALL_LABEL[door.wall]}</strong><small>Se ubica por defecto centrada en la parte trasera. Nada puede colocarse justo frente a ella (zona de {DOOR_CLEARANCE_CM} cm).</small></div>
+              <label>Ancho<input type="number" min={DOOR_MIN_WIDTH_CM} max={Math.min(DOOR_MAX_WIDTH_CM, wallLengthCm(door.wall, preset.widthCm, preset.lengthCm))} value={door.widthCm} onChange={(event) => updateDoorWidth(Number(event.target.value))} /><b>cm</b></label>
+              <button type="button" onClick={cycleDoorWall}>Cambiar de pared ↻</button>
+            </div>
+          ) : (
+            <div className="item-editor empty"><span>Selecciona un elemento o la puerta en el plano para ajustar su medida o cambiarlo de pared. Todo se desliza pegado a la orilla del remolque.</span></div>
+          )}
         </div>
 
         <aside className="price-panel">
@@ -297,8 +478,8 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
         <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{preset.axles === 2 ? "Doble eje" : "1 eje completo"}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
         <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div></div>
-        <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}</svg></div>
-        <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div><div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
+        <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>
+        <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div><div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div><div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
         <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div><div><span>IVA</span><strong>{money(quote.iva)}</strong></div><div><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
