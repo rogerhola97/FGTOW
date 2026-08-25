@@ -42,6 +42,32 @@ function ticksFor(maxCm: number, step: number) {
   return values;
 }
 
+function rulerLabels(maxCm: number, step: number, minGap: number) {
+  const values: number[] = [];
+  for (let v = 0; v <= maxCm; v += step) values.push(v);
+  const last = values[values.length - 1];
+  if (last !== maxCm) {
+    if (maxCm - last < minGap) values[values.length - 1] = maxCm;
+    else values.push(maxCm);
+  }
+  return values;
+}
+
+const SNAP_DISTANCE_CM = 8;
+
+function snapAlongWall(offset: number, alongCm: number, neighbors: { start: number; end: number }[]) {
+  let best = offset;
+  let bestGap = SNAP_DISTANCE_CM;
+  const end = offset + alongCm;
+  for (const neighbor of neighbors) {
+    const gapBefore = neighbor.start - end;
+    if (gapBefore > 0 && gapBefore < bestGap) { bestGap = gapBefore; best = neighbor.start - alongCm; }
+    const gapAfter = offset - neighbor.end;
+    if (gapAfter > 0 && gapAfter < bestGap) { bestGap = gapAfter; best = neighbor.end; }
+  }
+  return best;
+}
+
 function doorGeometry(door: DoorConfig, preset: TrailerPreset) {
   const { wall, offsetCm, widthCm } = door;
   if (wall === "front") return { x1: offsetCm, y1: 0, x2: offsetCm + widthCm, y2: 0, labelX: offsetCm + widthCm / 2, labelY: 18, rotate: 0 };
@@ -233,7 +259,13 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
       const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
       const desired = clamp((wall === "front" || wall === "back" ? pointX : pointY) - alongCm / 2, 0, Math.max(0, span - alongCm));
-      const offset = avoidDoor(wall, desired, alongCm, mount, door, span);
+      const afterDoor = avoidDoor(wall, desired, alongCm, mount, door, span);
+      const neighbors = current.filter((other) => other.instanceId !== instanceId && other.wall === wall).map((other) => {
+        const otherAlong = other.rotation === 0 ? other.widthCm : other.depthCm;
+        const otherOffset = offsetOfItem(other);
+        return { start: otherOffset, end: otherOffset + otherAlong };
+      });
+      const offset = clamp(snapAlongWall(afterDoor, alongCm, neighbors), 0, Math.max(0, span - alongCm));
       const rect = placeOnWall(wall, offset, alongCm, depthCm, preset.widthCm, preset.lengthCm, mount);
       return { ...item, wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
     }));
@@ -375,7 +407,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
             <svg
               ref={svgRef}
               className="trailer-plan"
-              viewBox={`${-60} ${-80} ${preset.widthCm + 110} ${preset.lengthCm + 150}`}
+              viewBox={`${-60} ${-120} ${preset.widthCm + 100} ${preset.lengthCm + 190}`}
               role="img"
               aria-label={`Plano editable de remolque de ${preset.widthCm} por ${preset.lengthCm} centímetros`}
               onPointerMove={moveDrag}
@@ -416,12 +448,22 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
               <g className="ruler ruler-bottom">
                 <line x1={0} y1={preset.lengthCm + 6} x2={preset.widthCm} y2={preset.lengthCm + 6} className="ruler-line" />
                 {ticksFor(preset.widthCm, 10).map((v) => <line key={`bw-${v}`} x1={v} y1={preset.lengthCm + 6} x2={v} y2={preset.lengthCm + (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
-                {ticksFor(preset.widthCm, 50).map((v) => <text key={`bwl-${v}`} x={v} y={preset.lengthCm + 27} textAnchor="middle" className="ruler-label">{v}</text>)}
+                {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`bwl-${v}`} x={v} y={preset.lengthCm + 27} textAnchor="middle" className="ruler-label">{v}</text>)}
+              </g>
+              <g className="ruler ruler-top">
+                <line x1={0} y1={-80} x2={preset.widthCm} y2={-80} className="ruler-line" />
+                {ticksFor(preset.widthCm, 10).map((v) => <line key={`tw-${v}`} x1={v} y1={-80} x2={v} y2={-80 - (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
+                {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`twl-${v}`} x={v} y={-101} textAnchor="middle" className="ruler-label">{v}</text>)}
               </g>
               <g className="ruler ruler-left">
                 <line x1={-6} y1={0} x2={-6} y2={preset.lengthCm} className="ruler-line" />
                 {ticksFor(preset.lengthCm, 10).map((v) => <line key={`lh-${v}`} x1={-6} y1={v} x2={-(v % 50 === 0 ? 16 : 10)} y2={v} className="ruler-tick" />)}
-                {ticksFor(preset.lengthCm, 50).map((v) => <text key={`lhl-${v}`} x={-24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 -24 ${v})`}>{v}</text>)}
+                {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`lhl-${v}`} x={-24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 -24 ${v})`}>{v}</text>)}
+              </g>
+              <g className="ruler ruler-right">
+                <line x1={preset.widthCm + 6} y1={0} x2={preset.widthCm + 6} y2={preset.lengthCm} className="ruler-line" />
+                {ticksFor(preset.lengthCm, 10).map((v) => <line key={`rh-${v}`} x1={preset.widthCm + 6} y1={v} x2={preset.widthCm + (v % 50 === 0 ? 16 : 10)} y2={v} className="ruler-tick" />)}
+                {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`rhl-${v}`} x={preset.widthCm + 24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 ${preset.widthCm + 24} ${v})`}>{v}</text>)}
               </g>
 
               <text x={preset.widthCm / 2} y={preset.lengthCm + 48} textAnchor="middle" className="plan-measure">ANCHO {(preset.widthCm / 100).toFixed(2)} m</text>

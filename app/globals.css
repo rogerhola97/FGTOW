@@ -176,7 +176,7 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .plan-legend i.danger { background:#b3261e; }
 .plan-legend i.door { width:11px; height:4px; border-radius:0; background:#d6a229; }
 .plan-scroll { min-height:620px; max-height:850px; padding:20px; display:flex; align-items:center; justify-content:center; overflow:auto; background:#f4f7f6; }
-.trailer-plan { display:block; width:100%; max-width:760px; min-width:460px; max-height:800px; touch-action:none; user-select:none; filter:drop-shadow(0 13px 18px rgba(6,41,62,.10)); }
+.trailer-plan { display:block; width:100%; max-width:760px; min-width:460px; max-height:800px; touch-action:pan-y; user-select:none; filter:drop-shadow(0 13px 18px rgba(6,41,62,.10)); }
 .ruler-line { stroke:#8b9ba1; stroke-width:1; }
 .ruler-tick { stroke:#8b9ba1; stroke-width:.8; }
 .ruler-label { fill:#5c6d73; font:700 6.5px monospace; }
