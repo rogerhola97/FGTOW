@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, PointerEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   DOOR_CLEARANCE_CM,
   DOOR_MAX_WIDTH_CM,
@@ -30,7 +30,7 @@ import {
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
-type DragState = { kind: "item"; instanceId: string; pointerId: number } | { kind: "door"; pointerId: number } | { kind: "pan"; pointerId: number; lastClientY: number } | null;
+type DragState = { kind: "item"; instanceId: string; pointerId: number } | { kind: "door"; pointerId: number } | null;
 
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -156,6 +156,18 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   const [quoteNumber, setQuoteNumber] = useState("BORRADOR");
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", city: "Monterrey, N.L.", notes: "" });
   const svgRef = useRef<SVGSVGElement>(null);
+  const [rulerHeightPx, setRulerHeightPx] = useState<number | null>(null);
+
+  useEffect(() => {
+    const node = svgRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setRulerHeightPx(entry.contentRect.height);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const quote = useMemo(() => calculateQuote(presetId, items, includeIva), [presetId, items, includeIva]);
   const layoutErrors = useMemo(() => validateLayout(preset, items, door), [preset, items, door]);
@@ -330,22 +342,9 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
 
   function moveDrag(event: PointerEvent<SVGSVGElement>) {
     if (!drag) return;
-    if (drag.kind === "pan") {
-      window.scrollBy(0, drag.lastClientY - event.clientY);
-      setDrag({ ...drag, lastClientY: event.clientY });
-      return;
-    }
     const point = pointInPlan(event);
     if (drag.kind === "item") moveItemTo(drag.instanceId, point.x, point.y);
     else moveDoorTo(point.x, point.y);
-  }
-
-  function startBackgroundPan(event: PointerEvent<SVGSVGElement>) {
-    setSelectedId(null);
-    setDoorSelected(false);
-    if (event.pointerType !== "touch") return;
-    svgRef.current?.setPointerCapture(event.pointerId);
-    setDrag({ kind: "pan", pointerId: event.pointerId, lastClientY: event.clientY });
   }
 
   function stopDrag() {
@@ -417,73 +416,74 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
         <div className="plan-workspace">
           <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
           <div className="plan-scroll">
-            <svg
-              ref={svgRef}
-              className="trailer-plan"
-              viewBox={`${-60} ${-120} ${preset.widthCm + 100} ${preset.lengthCm + 190}`}
-              role="img"
-              aria-label={`Plano editable de remolque de ${preset.widthCm} por ${preset.lengthCm} centímetros`}
-              onPointerMove={moveDrag}
-              onPointerUp={stopDrag}
-              onPointerCancel={stopDrag}
-              onPointerDown={startBackgroundPan}
-            >
-              <defs><pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#dce5e5" strokeWidth="0.7" /></pattern><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#smallGrid)" /><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b9c9cc" strokeWidth="1.3" /></pattern></defs>
-              <g className="plan-interactive" onPointerDown={(event) => event.preventDefault()}>
-                <path className="plan-interactive" d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
-                <circle className="plan-interactive" cx={preset.widthCm / 2} cy="-66" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" />
-                <rect className="plan-interactive" x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
-                <rect className="plan-interactive" x="-23" y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
-                <rect className="plan-interactive" x={preset.widthCm} y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
+            <div className="plan-row">
+              <svg className="ruler-strip" viewBox={`0 ${-120} 30 ${preset.lengthCm + 190}`} preserveAspectRatio="none" style={rulerHeightPx ? { height: rulerHeightPx } : undefined} aria-hidden="true">
+                <line x1={24} y1={0} x2={24} y2={preset.lengthCm} className="ruler-line" />
+                {ticksFor(preset.lengthCm, 10).map((v) => <line key={`lh-${v}`} x1={24} y1={v} x2={30 - (v % 50 === 0 ? 16 : 10)} y2={v} className="ruler-tick" />)}
+                {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`lhl-${v}`} x={6} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 6 ${v})`}>{v}</text>)}
+              </svg>
+
+              <svg
+                ref={svgRef}
+                className="trailer-plan"
+                viewBox={`${-30} ${-120} ${preset.widthCm + 60} ${preset.lengthCm + 190}`}
+                role="img"
+                aria-label={`Plano editable de remolque de ${preset.widthCm} por ${preset.lengthCm} centímetros`}
+                onPointerMove={moveDrag}
+                onPointerUp={stopDrag}
+                onPointerCancel={stopDrag}
+                onPointerDown={() => { setSelectedId(null); setDoorSelected(false); }}
+              >
+                <defs><pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#dce5e5" strokeWidth="0.7" /></pattern><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#smallGrid)" /><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b9c9cc" strokeWidth="1.3" /></pattern></defs>
+                <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
+                <circle cx={preset.widthCm / 2} cy="-66" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" />
+                <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
+                <rect x="-23" y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
+                <rect x={preset.widthCm} y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
                 <text x={preset.widthCm / 2} y="-17" textAnchor="middle" className="plan-label">FRENTE / TIRÓN</text>
 
-                {doorSelected && <rect className="plan-interactive" x={doorClearance.xCm} y={doorClearance.yCm} width={doorClearance.widthCm} height={doorClearance.depthCm} fill="rgba(214,162,41,.14)" stroke="#d6a229" strokeDasharray="6 5" strokeWidth="1.2" />}
+                {doorSelected && <rect x={doorClearance.xCm} y={doorClearance.yCm} width={doorClearance.widthCm} height={doorClearance.depthCm} fill="rgba(214,162,41,.14)" stroke="#d6a229" strokeDasharray="6 5" strokeWidth="1.2" />}
 
                 {items.map((item, index) => {
                   const definition = getEquipment(item.typeId);
                   if (!definition) return null;
                   const bad = collisionIds.has(item.instanceId);
                   const active = selectedId === item.instanceId;
-                  return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item plan-interactive ${bad ? "collision" : ""} ${active ? "selected" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
-                    <rect className="plan-interactive" width={item.widthCm} height={item.depthCm} rx="3" fill={definition.color} fillOpacity=".92" />
-                    <rect className="plan-interactive" width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : "#0a3550"} strokeWidth={active ? 4 : 2} />
+                  return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
+                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill={definition.color} fillOpacity=".92" />
+                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : "#0a3550"} strokeWidth={active ? 4 : 2} />
                     <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className="item-label"><tspan x={item.widthCm / 2}>{index + 1}. {definition.shortName}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
                   </g>;
                 })}
 
-                <g className={`plan-door plan-interactive ${doorSelected ? "selected" : ""}`} onPointerDown={startDoorDrag}>
-                  <rect className="plan-interactive" x={doorHitRect.xCm} y={doorHitRect.yCm} width={doorHitRect.widthCm} height={doorHitRect.depthCm} fill="transparent" />
-                  <line className="plan-interactive" x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" strokeLinecap="butt" />
+                <g className={`plan-door ${doorSelected ? "selected" : ""}`} onPointerDown={startDoorDrag}>
+                  <rect x={doorHitRect.xCm} y={doorHitRect.yCm} width={doorHitRect.widthCm} height={doorHitRect.depthCm} fill="transparent" />
+                  <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" strokeLinecap="butt" />
                   <text x={doorGeo.labelX} y={doorGeo.labelY} textAnchor="middle" className="door-label" transform={doorGeo.rotate ? `rotate(${doorGeo.rotate} ${doorGeo.labelX} ${doorGeo.labelY})` : undefined}>PUERTA {door.widthCm}cm</text>
                 </g>
 
-                <line className="plan-interactive" x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
-              </g>
+                <line x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
 
-              <g className="ruler ruler-bottom">
-                <line x1={0} y1={preset.lengthCm + 6} x2={preset.widthCm} y2={preset.lengthCm + 6} className="ruler-line" />
-                {ticksFor(preset.widthCm, 10).map((v) => <line key={`bw-${v}`} x1={v} y1={preset.lengthCm + 6} x2={v} y2={preset.lengthCm + (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
-                {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`bwl-${v}`} x={v} y={preset.lengthCm + 27} textAnchor="middle" className="ruler-label">{v}</text>)}
-              </g>
-              <g className="ruler ruler-top">
-                <line x1={0} y1={-80} x2={preset.widthCm} y2={-80} className="ruler-line" />
-                {ticksFor(preset.widthCm, 10).map((v) => <line key={`tw-${v}`} x1={v} y1={-80} x2={v} y2={-80 - (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
-                {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`twl-${v}`} x={v} y={-101} textAnchor="middle" className="ruler-label">{v}</text>)}
-              </g>
-              <g className="ruler ruler-left">
-                <line x1={-6} y1={0} x2={-6} y2={preset.lengthCm} className="ruler-line" />
-                {ticksFor(preset.lengthCm, 10).map((v) => <line key={`lh-${v}`} x1={-6} y1={v} x2={-(v % 50 === 0 ? 16 : 10)} y2={v} className="ruler-tick" />)}
-                {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`lhl-${v}`} x={-24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 -24 ${v})`}>{v}</text>)}
-              </g>
-              <g className="ruler ruler-right">
-                <line x1={preset.widthCm + 6} y1={0} x2={preset.widthCm + 6} y2={preset.lengthCm} className="ruler-line" />
-                {ticksFor(preset.lengthCm, 10).map((v) => <line key={`rh-${v}`} x1={preset.widthCm + 6} y1={v} x2={preset.widthCm + (v % 50 === 0 ? 16 : 10)} y2={v} className="ruler-tick" />)}
-                {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`rhl-${v}`} x={preset.widthCm + 24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 ${preset.widthCm + 24} ${v})`}>{v}</text>)}
-              </g>
+                <g className="ruler ruler-bottom">
+                  <line x1={0} y1={preset.lengthCm + 6} x2={preset.widthCm} y2={preset.lengthCm + 6} className="ruler-line" />
+                  {ticksFor(preset.widthCm, 10).map((v) => <line key={`bw-${v}`} x1={v} y1={preset.lengthCm + 6} x2={v} y2={preset.lengthCm + (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
+                  {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`bwl-${v}`} x={v} y={preset.lengthCm + 27} textAnchor="middle" className="ruler-label">{v}</text>)}
+                </g>
+                <g className="ruler ruler-top">
+                  <line x1={0} y1={-80} x2={preset.widthCm} y2={-80} className="ruler-line" />
+                  {ticksFor(preset.widthCm, 10).map((v) => <line key={`tw-${v}`} x1={v} y1={-80} x2={v} y2={-80 - (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
+                  {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`twl-${v}`} x={v} y={-101} textAnchor="middle" className="ruler-label">{v}</text>)}
+                </g>
 
-              <text x={preset.widthCm / 2} y={preset.lengthCm + 48} textAnchor="middle" className="plan-measure">ANCHO {(preset.widthCm / 100).toFixed(2)} m</text>
-              <text x="-44" y={preset.lengthCm / 2} transform={`rotate(-90 -44 ${preset.lengthCm / 2})`} textAnchor="middle" className="plan-measure">LARGO {(preset.lengthCm / 100).toFixed(2)} m</text>
-            </svg>
+                <text x={preset.widthCm / 2} y={preset.lengthCm + 48} textAnchor="middle" className="plan-measure">ANCHO {(preset.widthCm / 100).toFixed(2)} m</text>
+              </svg>
+
+              <svg className="ruler-strip" viewBox={`0 ${-120} 30 ${preset.lengthCm + 190}`} preserveAspectRatio="none" style={rulerHeightPx ? { height: rulerHeightPx } : undefined} aria-hidden="true">
+                <line x1={6} y1={0} x2={6} y2={preset.lengthCm} className="ruler-line" />
+                {ticksFor(preset.lengthCm, 10).map((v) => <line key={`rh-${v}`} x1={6} y1={v} x2={v % 50 === 0 ? 16 : 10} y2={v} className="ruler-tick" />)}
+                {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`rhl-${v}`} x={24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 24 ${v})`}>{v}</text>)}
+              </svg>
+            </div>
           </div>
 
           <div className={`layout-status ${layoutErrors.length ? "has-errors" : "ready"}`}><strong>{layoutErrors.length ? `${layoutErrors.length} ajuste${layoutErrors.length > 1 ? "s" : ""} pendiente${layoutErrors.length > 1 ? "s" : ""}` : "Distribución lista para cotizar"}</strong><span>{layoutErrors[0] ?? "Todos los equipos están dentro del remolque, contra las orillas y sin cruces."}</span></div>
