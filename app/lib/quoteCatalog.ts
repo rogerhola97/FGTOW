@@ -8,7 +8,6 @@ export type ModelMeta = {
   heroTitleLine: string;
   heroEm: string;
   intro: string;
-  sourceBadges: string[];
   equipmentHeading: string;
   equipmentSub: string;
   equipmentLabel: string;
@@ -25,7 +24,6 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     heroTitleLine: "Diseña tu food truck",
     heroEm: "sobre un plano real.",
     intro: "Elige una medida, agrega equipos de cocina y arrástralos dentro del remolque. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.",
-    sourceBadges: ["Medidas desde 1.80 × 2.00 m", "1 o 2 ejes", "Precios aproximados MXN"],
     equipmentHeading: "Equipamiento",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "equipos principales",
@@ -40,7 +38,6 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     heroTitleLine: "Configura tu remolque",
     heroEm: "de carga y trabajo.",
     intro: "Elige una medida, agrega rampas, racks y amarres, y colócalos sobre el plano. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.",
-    sourceBadges: ["Medidas desde 1.50 × 2.45 m", "1 o 2 ejes", "Precios aproximados MXN"],
     equipmentHeading: "Aditamentos",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "aditamentos principales",
@@ -55,7 +52,6 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     heroTitleLine: "Configura tu remolque",
     heroEm: "para RZR, motos y cuatrimotos.",
     intro: "Elige una medida, agrega rampas, anclajes y soportes, y colócalos sobre el plano. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.",
-    sourceBadges: ["Medidas desde 1.50 × 3.05 m", "1 o 2 ejes", "Precios aproximados MXN"],
     equipmentHeading: "Aditamentos",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "aditamentos principales",

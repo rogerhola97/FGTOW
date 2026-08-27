@@ -132,8 +132,6 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .configurator-intro { padding:80px 6vw 66px; background:#fff; border-bottom:1px solid var(--line); }
 .configurator-intro h1 { max-width:1000px; margin:26px 0 25px; font-size:clamp(48px,6vw,88px); line-height:.94; letter-spacing:-.06em; text-transform:uppercase; }
 .configurator-intro>p { max-width:780px; color:var(--muted); font-size:18px; line-height:1.7; }
-.source-badges { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }
-.source-badges span { padding:9px 13px; background:#edf2f1; border:1px solid #d8e1df; color:var(--blue); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
 
 .configurator-shell { max-width:1720px; margin:0 auto; padding:30px 2.5vw 50px; display:grid; grid-template-columns:290px minmax(570px,1fr) 330px; align-items:start; gap:18px; }
 .config-sidebar,.plan-workspace,.price-panel { background:#fff; border:1px solid var(--line); box-shadow:0 10px 35px rgba(6,41,62,.055); }

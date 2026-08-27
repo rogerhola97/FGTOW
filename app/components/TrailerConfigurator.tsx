@@ -386,7 +386,6 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
         <span className="eyebrow">Cotizador interactivo · {meta.label}</span>
         <h1>{meta.heroTitleLine}<br /><em>{meta.heroEm}</em></h1>
         <p>{meta.intro}</p>
-        <div className="source-badges">{meta.sourceBadges.map((badge) => <span key={badge}>{badge}</span>)}</div>
       </section>
 
       <section className="configurator-shell no-print">
