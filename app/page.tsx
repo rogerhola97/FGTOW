@@ -3,9 +3,30 @@ import Image from "next/image";
 import { LeadForm } from "./components/LeadForm";
 
 const products = [
-  { code: "01", id: "food", name: "Food Truck", use: "Cocina móvil para café, snacks y servicio completo", className: "food" },
-  { code: "02", id: "cargo", name: "Cargo", use: "Plataforma para herramienta, mudanza y carga diaria", className: "cargo" },
-  { code: "03", id: "rzr", name: "RZR Sport", use: "Transporte para RZR, UTV, motos y cuatrimotos", className: "rzr" },
+  {
+    code: "01",
+    id: "food",
+    name: "Food Truck",
+    use: "Cocina móvil para café, snacks y servicio completo",
+    description: "Distribuye tu cocina, ventana de servicio e instalaciones sobre un plano 2D real antes de fabricar. Para café, snacks, tacos y operaciones de servicio completo.",
+    className: "food",
+  },
+  {
+    code: "02",
+    id: "cargo",
+    name: "Cargo",
+    use: "Plataforma para herramienta, mudanza y carga diaria",
+    description: "Plataforma robusta para herramienta, mudanza y carga diaria. Configura medidas, ejes y aditamentos como rampas, racks y amarres según tu operación.",
+    className: "cargo",
+  },
+  {
+    code: "03",
+    id: "rzr",
+    name: "RZR Sport",
+    use: "Transporte para RZR, UTV, motos y cuatrimotos",
+    description: "Un solo concepto para mover RZR, Can-Am, UTV, motos y cuatrimotos. Configura tamaño, ejes y aditamentos como rampas reforzadas, anclajes y malacate.",
+    className: "rzr",
+  },
 ];
 
 const reasons = [
@@ -55,14 +76,17 @@ export default function Home() {
 
       <section className="section" id="soluciones">
         <div className="section-head">
-          <div><span className="eyebrow">Línea inicial</span><h2>Una plataforma.<br />Muchas posibilidades.</h2></div>
-          <p>Modelos base para cotizar con rapidez, configurables en medidas, capacidad, anclajes, rampas y equipamiento.</p>
+          <div><span className="eyebrow">Línea inicial</span><h2>Tres modelos.<br />Un punto de partida.</h2></div>
+          <div className="section-head-desc">
+            <p>Modelos base para cotizar con rapidez, configurables en medidas, capacidad, anclajes, rampas y equipamiento.</p>
+            <p>Elige el concepto que se parece a lo que necesitas y configúralo a tu proyecto: medidas, ejes y aditamentos.</p>
+          </div>
         </div>
         <div className="product-grid">
           {products.map((product) => (
             <article className="product-card" key={product.name}>
               <div className={`product-visual ${product.className}`}><span>{product.code}</span><div className="mini-trailer" /></div>
-              <div className="product-info"><small>{product.use}</small><h3>FG {product.name}</h3><Link href={`/catalogo#${product.id}`}>Ver configuración <span>→</span></Link></div>
+              <div className="product-info"><small>{product.use}</small><h3>FG {product.name}</h3><p>{product.description}</p><Link className="button" href={`/cotizador/${product.id}`}>Configurar este modelo <span>→</span></Link></div>
             </article>
           ))}
         </div>

@@ -49,7 +49,8 @@ h1 em,h2 em { color:var(--gold); font-style:normal; }
 .section { padding:118px 6vw; }
 .section-head { display:flex; justify-content:space-between; align-items:end; gap:60px; margin-bottom:58px; }
 .section-head h2,.split-title h2,.quote-copy h2,.catalog-note h2 { margin:23px 0 0; font-size:clamp(42px,5vw,72px); line-height:.98; letter-spacing:-.055em; text-transform:uppercase; }
-.section-head>p { max-width:440px; color:var(--muted); font-size:16px; line-height:1.65; }
+.section-head>p,.section-head-desc { max-width:440px; color:var(--muted); font-size:16px; line-height:1.65; }
+.section-head-desc p { margin:0 0 12px; } .section-head-desc p:last-child { margin-bottom:0; }
 .product-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
 .product-card { min-width:0; background:white; border:1px solid var(--line); transition:.28s; }
 .product-card:hover { transform:translateY(-7px); box-shadow:0 20px 50px rgba(6,41,62,.11); }
@@ -66,11 +67,12 @@ h1 em,h2 em { color:var(--gold); font-style:normal; }
 .product-visual.rzr .mini-trailer { width:76%; left:8%; height:14%; top:54%; }
 .product-info { padding:25px; }
 .product-info>small { color:#788188; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
-.product-info h3 { font-size:23px; margin:10px 0 22px; }
+.product-info h3 { font-size:23px; margin:10px 0 14px; }
+.product-info>p { color:var(--muted); font-size:14px; line-height:1.6; margin:0 0 22px; }
 .product-info dl { margin:0 0 22px; border-top:1px solid var(--line); }
 .product-info dl div { display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); font-size:11px; }
 .product-info dt { color:var(--muted); } .product-info dd { margin:0; font-weight:800; }
-.product-info a { font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; }
+.product-info .button { width:100%; }
 .price-note { color:var(--muted); font-size:11px; margin-top:20px; }
 .dark-section { padding:118px 6vw; background:var(--deep); color:white; position:relative; overflow:hidden; }
 .dark-section:after { content:"FG"; position:absolute; right:-30px; bottom:-110px; font-size:360px; font-weight:900; color:rgba(255,255,255,.025); letter-spacing:-.12em; }
