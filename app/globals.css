@@ -51,7 +51,7 @@ h1 em,h2 em { color:var(--gold); font-style:normal; }
 .section-head h2,.split-title h2,.quote-copy h2,.catalog-note h2 { margin:23px 0 0; font-size:clamp(42px,5vw,72px); line-height:.98; letter-spacing:-.055em; text-transform:uppercase; }
 .section-head>p,.section-head-desc { max-width:440px; color:var(--muted); font-size:16px; line-height:1.65; }
 .section-head-desc p { margin:0 0 12px; } .section-head-desc p:last-child { margin-bottom:0; }
-.product-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
+.product-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
 .product-card { min-width:0; background:white; border:1px solid var(--line); transition:.28s; }
 .product-card:hover { transform:translateY(-7px); box-shadow:0 20px 50px rgba(6,41,62,.11); }
 .product-visual { height:230px; position:relative; overflow:hidden; background:#e9eeec; border-bottom:1px solid var(--line); }
