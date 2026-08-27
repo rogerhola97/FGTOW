@@ -30,7 +30,7 @@ import {
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
-type DragState = { kind: "item"; instanceId: string; pointerId: number } | { kind: "door"; pointerId: number } | null;
+type DragState = { kind: "item"; instanceId: string; pointerId: number; originWall: Wall; originOffsetCm: number } | { kind: "door"; pointerId: number } | null;
 
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -94,6 +94,149 @@ function avoidDoor(wall: Wall, offset: number, alongCm: number, mount: "inside" 
   const distToEnd = Math.abs(offset - forbiddenEnd);
   const candidate = distToStart < distToEnd ? forbiddenStart : forbiddenEnd;
   return clamp(candidate, 0, Math.max(0, span - alongCm));
+}
+
+type SwapTarget = { instanceId: string; wall: Wall; offsetCm: number };
+type CollisionParams = {
+  instanceId: string;
+  wall: Wall;
+  offsetCm: number;
+  alongCm: number;
+  depthCm: number;
+  mount: "inside" | "outside";
+  trailerWidthCm: number;
+  trailerLengthCm: number;
+  others: PlacedItem[];
+  door: DoorConfig;
+  originWall: Wall;
+  originOffsetCm: number;
+};
+
+const OVERLAP_SWAP_RATIO = 0.6;
+
+// When a dragged item would overlap another, push it to the nearest free spot along
+// the same wall, then other walls, and only swap places with the blocking item as a last resort.
+function resolveCollision(params: CollisionParams): { wall: Wall; offsetCm: number; swapWith?: SwapTarget } {
+  const { wall, alongCm, depthCm, mount, trailerWidthCm, trailerLengthCm, others, door, originWall, originOffsetCm } = params;
+
+  function rectFor(w: Wall, offset: number, a: number, d: number, m: "inside" | "outside") {
+    const rect = placeOnWall(w, offset, a, d, trailerWidthCm, trailerLengthCm, m);
+    return { xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm };
+  }
+
+  function isFree(w: Wall, offset: number, exclude: string[] = []) {
+    const candidate = rectFor(w, offset, alongCm, depthCm, mount);
+    const clearance = mount === "inside" ? doorClearanceRect(door, trailerWidthCm, trailerLengthCm) : null;
+    if (clearance && rectsOverlap(candidate, clearance)) return false;
+    return !others.some((o) => !exclude.includes(o.instanceId) && rectsOverlap(candidate, o));
+  }
+
+  const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
+  const maxOffset = Math.max(0, span - alongCm);
+  const desired = clamp(params.offsetCm, 0, maxOffset);
+
+  if (isFree(wall, desired)) return { wall, offsetCm: desired };
+
+  const desiredRect = rectFor(wall, desired, alongCm, depthCm, mount);
+  const desiredArea = alongCm * depthCm;
+  const overlapping = others
+    .map((other) => {
+      if (!rectsOverlap(desiredRect, other)) return null;
+      const overlapWidth = Math.min(desiredRect.xCm + desiredRect.widthCm, other.xCm + other.widthCm) - Math.max(desiredRect.xCm, other.xCm);
+      const overlapDepth = Math.min(desiredRect.yCm + desiredRect.depthCm, other.yCm + other.depthCm) - Math.max(desiredRect.yCm, other.yCm);
+      const overlapArea = Math.max(0, overlapWidth) * Math.max(0, overlapDepth);
+      const otherArea = Math.max(1, other.widthCm * other.depthCm);
+      return { other, ratio: overlapArea / Math.min(desiredArea, otherArea) };
+    })
+    .filter((entry): entry is { other: PlacedItem; ratio: number } => entry !== null)
+    .sort((a, b) => b.ratio - a.ratio);
+
+  // A swap sends the target to the DRAGGED item's original spot (not the drop point) so the two
+  // truly trade places instead of both landing on the same offset when dropped right on top of it.
+  function attemptSwap(target: PlacedItem): SwapTarget | null {
+    const targetDef = getEquipment(target.typeId);
+    const targetMount = targetDef?.mount ?? "inside";
+    if (targetMount !== mount) return null;
+    const targetAlong = target.rotation === 0 ? target.widthCm : target.depthCm;
+    const targetDepth = target.rotation === 0 ? target.depthCm : target.widthCm;
+    const targetWallSpan = wallLengthCm(target.wall, trailerWidthCm, trailerLengthCm);
+    const originSpan = wallLengthCm(originWall, trailerWidthCm, trailerLengthCm);
+    if (alongCm > targetWallSpan || targetAlong > originSpan) return null;
+    const draggedNewOffset = clamp(offsetOfItem(target), 0, Math.max(0, targetWallSpan - alongCm));
+    if (!isFree(target.wall, draggedNewOffset, [target.instanceId])) return null;
+    const targetNewOffset = clamp(originOffsetCm, 0, Math.max(0, originSpan - targetAlong));
+    const targetCandidate = rectFor(originWall, targetNewOffset, targetAlong, targetDepth, targetMount);
+    const targetClearance = targetMount === "inside" ? doorClearanceRect(door, trailerWidthCm, trailerLengthCm) : null;
+    if (targetClearance && rectsOverlap(targetCandidate, targetClearance)) return null;
+    if (others.some((o) => o.instanceId !== target.instanceId && rectsOverlap(targetCandidate, o))) return null;
+    return { instanceId: target.instanceId, wall: originWall, offsetCm: targetNewOffset };
+  }
+
+  for (const entry of overlapping) {
+    if (entry.ratio < OVERLAP_SWAP_RATIO) break;
+    const swap = attemptSwap(entry.other);
+    if (swap) {
+      const targetWallSpan = wallLengthCm(entry.other.wall, trailerWidthCm, trailerLengthCm);
+      const draggedNewOffset = clamp(offsetOfItem(entry.other), 0, Math.max(0, targetWallSpan - alongCm));
+      return { wall: entry.other.wall, offsetCm: draggedNewOffset, swapWith: swap };
+    }
+  }
+
+  const step = 2;
+  const range = Math.max(desired, maxOffset - desired);
+  for (let d = step; d <= range + step; d += step) {
+    const left = desired - d;
+    const right = desired + d;
+    if (left >= 0 && isFree(wall, left)) return { wall, offsetCm: left };
+    if (right <= maxOffset && isFree(wall, right)) return { wall, offsetCm: right };
+  }
+
+  const fallbackWalls = (mount === "outside" ? (["back", "front", "left", "right"] as Wall[]) : WALL_ORDER).filter((w) => w !== wall);
+  for (const candidateWall of fallbackWalls) {
+    const candidateSpan = wallLengthCm(candidateWall, trailerWidthCm, trailerLengthCm);
+    if (alongCm > candidateSpan) continue;
+    for (let offset = 0; offset <= candidateSpan - alongCm + 0.01; offset += 5) {
+      if (isFree(candidateWall, offset)) return { wall: candidateWall, offsetCm: offset };
+    }
+  }
+
+  for (const entry of overlapping) {
+    const swap = attemptSwap(entry.other);
+    if (swap) {
+      const targetWallSpan = wallLengthCm(entry.other.wall, trailerWidthCm, trailerLengthCm);
+      const draggedNewOffset = clamp(offsetOfItem(entry.other), 0, Math.max(0, targetWallSpan - alongCm));
+      return { wall: entry.other.wall, offsetCm: draggedNewOffset, swapWith: swap };
+    }
+  }
+
+  return { wall, offsetCm: desired };
+}
+
+function applyPlacementResult(
+  current: PlacedItem[],
+  instanceId: string,
+  alongCm: number,
+  depthCm: number,
+  mount: "inside" | "outside",
+  placement: { wall: Wall; offsetCm: number; swapWith?: SwapTarget },
+  trailerWidthCm: number,
+  trailerLengthCm: number,
+): PlacedItem[] {
+  return current.map((entry) => {
+    if (entry.instanceId === instanceId) {
+      const rect = placeOnWall(placement.wall, placement.offsetCm, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount);
+      return { ...entry, wall: placement.wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
+    }
+    if (placement.swapWith && entry.instanceId === placement.swapWith.instanceId) {
+      const swapDef = getEquipment(entry.typeId);
+      const swapMount = swapDef?.mount ?? "inside";
+      const swapAlong = entry.rotation === 0 ? entry.widthCm : entry.depthCm;
+      const swapDepth = entry.rotation === 0 ? entry.depthCm : entry.widthCm;
+      const rect = placeOnWall(placement.swapWith.wall, placement.swapWith.offsetCm, swapAlong, swapDepth, trailerWidthCm, trailerLengthCm, swapMount);
+      return { ...entry, wall: placement.swapWith.wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
+    }
+    return entry;
+  });
 }
 
 function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
@@ -239,8 +382,9 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   }
 
   function cycleWall(instanceId: string) {
-    setItems((current) => current.map((item) => {
-      if (item.instanceId !== instanceId) return item;
+    setItems((current) => {
+      const item = current.find((entry) => entry.instanceId === instanceId);
+      if (!item) return current;
       const definition = getEquipment(item.typeId);
       const mount = definition?.mount ?? "inside";
       const alongCm = item.rotation === 0 ? item.widthCm : item.depthCm;
@@ -249,9 +393,23 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
       const clampedAlong = Math.min(alongCm, span);
       const centeredOffset = avoidDoor(nextWall, Math.max(0, (span - clampedAlong) / 2), clampedAlong, mount, door, span);
-      const rect = placeOnWall(nextWall, centeredOffset, clampedAlong, depthCm, preset.widthCm, preset.lengthCm, mount);
-      return { ...item, wall: nextWall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
-    }));
+      const others = current.filter((entry) => entry.instanceId !== instanceId);
+      const placement = resolveCollision({
+        instanceId,
+        wall: nextWall,
+        offsetCm: centeredOffset,
+        alongCm: clampedAlong,
+        depthCm,
+        mount,
+        trailerWidthCm: preset.widthCm,
+        trailerLengthCm: preset.lengthCm,
+        others,
+        door,
+        originWall: item.wall,
+        originOffsetCm: offsetOfItem(item),
+      });
+      return applyPlacementResult(current, instanceId, clampedAlong, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
+    });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -281,6 +439,36 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       const rect = placeOnWall(wall, offset, alongCm, depthCm, preset.widthCm, preset.lengthCm, mount);
       return { ...item, wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
     }));
+  }
+
+  // Runs once, when the pointer is released: if the item was dropped on top of another,
+  // push it to the nearest free spot, or swap places with the blocker as a last resort.
+  function finalizeItemPlacement(instanceId: string, originWall: Wall, originOffsetCm: number) {
+    setItems((current) => {
+      const item = current.find((entry) => entry.instanceId === instanceId);
+      if (!item) return current;
+      const definition = getEquipment(item.typeId);
+      const mount = definition?.mount ?? "inside";
+      const alongCm = item.rotation === 0 ? item.widthCm : item.depthCm;
+      const depthCm = item.rotation === 0 ? item.depthCm : item.widthCm;
+      const others = current.filter((entry) => entry.instanceId !== instanceId);
+      const placement = resolveCollision({
+        instanceId,
+        wall: item.wall,
+        offsetCm: offsetOfItem(item),
+        alongCm,
+        depthCm,
+        mount,
+        trailerWidthCm: preset.widthCm,
+        trailerLengthCm: preset.lengthCm,
+        others,
+        door,
+        originWall,
+        originOffsetCm,
+      });
+      return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
+    });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
   function moveDoorTo(pointX: number, pointY: number) {
@@ -329,7 +517,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     svgRef.current?.setPointerCapture(event.pointerId);
     setSelectedId(item.instanceId);
     setDoorSelected(false);
-    setDrag({ kind: "item", instanceId: item.instanceId, pointerId: event.pointerId });
+    setDrag({ kind: "item", instanceId: item.instanceId, pointerId: event.pointerId, originWall: item.wall, originOffsetCm: offsetOfItem(item) });
   }
 
   function startDoorDrag(event: PointerEvent<SVGGElement>) {
@@ -349,6 +537,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
 
   function stopDrag() {
     if (drag && svgRef.current?.hasPointerCapture(drag.pointerId)) svgRef.current.releasePointerCapture(drag.pointerId);
+    if (drag && drag.kind === "item") finalizeItemPlacement(drag.instanceId, drag.originWall, drag.originOffsetCm);
     setDrag(null);
   }
 
