@@ -33,8 +33,9 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(rzrConfiguratorPage, /TrailerConfigurator modelId="rzr"/);
   assert.match(configurator, /onPointerMove/);
   assert.match(configurator, /Guardar cotización en PDF/);
-  assert.match(quoteCatalog, /ft-200-300/);
-  assert.match(quoteCatalog, /basePrice: 69000/);
+  assert.match(quoteCatalog, /custom-food-200-300-210-1/);
+  assert.match(quoteCatalog, /export function buildCustomPreset/);
+  assert.match(quoteCatalog, /export function isValidPresetId/);
   assert.match(quoteCatalog, /model: "cargo"/);
   assert.match(quoteCatalog, /model: "rzr"/);
   assert.match(quoteApi, /contacto@fgtow\.com/);
@@ -42,5 +43,7 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(quoteApi, /validateLayout/);
   assert.match(quoteSchema, /create table if not exists public\.quotes/);
   assert.match(quoteSchema, /enable row level security/);
+  assert.match(quoteSchema, /trailer_length_cm between 200 and 900/);
+  assert.match(quoteSchema, /axles in \(1, 2, 3\)/);
   assert.doesNotMatch(home, /SkeletonPreview|codex-preview/);
 });

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CUSTOM_WIDTH_OPTIONS_CM,
   DOOR_CLEARANCE_CM,
   DOOR_MAX_WIDTH_CM,
   DOOR_MIN_WIDTH_CM,
@@ -13,13 +14,20 @@ import {
   TrailerPreset,
   WALL_LABEL,
   Wall,
+  axleLabel,
+  buildCustomPresetId,
   calculateQuote,
   defaultDoor,
   doorClearanceRect,
+  getAllowedAxles,
+  getAllowedWidths,
+  getCustomHeightOptions,
+  getCustomLengthOptions,
   getEquipment,
   getEquipmentForModel,
   getPreset,
   getPresetsForModel,
+  getSizingMode,
   money,
   placeOnWall,
   rectsOverlap,
@@ -283,10 +291,15 @@ const WALL_ORDER: Wall[] = ["front", "right", "back", "left"];
 
 export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   const meta = MODEL_META[modelId];
+  const sizingMode = getSizingMode(modelId);
   const presets = useMemo(() => getPresetsForModel(modelId), [modelId]);
   const equipmentList = useMemo(() => getEquipmentForModel(modelId), [modelId]);
   const [presetId, setPresetId] = useState(meta.defaultPresetId);
   const preset = getPreset(presetId);
+  const allowedWidths = useMemo(() => getAllowedWidths(preset.lengthCm), [preset.lengthCm]);
+  const lengthOptions = useMemo(() => getCustomLengthOptions(), []);
+  const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
+  const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
   const [door, setDoor] = useState<DoorConfig>(() => defaultDoor(preset.widthCm));
   const [items, setItems] = useState<PlacedItem[]>(() => starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -348,6 +361,16 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       return { wall: current.wall, offsetCm: rect.offset, widthCm: current.widthCm };
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  // Builds the next custom-size id by changing just one dimension; getPreset()/buildCustomPreset()
+  // sanitizes the full combination (width/height/axles snap to whatever the new value allows).
+  function updateCustomDim(part: "width" | "length" | "height" | "axles", value: number) {
+    const nextWidth = part === "width" ? value : preset.widthCm;
+    const nextLength = part === "length" ? value : preset.lengthCm;
+    const nextHeight = part === "height" ? value : preset.heightCm;
+    const nextAxles = part === "axles" ? value : preset.axles;
+    updatePreset(buildCustomPresetId(modelId as "food" | "cargo", nextWidth, nextLength, nextHeight, nextAxles as 1 | 2 | 3));
   }
 
   function addEquipment(typeId: string, quantity: number) {
@@ -594,6 +617,11 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   const doorGeo = doorGeometry(door, preset);
   const doorHitRect = placeOnWall(door.wall, door.offsetCm, door.widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
   const doorClearance = doorClearanceRect(door, preset.widthCm, preset.lengthCm);
+  const axleWheelHeight = 34;
+  const axleWheelGap = 8;
+  const axleBandHeight = preset.axles * axleWheelHeight + (preset.axles - 1) * axleWheelGap;
+  const axleBandStart = preset.lengthCm * .52 - axleBandHeight / 2;
+  const axleWheelYs = Array.from({ length: preset.axles }, (_, i) => axleBandStart + i * (axleWheelHeight + axleWheelGap));
 
   return (
     <>
@@ -606,8 +634,32 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       <section className="configurator-shell no-print">
         <aside className="config-sidebar">
           <div className="config-step"><span>01</span><div><strong>Medida del remolque</strong><small>Dimensiones interiores de trabajo</small></div></div>
-          <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{presets.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
-          <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{preset.axles === 2 ? "Doble eje" : "1 eje"}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
+          {sizingMode === "preset" ? (
+            <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{presets.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
+          ) : (
+            <div className="config-custom-dims">
+              <div className="dim-field">
+                <small>Ancho</small>
+                <div className="dim-options">
+                  {CUSTOM_WIDTH_OPTIONS_CM.map((w) => (
+                    <button key={w} type="button" className={`dim-option ${preset.widthCm === w ? "active" : ""}`} disabled={!allowedWidths.includes(w)} onClick={() => updateCustomDim("width", w)}>{(w / 100).toFixed(2)} m</button>
+                  ))}
+                </div>
+              </div>
+              <label className="config-select dim-field">Largo<select value={preset.lengthCm} onChange={(event) => updateCustomDim("length", Number(event.target.value))}>{lengthOptions.map((l) => <option key={l} value={l}>{(l / 100).toFixed(2)} m</option>)}</select></label>
+              <label className="config-select dim-field">Altura<select value={preset.heightCm} onChange={(event) => updateCustomDim("height", Number(event.target.value))}>{heightOptions.map((h) => <option key={h} value={h}>{(h / 100).toFixed(2)} m</option>)}</select></label>
+              <div className="dim-field config-axle-box">
+                <small>Ejes</small>
+                <div className="dim-options">
+                  {[1, 2, 3].map((a) => (
+                    <button key={a} type="button" className={`dim-option ${preset.axles === a ? "active" : ""}`} disabled={!allowedAxles.includes(a as 1 | 2 | 3)} onClick={() => updateCustomDim("axles", a)}>{a}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="dim-price-hint">Precio base estimado <strong>{money(preset.basePrice)}</strong></div>
+            </div>
+          )}
+          <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
 
           <div className="config-step equipment-heading"><span>02</span><div><strong>{meta.equipmentHeading}</strong><small>Elige cuántos y toca “Agregar”</small></div></div>
           <div className="equipment-library">{equipmentList.map((equipment) => {
@@ -652,8 +704,8 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
                 <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
                 <circle cx={preset.widthCm / 2} cy="-66" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" />
                 <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
-                <rect x="-23" y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
-                <rect x={preset.widthCm} y={preset.lengthCm * .52} width="23" height={preset.axles === 2 ? 76 : 45} rx="6" fill="#092f46" />
+                {axleWheelYs.map((y, i) => <rect key={`axle-left-${i}`} x="-23" y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
+                {axleWheelYs.map((y, i) => <rect key={`axle-right-${i}`} x={preset.widthCm} y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
                 <text x={preset.widthCm / 2} y="-17" textAnchor="middle" className="plan-label">FRENTE / TIRÓN</text>
 
                 {doorSelected && <rect x={doorClearance.xCm} y={doorClearance.yCm} width={doorClearance.widthCm} height={doorClearance.depthCm} fill="rgba(214,162,41,.14)" stroke="#d6a229" strokeDasharray="6 5" strokeWidth="1.2" />}
@@ -747,7 +799,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
 
       <section className="quote-document" aria-label="Formato imprimible de cotización">
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
-        <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{preset.axles === 2 ? "Doble eje" : "1 eje completo"}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
+        <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
         <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div></div>
         <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div><div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div><div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>

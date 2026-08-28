@@ -28,7 +28,7 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "equipos principales",
     includesNote: "estructura, chasis, laminado, tren rodante, instalación eléctrica y de gas base",
-    defaultPresetId: "ft-200-300",
+    defaultPresetId: "custom-food-200-300-210-1",
   },
   cargo: {
     id: "cargo",
@@ -42,7 +42,7 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "aditamentos principales",
     includesNote: "estructura, chasis, piso antiderrapante, tren rodante, luces reglamentarias, tirón y cadenas de seguridad",
-    defaultPresetId: "cg-180-365",
+    defaultPresetId: "custom-cargo-200-350-210-1",
   },
   rzr: {
     id: "rzr",
@@ -139,7 +139,7 @@ export type TrailerPreset = {
   widthCm: number;
   lengthCm: number;
   heightCm: number;
-  axles: 1 | 2;
+  axles: 1 | 2 | 3;
   basePrice: number;
   includedEquipment: number;
   estimatedWeightKg: number;
@@ -176,22 +176,6 @@ export type PlacedEquipment = {
 };
 
 export const TRAILER_PRESETS: TrailerPreset[] = [
-  { id: "ft-180-200", model: "food", label: "1.80 × 2.00 m · 1 eje", widthCm: 180, lengthCm: 200, heightCm: 200, axles: 1, basePrice: 49000, includedEquipment: 2, estimatedWeightKg: 650, estimatedCapacityKg: 1200 },
-  { id: "ft-180-250", model: "food", label: "1.80 × 2.50 m · 1 eje", widthCm: 180, lengthCm: 250, heightCm: 205, axles: 1, basePrice: 58500, includedEquipment: 5, estimatedWeightKg: 700, estimatedCapacityKg: 1400 },
-  { id: "ft-180-300", model: "food", label: "1.80 × 3.00 m · 1 eje", widthCm: 180, lengthCm: 300, heightCm: 210, axles: 1, basePrice: 62500, includedEquipment: 5, estimatedWeightKg: 735, estimatedCapacityKg: 1500 },
-  { id: "ft-200-300", model: "food", label: "2.00 × 3.00 m · 1 eje", widthCm: 200, lengthCm: 300, heightCm: 210, axles: 1, basePrice: 69000, includedEquipment: 5, estimatedWeightKg: 750, estimatedCapacityKg: 1500 },
-  { id: "ft-200-350", model: "food", label: "2.00 × 3.50 m · 1 eje", widthCm: 200, lengthCm: 350, heightCm: 210, axles: 1, basePrice: 75500, includedEquipment: 5, estimatedWeightKg: 790, estimatedCapacityKg: 1650 },
-  { id: "ft-200-400", model: "food", label: "2.00 × 4.00 m · 1 eje", widthCm: 200, lengthCm: 400, heightCm: 210, axles: 1, basePrice: 79500, includedEquipment: 5, estimatedWeightKg: 830, estimatedCapacityKg: 1800 },
-  { id: "ft-200-400-2e", model: "food", label: "2.00 × 4.00 m · doble eje", widthCm: 200, lengthCm: 400, heightCm: 210, axles: 2, basePrice: 86500, includedEquipment: 5, estimatedWeightKg: 870, estimatedCapacityKg: 2500 },
-  { id: "ft-220-500", model: "food", label: "2.20 × 5.00 m · doble eje", widthCm: 220, lengthCm: 500, heightCm: 200, axles: 2, basePrice: 107000, includedEquipment: 5, estimatedWeightKg: 900, estimatedCapacityKg: 3000 },
-  { id: "ft-220-600", model: "food", label: "2.20 × 6.00 m · doble eje", widthCm: 220, lengthCm: 600, heightCm: 200, axles: 2, basePrice: 117000, includedEquipment: 5, estimatedWeightKg: 1000, estimatedCapacityKg: 3000 },
-
-  { id: "cg-150-245", model: "cargo", label: "1.50 × 2.45 m · 1 eje", widthCm: 150, lengthCm: 245, heightCm: 60, axles: 1, basePrice: 36900, includedEquipment: 2, estimatedWeightKg: 350, estimatedCapacityKg: 800 },
-  { id: "cg-150-305", model: "cargo", label: "1.50 × 3.05 m · 1 eje", widthCm: 150, lengthCm: 305, heightCm: 60, axles: 1, basePrice: 41900, includedEquipment: 2, estimatedWeightKg: 380, estimatedCapacityKg: 900 },
-  { id: "cg-180-365", model: "cargo", label: "1.80 × 3.65 m · 1 eje", widthCm: 180, lengthCm: 365, heightCm: 65, axles: 1, basePrice: 52900, includedEquipment: 3, estimatedWeightKg: 430, estimatedCapacityKg: 1200 },
-  { id: "cg-200-400", model: "cargo", label: "2.00 × 4.00 m · 1 eje", widthCm: 200, lengthCm: 400, heightCm: 65, axles: 1, basePrice: 61900, includedEquipment: 3, estimatedWeightKg: 480, estimatedCapacityKg: 1500 },
-  { id: "cg-200-450-2e", model: "cargo", label: "2.00 × 4.50 m · doble eje", widthCm: 200, lengthCm: 450, heightCm: 65, axles: 2, basePrice: 78900, includedEquipment: 4, estimatedWeightKg: 620, estimatedCapacityKg: 2500 },
-
   { id: "rz-150-305", model: "rzr", label: "1.50 × 3.05 m · 1 eje", widthCm: 150, lengthCm: 305, heightCm: 55, axles: 1, basePrice: 41900, includedEquipment: 2, estimatedWeightKg: 400, estimatedCapacityKg: 900 },
   { id: "rz-194-360", model: "rzr", label: "1.94 × 3.60 m · 1 eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 1, basePrice: 49900, includedEquipment: 3, estimatedWeightKg: 480, estimatedCapacityKg: 1300 },
   { id: "rz-194-360-2e", model: "rzr", label: "1.94 × 3.60 m · doble eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 2, basePrice: 58900, includedEquipment: 3, estimatedWeightKg: 560, estimatedCapacityKg: 1900 },
@@ -246,12 +230,144 @@ export function getEquipmentForModel(modelId: ModelId) {
   return EQUIPMENT.filter((equipment) => equipment.model === modelId);
 }
 
-export function getPreset(id: string) {
-  return TRAILER_PRESETS.find((preset) => preset.id === id) ?? TRAILER_PRESETS[0];
-}
-
 export function getEquipment(id: string) {
   return EQUIPMENT.find((equipment) => equipment.id === id);
+}
+
+export function axleLabel(axles: number) {
+  return axles === 1 ? "1 eje" : axles === 2 ? "Doble eje" : "Triple eje";
+}
+
+export function getSizingMode(modelId: ModelId): "preset" | "custom" {
+  return modelId === "rzr" ? "preset" : "custom";
+}
+
+type CustomModelId = "food" | "cargo";
+
+export const CUSTOM_WIDTH_OPTIONS_CM = [180, 200, 220] as const;
+export const CUSTOM_LENGTH_MIN_CM = 200;
+export const CUSTOM_LENGTH_MAX_CM = 900;
+export const CUSTOM_LENGTH_STEP_CM = 50;
+export const CUSTOM_HEIGHT_MIN_CM = 210;
+export const CUSTOM_HEIGHT_STEP_CM = 10;
+
+// Widths of 180cm only fit the two shortest lengths; every longer trailer needs the wider axle track.
+export function getAllowedWidths(lengthCm: number): number[] {
+  return lengthCm <= 250 ? [...CUSTOM_WIDTH_OPTIONS_CM] : [200, 220];
+}
+
+// 3m height is only offered from 5m of length onward, so shorter trailers don't look top-heavy.
+export function getMaxHeightCm(lengthCm: number): number {
+  return lengthCm < 500 ? 270 : 300;
+}
+
+// Axle count is forced (not just capped) past 4.5m of length — the trailer needs the extra axle to carry itself.
+export function getAllowedAxles(lengthCm: number): (1 | 2 | 3)[] {
+  if (lengthCm <= 450) return [1, 2];
+  if (lengthCm <= 650) return [2];
+  return [3];
+}
+
+export function getCustomLengthOptions(): number[] {
+  const values: number[] = [];
+  for (let v = CUSTOM_LENGTH_MIN_CM; v <= CUSTOM_LENGTH_MAX_CM; v += CUSTOM_LENGTH_STEP_CM) values.push(v);
+  return values;
+}
+
+export function getCustomHeightOptions(lengthCm: number): number[] {
+  const max = getMaxHeightCm(lengthCm);
+  const values: number[] = [];
+  for (let v = CUSTOM_HEIGHT_MIN_CM; v <= max; v += CUSTOM_HEIGHT_STEP_CM) values.push(v);
+  return values;
+}
+
+export function buildCustomPresetId(model: CustomModelId, widthCm: number, lengthCm: number, heightCm: number, axles: 1 | 2 | 3) {
+  return `custom-${model}-${widthCm}-${lengthCm}-${heightCm}-${axles}`;
+}
+
+function parseCustomPresetId(id: string): { model: CustomModelId; widthCm: number; lengthCm: number; heightCm: number; axles: number } | null {
+  const match = /^custom-(food|cargo)-(\d+)-(\d+)-(\d+)-(\d+)$/.exec(id);
+  if (!match) return null;
+  const [, model, widthCm, lengthCm, heightCm, axles] = match;
+  return { model: model as CustomModelId, widthCm: Number(widthCm), lengthCm: Number(lengthCm), heightCm: Number(heightCm), axles: Number(axles) };
+}
+
+function clampToStep(value: number, min: number, max: number, step: number) {
+  const clamped = Math.min(Math.max(value, min), max);
+  const snapped = min + Math.round((clamped - min) / step) * step;
+  return Math.min(Math.max(snapped, min), max);
+}
+
+function pickNearestAllowed(value: number, allowed: number[]) {
+  if (allowed.includes(value)) return value;
+  return allowed.reduce((best, candidate) => (Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best), allowed[0]);
+}
+
+// Single source of truth for "is this combination legal" — length is sanitized first since every
+// other dimension's allowed range is derived from it, then width/height/axles are snapped to fit.
+function sanitizeCustomDims(lengthCmRaw: number, widthCmRaw: number, heightCmRaw: number, axlesRaw: number) {
+  const lengthCm = clampToStep(lengthCmRaw, CUSTOM_LENGTH_MIN_CM, CUSTOM_LENGTH_MAX_CM, CUSTOM_LENGTH_STEP_CM);
+  const widthCm = pickNearestAllowed(widthCmRaw, getAllowedWidths(lengthCm));
+  const heightCm = clampToStep(heightCmRaw, CUSTOM_HEIGHT_MIN_CM, getMaxHeightCm(lengthCm), CUSTOM_HEIGHT_STEP_CM);
+  const axles = pickNearestAllowed(axlesRaw, getAllowedAxles(lengthCm)) as 1 | 2 | 3;
+  return { widthCm, lengthCm, heightCm, axles };
+}
+
+// Calibrated against the historical fixed-preset prices/weights: a fixed base cost plus a rate per
+// m² of floor and per m² of "wall" (perimeter × height), plus a flat cost per axle beyond the first.
+const CUSTOM_PRICE_COEFFICIENTS: Record<CustomModelId, { priceBase: number; priceFloor: number; priceWall: number; priceAxle: number; weightBase: number; weightFloor: number; weightWall: number; weightAxle: number }> = {
+  food: { priceBase: 32000, priceFloor: 3600, priceWall: 900, priceAxle: 7500, weightBase: 545, weightFloor: 14.3, weightWall: 3.6, weightAxle: 150 },
+  cargo: { priceBase: 16000, priceFloor: 5600, priceWall: 220, priceAxle: 9500, weightBase: 247, weightFloor: 26.8, weightWall: 1.1, weightAxle: 124 },
+};
+
+const CUSTOM_CAPACITY_FACTOR: Record<1 | 2 | 3, number> = { 1: 2.2, 2: 3.2, 3: 4.0 };
+
+function includedEquipmentForCustom(model: CustomModelId, lengthCm: number) {
+  const lengthM = lengthCm / 100;
+  const raw = model === "food" ? Math.round(lengthM) : Math.round(lengthM * 0.8);
+  return Math.min(6, Math.max(2, raw));
+}
+
+export function buildCustomPreset(model: CustomModelId, widthCmRaw: number, lengthCmRaw: number, heightCmRaw: number, axlesRaw: number): TrailerPreset {
+  const { widthCm, lengthCm, heightCm, axles } = sanitizeCustomDims(lengthCmRaw, widthCmRaw, heightCmRaw, axlesRaw);
+  const floorAreaM2 = (widthCm / 100) * (lengthCm / 100);
+  const wallAreaM2 = 2 * (widthCm / 100 + lengthCm / 100) * (heightCm / 100);
+  const extraAxles = axles - 1;
+  const coeff = CUSTOM_PRICE_COEFFICIENTS[model];
+  const basePrice = Math.round(coeff.priceBase + coeff.priceFloor * floorAreaM2 + coeff.priceWall * wallAreaM2 + coeff.priceAxle * extraAxles);
+  const estimatedWeightKg = Math.round(coeff.weightBase + coeff.weightFloor * floorAreaM2 + coeff.weightWall * wallAreaM2 + coeff.weightAxle * extraAxles);
+  const estimatedCapacityKg = Math.round(estimatedWeightKg * CUSTOM_CAPACITY_FACTOR[axles]);
+  return {
+    id: buildCustomPresetId(model, widthCm, lengthCm, heightCm, axles),
+    model,
+    label: `${(widthCm / 100).toFixed(2)} × ${(lengthCm / 100).toFixed(2)} m · ${axleLabel(axles)}`,
+    widthCm,
+    lengthCm,
+    heightCm,
+    axles,
+    basePrice,
+    includedEquipment: includedEquipmentForCustom(model, lengthCm),
+    estimatedWeightKg,
+    estimatedCapacityKg,
+  };
+}
+
+export function getPreset(id: string) {
+  const found = TRAILER_PRESETS.find((preset) => preset.id === id);
+  if (found) return found;
+  const parsed = parseCustomPresetId(id);
+  // Unreachable on any validated path (route.ts gates with isValidPresetId; the client only ever
+  // builds ids via buildCustomPresetId or the RZR preset <select>) — kept as a safe fallback only.
+  if (parsed) return buildCustomPreset(parsed.model, parsed.widthCm, parsed.lengthCm, parsed.heightCm, parsed.axles);
+  return TRAILER_PRESETS[0];
+}
+
+export function isValidPresetId(id: string) {
+  if (TRAILER_PRESETS.some((preset) => preset.id === id)) return true;
+  const parsed = parseCustomPresetId(id);
+  if (!parsed) return false;
+  const sane = sanitizeCustomDims(parsed.lengthCm, parsed.widthCm, parsed.heightCm, parsed.axles);
+  return sane.widthCm === parsed.widthCm && sane.lengthCm === parsed.lengthCm && sane.heightCm === parsed.heightCm && sane.axles === parsed.axles;
 }
 
 export function calculateQuote(presetId: string, items: PlacedEquipment[], includeIva: boolean) {

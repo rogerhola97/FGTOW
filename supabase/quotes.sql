@@ -12,8 +12,8 @@ create table if not exists public.quotes (
   notes text check (notes is null or char_length(notes) <= 2000),
   trailer_preset text not null check (char_length(trailer_preset) between 5 and 60),
   trailer_width_cm integer not null check (trailer_width_cm between 150 and 220),
-  trailer_length_cm integer not null check (trailer_length_cm between 200 and 600),
-  axles smallint not null check (axles in (1, 2)),
+  trailer_length_cm integer not null check (trailer_length_cm between 200 and 900),
+  axles smallint not null check (axles in (1, 2, 3)),
   configuration jsonb not null check (jsonb_typeof(configuration) = 'object'),
   subtotal numeric(12,2) not null check (subtotal between 1000 and 1000000),
   iva numeric(12,2) not null default 0 check (iva between 0 and 160000),
@@ -60,3 +60,15 @@ with check (
 );
 
 comment on table public.quotes is 'Cotizaciones preliminares creadas con el configurador 2D de FG TOW.';
+
+-- Migración: ampliar límites para el configurador de medidas personalizadas (food/cargo).
+-- Ejecuta esto una sola vez contra una tabla ya creada (el "create table if not exists" de
+-- arriba no vuelve a aplicarse si la tabla ya existe). Los nombres de constraint abajo siguen
+-- el nombrado automático de Postgres para CHECK inline sin nombre ("<tabla>_<columna>_check");
+-- si esta tabla ya fue alterada antes, verifica los nombres reales primero con:
+--   select conname from pg_constraint where conrelid = 'public.quotes'::regclass and contype = 'c';
+alter table public.quotes drop constraint if exists quotes_trailer_length_cm_check;
+alter table public.quotes add constraint quotes_trailer_length_cm_check check (trailer_length_cm between 200 and 900);
+
+alter table public.quotes drop constraint if exists quotes_axles_check;
+alter table public.quotes add constraint quotes_axles_check check (axles in (1, 2, 3));

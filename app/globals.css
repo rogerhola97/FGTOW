@@ -143,6 +143,16 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .config-step small { margin-top:4px; color:var(--muted); font-size:10px; }
 .config-select { display:block; margin:20px 0 16px; color:var(--muted); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
 .config-select select { width:100%; margin-top:8px; padding:12px 10px; border:1px solid #c7d0ce; background:#f9faf9; color:var(--deep); font-size:12px; font-weight:700; outline:none; }
+.config-custom-dims { display:flex; flex-direction:column; gap:14px; margin:20px 0 16px; }
+.dim-field.config-select { margin:0; }
+.dim-options { display:flex; gap:6px; margin-top:8px; }
+.dim-option { flex:1; padding:10px 6px; border:1px solid #c7d0ce; background:#f9faf9; color:var(--deep); font-size:12px; font-weight:800; cursor:pointer; }
+.dim-option:hover:not(:disabled) { border-color:var(--blue); }
+.dim-option.active { border-color:var(--deep); background:var(--deep); color:#fff; }
+.dim-option:disabled { opacity:.35; cursor:not-allowed; }
+.config-axle-box { padding:12px; border:1px solid var(--line); background:#f9faf9; }
+.dim-price-hint { padding:11px; border:1px solid var(--line); font-size:11px; color:var(--muted); }
+.dim-price-hint strong { margin-left:6px; color:var(--deep); font-size:13px; }
 .preset-facts { display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--line); }
 .preset-facts div { padding:11px; min-width:0; border-bottom:1px solid var(--line); }
 .preset-facts div:nth-child(odd) { border-right:1px solid var(--line); }
