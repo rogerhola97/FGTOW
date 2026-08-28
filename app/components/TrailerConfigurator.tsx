@@ -292,6 +292,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
   const [drag, setDrag] = useState<DragState>(null);
+  const dragRef = useRef<DragState>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [includeIva, setIncludeIva] = useState(false);
   const [sendState, setSendState] = useState<SendState>("idle");
@@ -367,17 +368,33 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
 
   function updateItemSize(instanceId: string, part: "along" | "depth", value: number) {
     if (!Number.isFinite(value) || value <= 0) return;
-    setItems((current) => current.map((item) => {
-      if (item.instanceId !== instanceId) return item;
+    setItems((current) => {
+      const item = current.find((entry) => entry.instanceId === instanceId);
+      if (!item) return current;
       const definition = getEquipment(item.typeId);
       const mount = definition?.mount ?? "inside";
       const currentAlong = item.rotation === 0 ? item.widthCm : item.depthCm;
       const currentDepth = item.rotation === 0 ? item.depthCm : item.widthCm;
       const alongCm = part === "along" ? value : currentAlong;
       const depthCm = part === "depth" ? value : currentDepth;
-      const rect = placeOnWall(item.wall, offsetOfItem(item), alongCm, depthCm, preset.widthCm, preset.lengthCm, mount);
-      return { ...item, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
-    }));
+      const originOffsetCm = offsetOfItem(item);
+      const others = current.filter((entry) => entry.instanceId !== instanceId);
+      const placement = resolveCollision({
+        instanceId,
+        wall: item.wall,
+        offsetCm: originOffsetCm,
+        alongCm,
+        depthCm,
+        mount,
+        trailerWidthCm: preset.widthCm,
+        trailerLengthCm: preset.lengthCm,
+        others,
+        door,
+        originWall: item.wall,
+        originOffsetCm,
+      });
+      return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
+    });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -517,7 +534,9 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     svgRef.current?.setPointerCapture(event.pointerId);
     setSelectedId(item.instanceId);
     setDoorSelected(false);
-    setDrag({ kind: "item", instanceId: item.instanceId, pointerId: event.pointerId, originWall: item.wall, originOffsetCm: offsetOfItem(item) });
+    const next: DragState = { kind: "item", instanceId: item.instanceId, pointerId: event.pointerId, originWall: item.wall, originOffsetCm: offsetOfItem(item) };
+    dragRef.current = next;
+    setDrag(next);
   }
 
   function startDoorDrag(event: PointerEvent<SVGGElement>) {
@@ -525,7 +544,9 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     svgRef.current?.setPointerCapture(event.pointerId);
     setSelectedId(null);
     setDoorSelected(true);
-    setDrag({ kind: "door", pointerId: event.pointerId });
+    const next: DragState = { kind: "door", pointerId: event.pointerId };
+    dragRef.current = next;
+    setDrag(next);
   }
 
   function moveDrag(event: PointerEvent<SVGSVGElement>) {
@@ -535,9 +556,14 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     else moveDoorTo(point.x, point.y);
   }
 
+  // Reads/clears the ref (not the state) first so a duplicate pointerup/pointercancel for the
+  // same gesture — which can otherwise both see the same stale `drag` state — only finalizes once.
   function stopDrag() {
-    if (drag && svgRef.current?.hasPointerCapture(drag.pointerId)) svgRef.current.releasePointerCapture(drag.pointerId);
-    if (drag && drag.kind === "item") finalizeItemPlacement(drag.instanceId, drag.originWall, drag.originOffsetCm);
+    const active = dragRef.current;
+    if (!active) return;
+    dragRef.current = null;
+    if (svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
+    if (active.kind === "item") finalizeItemPlacement(active.instanceId, active.originWall, active.originOffsetCm);
     setDrag(null);
   }
 
