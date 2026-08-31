@@ -112,7 +112,7 @@ export default function Home() {
         <LeadForm />
       </section>
 
-      <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/catalogo">Catálogo</Link><a href="#cotizar">Cotizar</a></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
+      <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/catalogo">Catálogo</Link><a href="#cotizar">Cotizar</a></div><small>© 2026 FG TOW · Parte de FG PRO · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
     </main>
   );
 }

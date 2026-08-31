@@ -14,7 +14,7 @@ export default function CotizadorRzrPage() {
       <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/catalogo">Catálogo</Link><a href="#enviar-cotizacion">Enviar proyecto</a></nav>
       <Link className="button button-small" href="/catalogo">Ver modelos</Link>
     </header>
-    <TrailerConfigurator modelId="rzr" />
+    <TrailerConfigurator modelId="rzr" plano={false} />
     <footer className="no-print"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/">Inicio</Link><Link href="/catalogo">Catálogo</Link></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
   </main>;
 }

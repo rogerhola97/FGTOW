@@ -128,6 +128,23 @@ export function doorClearanceRect(door: DoorConfig, trailerWidthCm: number, trai
   return { xCm: Math.max(0, trailerWidthCm - DOOR_CLEARANCE_CM), yCm: door.offsetCm, widthCm: DOOR_CLEARANCE_CM, depthCm: door.widthCm };
 }
 
+export const AXLE_WHEEL_HEIGHT_CM = 34;
+export const AXLE_WHEEL_GAP_CM = 8;
+
+// Axle band is centered at 3/4 of the trailer's length (measured from the front/tow end),
+// shared by the plan drawing (wheel positions) and layout validation (door-vs-axle overlap).
+export function axleBandCm(preset: { lengthCm: number; axles: number }) {
+  const height = preset.axles * AXLE_WHEEL_HEIGHT_CM + (preset.axles - 1) * AXLE_WHEEL_GAP_CM;
+  const start = preset.lengthCm * 0.75 - height / 2;
+  return { start, end: start + height, height };
+}
+
+export function doorOverlapsAxleBand(door: DoorConfig, preset: { lengthCm: number; axles: number }) {
+  if (door.wall !== "left" && door.wall !== "right") return false;
+  const band = axleBandCm(preset);
+  return door.offsetCm < band.end && door.offsetCm + door.widthCm > band.start;
+}
+
 export function rectsOverlap(a: { xCm: number; yCm: number; widthCm: number; depthCm: number }, b: { xCm: number; yCm: number; widthCm: number; depthCm: number }) {
   return a.xCm < b.xCm + b.widthCm && a.xCm + a.widthCm > b.xCm && a.yCm < b.yCm + b.depthCm && a.yCm + a.depthCm > b.yCm;
 }
@@ -390,6 +407,7 @@ export function calculateQuote(presetId: string, items: PlacedEquipment[], inclu
 
 export function validateLayout(preset: TrailerPreset, items: PlacedEquipment[], door?: DoorConfig) {
   const errors: string[] = [];
+  if (door && doorOverlapsAxleBand(door, preset)) errors.push("La puerta no puede colocarse sobre los ejes.");
   const clearance = door ? doorClearanceRect(door, preset.widthCm, preset.lengthCm) : null;
   for (const item of items) {
     const definition = getEquipment(item.typeId);

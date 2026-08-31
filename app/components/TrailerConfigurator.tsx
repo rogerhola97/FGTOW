@@ -14,6 +14,7 @@ import {
   TrailerPreset,
   WALL_LABEL,
   Wall,
+  axleBandCm,
   axleLabel,
   buildCustomPresetId,
   calculateQuote,
@@ -102,6 +103,20 @@ function avoidDoor(wall: Wall, offset: number, alongCm: number, mount: "inside" 
   const distToEnd = Math.abs(offset - forbiddenEnd);
   const candidate = distToStart < distToEnd ? forbiddenStart : forbiddenEnd;
   return clamp(candidate, 0, Math.max(0, span - alongCm));
+}
+
+// The axle band only exists along the left/right walls (that's where the wheels are drawn),
+// so the door can't be dropped, cycled onto, or widened into that band on those walls.
+function avoidAxleBand(wall: Wall, offset: number, widthCm: number, preset: TrailerPreset) {
+  if (wall !== "left" && wall !== "right") return offset;
+  const band = axleBandCm(preset);
+  const forbiddenStart = band.start - widthCm;
+  const forbiddenEnd = band.end;
+  if (offset <= forbiddenStart || offset >= forbiddenEnd) return offset;
+  const distToStart = Math.abs(offset - forbiddenStart);
+  const distToEnd = Math.abs(offset - forbiddenEnd);
+  const candidate = distToStart < distToEnd ? forbiddenStart : forbiddenEnd;
+  return clamp(candidate, 0, Math.max(0, preset.lengthCm - widthCm));
 }
 
 type SwapTarget = { instanceId: string; wall: Wall; offsetCm: number };
@@ -289,7 +304,7 @@ function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerW
 
 const WALL_ORDER: Wall[] = ["front", "right", "back", "left"];
 
-export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
+export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelId; plano?: boolean }) {
   const meta = MODEL_META[modelId];
   const sizingMode = getSizingMode(modelId);
   const presets = useMemo(() => getPresetsForModel(modelId), [modelId]);
@@ -453,10 +468,15 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
+  function removeItem(instanceId: string) {
+    setItems((current) => current.filter((item) => item.instanceId !== instanceId));
+    if (selectedId === instanceId) setSelectedId(null);
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
   function removeSelected() {
     if (!selectedId) return;
-    setItems((current) => current.filter((item) => item.instanceId !== selectedId));
-    setSelectedId(null); setSendState("idle"); setQuoteNumber("BORRADOR");
+    removeItem(selectedId);
   }
 
   function moveItemTo(instanceId: string, pointX: number, pointY: number) {
@@ -515,7 +535,8 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     setDoor((current) => {
       const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
       const desired = (wall === "front" || wall === "back" ? pointX : pointY) - current.widthCm / 2;
-      const rect = placeOnWall(wall, desired, current.widthCm, 1, preset.widthCm, preset.lengthCm);
+      const afterAxles = avoidAxleBand(wall, desired, current.widthCm, preset);
+      const rect = placeOnWall(wall, afterAxles, current.widthCm, 1, preset.widthCm, preset.lengthCm);
       return { wall, offsetCm: rect.offset, widthCm: current.widthCm };
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
@@ -526,7 +547,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(current.wall) + 1) % WALL_ORDER.length];
       const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
       const clampedWidth = Math.min(current.widthCm, span);
-      const centeredOffset = Math.max(0, (span - clampedWidth) / 2);
+      const centeredOffset = avoidAxleBand(nextWall, Math.max(0, (span - clampedWidth) / 2), clampedWidth, preset);
       const rect = placeOnWall(nextWall, centeredOffset, clampedWidth, 1, preset.widthCm, preset.lengthCm);
       return { wall: nextWall, offsetCm: rect.offset, widthCm: clampedWidth };
     });
@@ -538,7 +559,8 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
     setDoor((current) => {
       const span = wallLengthCm(current.wall, preset.widthCm, preset.lengthCm);
       const clampedWidth = Math.min(Math.max(value, DOOR_MIN_WIDTH_CM), Math.min(DOOR_MAX_WIDTH_CM, span));
-      const rect = placeOnWall(current.wall, current.offsetCm, clampedWidth, 1, preset.widthCm, preset.lengthCm);
+      const afterAxles = avoidAxleBand(current.wall, current.offsetCm, clampedWidth, preset);
+      const rect = placeOnWall(current.wall, afterAxles, clampedWidth, 1, preset.widthCm, preset.lengthCm);
       return { wall: current.wall, offsetCm: rect.offset, widthCm: clampedWidth };
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
@@ -619,9 +641,8 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
   const doorClearance = doorClearanceRect(door, preset.widthCm, preset.lengthCm);
   const axleWheelHeight = 34;
   const axleWheelGap = 8;
-  const axleBandHeight = preset.axles * axleWheelHeight + (preset.axles - 1) * axleWheelGap;
-  const axleBandStart = preset.lengthCm * .52 - axleBandHeight / 2;
-  const axleWheelYs = Array.from({ length: preset.axles }, (_, i) => axleBandStart + i * (axleWheelHeight + axleWheelGap));
+  const axleBand = axleBandCm(preset);
+  const axleWheelYs = Array.from({ length: preset.axles }, (_, i) => axleBand.start + i * (axleWheelHeight + axleWheelGap));
 
   return (
     <>
@@ -679,6 +700,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
           })}</div>
         </aside>
 
+        {plano ? (
         <div className="plan-workspace">
           <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
           <div className="plan-scroll">
@@ -772,6 +794,31 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
             <div className="item-editor empty"><span>Selecciona un elemento o la puerta en el plano para ajustar su medida o cambiarlo de pared. Todo se desliza pegado a la orilla del remolque.</span></div>
           )}
         </div>
+        ) : (
+        <div className="addons-workspace">
+          <div className="workspace-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{preset.label}</strong></div></div>
+          {items.length ? (
+            <ul className="addons-list">
+              {items.map((item, index) => {
+                const definition = getEquipment(item.typeId);
+                if (!definition) return null;
+                return (
+                  <li key={item.instanceId} className="addons-row">
+                    <i style={{ background: definition.color }} />
+                    <span><strong>{index + 1}. {definition.name}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm</small></span>
+                    <button type="button" className="danger-button" onClick={() => removeItem(item.instanceId)}>Quitar</button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="item-editor empty"><span>Agrega aditamentos desde la lista de la izquierda para armar tu configuración.</span></div>
+          )}
+          {layoutErrors.length > 0 && (
+            <div className="layout-status has-errors"><strong>Ajuste pendiente</strong><span>No caben todos los aditamentos con esta medida, quita alguno.</span></div>
+          )}
+        </div>
+        )}
 
         <aside className="price-panel">
           <div className="config-step"><span>03</span><div><strong>Cotización estimada</strong><small>Actualizada en tiempo real</small></div></div>
@@ -785,7 +832,7 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
       </section>
 
       <section className="quote-submit no-print" id="enviar-cotizacion">
-        <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>Guardaremos el plano y enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión.</p><ul><li>Plano 2D y lista de equipos</li><li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul></div>
+        <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>{plano ? "Guardaremos el plano y enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión." : "Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión."}</p><ul>{plano && <li>Plano 2D y lista de equipos</li>}{!plano && <li>Lista de aditamentos</li>}<li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul></div>
         <form className="quote-customer-form" onSubmit={submitQuote}>
           <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
           <div className="form-row"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label></div>
@@ -801,8 +848,8 @@ export function TrailerConfigurator({ modelId }: { modelId: ModelId }) {
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
         <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
         <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div></div>
-        <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>
-        <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div><div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div><div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
+        {plano && <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
+        <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
         <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div><div><span>IVA</span><strong>{money(quote.iva)}</strong></div><div><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
