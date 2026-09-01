@@ -9,6 +9,7 @@ create table if not exists public.quotes (
   phone text not null check (char_length(phone) between 7 and 40),
   email text not null check (char_length(email) between 5 and 160),
   city text not null check (char_length(city) between 2 and 100),
+  state text not null default 'Nuevo León' check (char_length(state) between 2 and 100),
   notes text check (notes is null or char_length(notes) <= 2000),
   trailer_preset text not null check (char_length(trailer_preset) between 5 and 60),
   trailer_width_cm integer not null check (trailer_width_cm between 150 and 220),
@@ -72,3 +73,8 @@ alter table public.quotes add constraint quotes_trailer_length_cm_check check (t
 
 alter table public.quotes drop constraint if exists quotes_axles_check;
 alter table public.quotes add constraint quotes_axles_check check (axles in (1, 2, 3));
+
+-- Migración: agregar estado de la república a cotizaciones ya creadas.
+alter table public.quotes add column if not exists state text not null default 'Nuevo León';
+alter table public.quotes drop constraint if exists quotes_state_check;
+alter table public.quotes add constraint quotes_state_check check (char_length(state) between 2 and 100);

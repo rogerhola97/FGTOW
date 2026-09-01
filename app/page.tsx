@@ -43,11 +43,10 @@ export default function Home() {
           <Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized />
         </Link>
         <nav aria-label="Navegación principal">
-          <a href="#soluciones">Soluciones</a>
+          <a href="#modelos">Modelos</a>
           <a href="#proceso">Proceso</a>
-          <Link href="/catalogo">Catálogo</Link>
         </nav>
-        <Link className="button button-small" href="/catalogo">Diseñar remolque</Link>
+        <a className="button button-small" href="#modelos">Diseñar remolque</a>
       </header>
 
       <section className="hero">
@@ -74,9 +73,9 @@ export default function Home() {
         <p>Desde una plataforma sencilla hasta una cocina móvil completa.</p>
       </section>
 
-      <section className="section" id="soluciones">
+      <section className="section" id="modelos">
         <div className="section-head">
-          <div><span className="eyebrow">Línea inicial</span><h2>Tres modelos.<br />Un punto de partida.</h2></div>
+          <div><span className="eyebrow">Línea inicial</span><h2 className="hero-title">Tres modelos,<br /><em>un punto de partida.</em></h2></div>
           <div className="section-head-desc">
             <p>Modelos base para cotizar con rapidez, configurables en medidas, capacidad, anclajes, rampas y equipamiento.</p>
             <p>Elige el concepto que se parece a lo que necesitas y configúralo a tu proyecto: medidas, ejes y aditamentos.</p>
@@ -108,11 +107,11 @@ export default function Home() {
       </section>
 
       <section className="quote-section" id="cotizar">
-        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food truck, cargo o RZR sport— y arma tu distribución en un plano 2D interactivo.</p><Link className="button quote-config-button" href="/catalogo">Elegir modelo y configurar →</Link><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
+        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food truck, cargo o RZR sport— y arma tu distribución en un plano 2D interactivo.</p><a className="button quote-config-button" href="#modelos">Elegir modelo y configurar →</a><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
         <LeadForm />
       </section>
 
-      <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/catalogo">Catálogo</Link><a href="#cotizar">Cotizar</a></div><small>© 2026 FG TOW · Parte de FG PRO · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
+      <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><a href="#modelos">Modelos</a><a href="#cotizar">Cotizar</a></div><small>© 2026 FG TOW · De FG INV · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
     </main>
   );
 }

@@ -7,6 +7,7 @@ create table if not exists public.leads (
   phone text not null check (char_length(phone) between 5 and 40),
   email text check (email is null or char_length(email) <= 160),
   city text not null check (char_length(city) between 2 and 100),
+  state text not null default 'Nuevo León' check (char_length(state) between 2 and 100),
   product_type text not null check (char_length(product_type) between 2 and 100),
   budget text check (budget is null or char_length(budget) <= 80),
   message text not null check (char_length(message) between 2 and 2000),
@@ -33,3 +34,10 @@ with check (
   and source = 'website'
   and status = 'new'
 );
+
+-- Migración: agregar estado de la república a leads ya creados.
+-- Ejecuta esto una sola vez contra una tabla ya existente (el "create table if not exists"
+-- de arriba no vuelve a aplicarse si la tabla ya existe).
+alter table public.leads add column if not exists state text not null default 'Nuevo León';
+alter table public.leads drop constraint if exists leads_state_check;
+alter table public.leads add constraint leads_state_check check (char_length(state) between 2 and 100);

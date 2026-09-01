@@ -19,7 +19,7 @@ export default async function VendedorAccesoPage({ searchParams }: { searchParam
   return <main className="vendor-gate">
     <header className="nav-shell no-print">
       <Link href="/" className="brand" aria-label="FG TOW, inicio"><Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized /></Link>
-      <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/catalogo">Catálogo</Link></nav>
+      <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/#modelos">Modelos</Link></nav>
     </header>
     <section className="vendor-gate-shell">
       <div className="vendor-gate-copy"><span className="eyebrow">Acceso interno</span><h1>Iniciar sesión<br /><em>como vendedor.</em></h1><p>Esta sección es para el equipo comercial de FG TOW: aquí se configuran los tres modelos con el plano completo, tal como funciona hoy la herramienta.</p></div>

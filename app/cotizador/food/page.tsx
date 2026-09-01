@@ -11,10 +11,10 @@ export default function CotizadorFoodPage() {
   return <main className="configurator-page">
     <header className="nav-shell no-print">
       <Link href="/" className="brand" aria-label="FG TOW, inicio"><Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized /></Link>
-      <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/catalogo">Catálogo</Link><a href="#enviar-cotizacion">Enviar proyecto</a></nav>
-      <Link className="button button-small" href="/catalogo">Ver modelos</Link>
+      <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/#modelos">Modelos</Link><a href="#enviar-cotizacion">Enviar proyecto</a></nav>
+      <Link className="button button-small" href="/#modelos">Ver modelos</Link>
     </header>
-    <TrailerConfigurator modelId="food" />
-    <footer className="no-print"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/">Inicio</Link><Link href="/catalogo">Catálogo</Link></div><small>© 2026 FG TOW · Parte de FG PRO</small></footer>
+    <TrailerConfigurator modelId="food" plano={false} />
+    <footer className="no-print"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/">Inicio</Link><Link href="/#modelos">Modelos</Link></div><small>© 2026 FG TOW · De FG INV · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
   </main>;
 }

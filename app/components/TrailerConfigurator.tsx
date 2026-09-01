@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_STATE, MEXICAN_STATES } from "../lib/mexicanStates";
+import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL } from "../lib/company";
 import {
   CUSTOM_WIDTH_OPTIONS_CM,
   DOOR_CLEARANCE_CM,
@@ -326,7 +328,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
   const [quoteNumber, setQuoteNumber] = useState("BORRADOR");
-  const [customer, setCustomer] = useState({ name: "", phone: "", email: "", city: "Monterrey, N.L.", notes: "" });
+  const [customer, setCustomer] = useState({ name: "", phone: "", email: "", city: "Monterrey, N.L.", state: DEFAULT_STATE, notes: "" });
   const svgRef = useRef<SVGSVGElement>(null);
   const [rulerHeightPx, setRulerHeightPx] = useState<number | null>(null);
 
@@ -648,8 +650,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     <>
       <section className="configurator-intro no-print">
         <span className="eyebrow">Cotizador interactivo · {meta.label}</span>
-        <h1>{meta.heroTitleLine}<br /><em>{meta.heroEm}</em></h1>
-        <p>{meta.intro}</p>
+        <h1>{meta.heroTitleLine}<br /><em>{plano ? meta.heroEm : meta.heroEmAddons ?? meta.heroEm}</em></h1>
+        <p>{plano ? meta.intro : meta.introAddons}</p>
       </section>
 
       <section className="configurator-shell no-print">
@@ -832,10 +834,10 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       </section>
 
       <section className="quote-submit no-print" id="enviar-cotizacion">
-        <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>{plano ? "Guardaremos el plano y enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión." : "Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión."}</p><ul>{plano && <li>Plano 2D y lista de equipos</li>}{!plano && <li>Lista de aditamentos</li>}<li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul></div>
+        <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>{plano ? "Guardaremos el plano y enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión." : "Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión."}</p><ul>{plano && <li>Plano 2D y lista de equipos</li>}{!plano && <li>Lista de aditamentos</li>}<li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul>{!plano && <p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta: <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p>}</div>
         <form className="quote-customer-form" onSubmit={submitQuote}>
           <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
-          <div className="form-row"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label></div>
+          <div className="form-row form-row-3"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
           <label>Notas para el equipo<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
           <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>
           <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>
@@ -847,14 +849,14 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       <section className="quote-document" aria-label="Formato imprimible de cotización">
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
         <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
-        <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div></div>
+        <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div><div><small>ESTADO</small><strong>{customer.state || "Por completar"}</strong></div></div>
         {plano && <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
         <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div><div><span>IVA</span><strong>{money(quote.iva)}</strong></div><div><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
         {customer.notes && <div className="document-notes"><strong>Notas del proyecto</strong><p>{customer.notes}</p></div>}
-        <div className="document-footer"><span>FG TOW · Parte de FG PRO</span><span>contacto@fgtow.com · fgtow.com</span></div>
+        <div className="document-footer"><span>FG TOW · De FG INV</span><span>contacto@fgtow.com · fgtow.com</span></div>
       </section>
 
       <div className="quote-actions no-print"><button type="button" className="button" onClick={() => window.print()}>Guardar cotización en PDF</button><span>En la ventana de impresión selecciona “Guardar como PDF”.</span></div>

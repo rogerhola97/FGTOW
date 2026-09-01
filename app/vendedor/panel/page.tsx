@@ -17,7 +17,7 @@ export default async function VendedorPanelPage() {
   return <main className="vendor-panel">
     <header className="nav-shell no-print">
       <Link href="/" className="brand" aria-label="FG TOW, inicio"><Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized /></Link>
-      <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/catalogo">Catálogo</Link></nav>
+      <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/#modelos">Modelos</Link></nav>
       <VendorLogoutButton />
     </header>
     <section className="vendor-panel-shell">

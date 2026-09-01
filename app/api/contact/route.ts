@@ -16,12 +16,13 @@ export async function POST(request: Request) {
     const phone = clean(payload.phone, 40);
     const email = clean(payload.email, 160);
     const city = clean(payload.city, 100);
+    const state = clean(payload.state, 100);
     const productType = clean(payload.productType, 100);
     const budget = clean(payload.budget, 80);
     const message = clean(payload.message, 2000);
     const consent = clean(payload.consent) === "yes";
 
-    if (!name || !phone || !city || !productType || !message || !consent) {
+    if (!name || !phone || !city || !state || !productType || !message || !consent) {
       return Response.json(
         { error: "Completa los campos obligatorios." },
         { status: 400 },
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
         phone,
         email: email || null,
         city,
+        state,
         product_type: productType,
         budget: budget || null,
         message,

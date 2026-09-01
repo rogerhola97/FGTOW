@@ -7,7 +7,9 @@ export type ModelMeta = {
   tagline: string;
   heroTitleLine: string;
   heroEm: string;
+  heroEmAddons?: string;
   intro: string;
+  introAddons: string;
   equipmentHeading: string;
   equipmentSub: string;
   equipmentLabel: string;
@@ -23,7 +25,9 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     tagline: "Cocina móvil",
     heroTitleLine: "Diseña tu food truck",
     heroEm: "sobre un plano real.",
+    heroEmAddons: "con los equipos que necesitas.",
     intro: "Elige una medida, agrega equipos de cocina y arrástralos dentro del remolque. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.",
+    introAddons: "Elige la medida y los equipos de cocina de tu food truck para armar tu cotización al instante.",
     equipmentHeading: "Equipamiento",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "equipos principales",
@@ -38,6 +42,7 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     heroTitleLine: "Configura tu remolque",
     heroEm: "de carga y trabajo.",
     intro: "Elige una medida, agrega rampas, racks y amarres, y colócalos sobre el plano. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.",
+    introAddons: "Elige la medida y agrega rampas, racks y amarres para armar tu cotización al instante.",
     equipmentHeading: "Aditamentos",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "aditamentos principales",
@@ -52,6 +57,7 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     heroTitleLine: "Configura tu remolque",
     heroEm: "para RZR, motos y cuatrimotos.",
     intro: "Elige una medida, agrega rampas, anclajes y soportes, y colócalos sobre el plano. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.",
+    introAddons: "Elige la medida y agrega rampas, anclajes y soportes para armar tu cotización al instante.",
     equipmentHeading: "Aditamentos",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "aditamentos principales",
