@@ -97,17 +97,26 @@ export async function findVendorByEmail(email: string): Promise<VendorRow | null
     const missing = [!supabaseUrl && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean).join(", ");
     throw new Error(`Faltan variables de entorno para Supabase: ${missing}`);
   }
-  // Supabase's newer sb_secret_/sb_publishable_ keys aren't JWTs, so only `apikey` is sent —
-  // same header pattern already used successfully in app/api/quote/route.ts and contact/route.ts.
+  // TODO(temporal): logging de diagnóstico — nunca imprime la key, el hash ni el salt.
+  const serviceRoleType = serviceKey.startsWith("eyJ") ? "legacy_jwt" : serviceKey.startsWith("sb_secret_") ? "sb_secret" : "unknown";
+  console.error(`[vendor-login-debug] service_role_present=${Boolean(serviceKey)} service_role_type=${serviceRoleType}`);
+
+  // PostgREST resuelve el rol de Postgres (y por lo tanto si RLS se bypassea) a partir del JWT en
+  // Authorization: Bearer, no de apikey — apikey solo identifica el proyecto ante el gateway. Con
+  // vendors en RLS y sin policies, mandar solo apikey deja la petición corriendo como anon y
+  // Supabase responde 200 con [] en vez de negar la petición, que es justo lo que se observó.
   const response = await fetch(
     `${supabaseUrl}/rest/v1/vendors?email=eq.${encodeURIComponent(email)}&select=id,name,email,password_hash,password_salt,active`,
-    { headers: { apikey: serviceKey } },
+    { headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}` } },
   );
   if (!response.ok) {
     const details = await response.text().catch(() => "");
+    console.error(`[vendor-login-debug] supabase_status=${response.status} response_is_array=false response_rows=0`);
     throw new Error(`Supabase rechazó la consulta de vendedores (status ${response.status}): ${details.slice(0, 300)}`);
   }
   const rows = (await response.json()) as VendorRow[];
+  const isArray = Array.isArray(rows);
+  console.error(`[vendor-login-debug] supabase_status=${response.status} response_is_array=${isArray} response_rows=${isArray ? rows.length : 0}`);
   return rows[0] ?? null;
 }
 

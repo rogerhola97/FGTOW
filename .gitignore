@@ -33,6 +33,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# wrangler local secrets (never commit real values)
+.dev.vars*
+
 # vercel
 .vercel
 

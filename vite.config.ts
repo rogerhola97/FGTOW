@@ -21,9 +21,12 @@ const localBindingConfig = {
   // holds them for: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY,
   // VENDOR_SESSION_SECRET, RESEND_API_KEY.
   keep_vars: true,
-  // Documents which secrets the Worker expects (names only, no values) — Wrangler uses this for
-  // local-dev validation warnings when one is missing, it does not create or store the secret.
-  secrets: { required: ["SUPABASE_SERVICE_ROLE_KEY", "VENDOR_SESSION_SECRET"] },
+  // Documents which vars/secrets the Worker expects (names only, no values) — Wrangler uses this
+  // for local-dev validation warnings when one is missing. It also drives which names the local
+  // dev server binds from .dev.vars/.env.local into `env` — leaving a name out here means it's
+  // silently missing from `env` in `npm run dev` even if it's in the dotenv file, so all 5 have to
+  // be listed even though only the first two are actually secret in the strict sense.
+  secrets: { required: ["SUPABASE_SERVICE_ROLE_KEY", "VENDOR_SESSION_SECRET", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "RESEND_API_KEY"] },
   d1_databases: d1
     ? [
         {

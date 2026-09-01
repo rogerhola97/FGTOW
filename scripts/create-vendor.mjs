@@ -25,12 +25,14 @@ if (!supabaseUrl || !serviceKey) {
 
 const { hash, salt } = await hashPassword(password);
 
-// Solo `apikey`: la service_role key de Supabase con el formato nuevo (sb_secret_...) no es un
-// JWT, así que no se manda como Authorization: Bearer (mismo criterio que app/lib/vendorAuth.ts).
+// vendors tiene RLS habilitado sin policies: PostgREST decide el rol (y si RLS se bypassea) a
+// partir del JWT en Authorization: Bearer, no de apikey — así que se mandan ambos (mismo criterio
+// que app/lib/vendorAuth.ts).
 const response = await fetch(`${supabaseUrl}/rest/v1/vendors?on_conflict=email`, {
   method: "POST",
   headers: {
     apikey: serviceKey,
+    authorization: `Bearer ${serviceKey}`,
     "content-type": "application/json",
     prefer: "return=representation,resolution=merge-duplicates",
   },
