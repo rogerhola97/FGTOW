@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { VENDOR_COOKIE_NAME, findVendorByEmail, signVendorSession, verifyPassword } from "../../../lib/vendorAuth";
+import { PBKDF2_ITERATIONS, HASH_ALGO, SALT_BYTES } from "../../../lib/passwordHash.mjs";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const clean = (value: unknown, max = 200) => (typeof value === "string" ? value.trim().slice(0, max) : "");
@@ -14,10 +15,20 @@ export async function POST(request: Request) {
     }
 
     const vendor = await findVendorByEmail(email);
+    // TODO(temporal): quitar este logging una vez resuelto el problema de login en producción.
+    // No imprime contraseña, hash, salt ni claves — solo metadatos para diagnosticar.
+    console.error(
+      `[vendor-login-debug] vendor_found=${Boolean(vendor)} vendor_active=${vendor ? vendor.active : "n/a"} ` +
+        `salt_len=${vendor?.password_salt?.length ?? 0} hash_len=${vendor?.password_hash?.length ?? 0}`,
+    );
     if (!vendor || !vendor.active) {
       return Response.json({ error: "Correo o contraseña inválidos." }, { status: 401 });
     }
     const valid = await verifyPassword(password, vendor.password_salt, vendor.password_hash);
+    console.error(
+      `[vendor-login-debug] password_verification_result=${valid} algo=PBKDF2-${HASH_ALGO} ` +
+        `iterations=${PBKDF2_ITERATIONS} salt_bytes=${SALT_BYTES} output_bits=256`,
+    );
     if (!valid) {
       return Response.json({ error: "Correo o contraseña inválidos." }, { status: 401 });
     }

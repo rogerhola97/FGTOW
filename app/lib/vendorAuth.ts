@@ -1,11 +1,11 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { env as workerEnv } from "cloudflare:workers";
+import { hashPassword, verifyPassword } from "./passwordHash.mjs";
 
+export { hashPassword, verifyPassword };
 export const VENDOR_COOKIE_NAME = "fgtow_vendor";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const PBKDF2_ITERATIONS = 100_000;
-const HASH_ALGO = "SHA-256";
 
 // process.env alone is unreliable for secrets on deployed Cloudflare Workers (it depends on the
 // nodejs_compat_populate_process_env flag actually populating it in time). The `env` binding from
@@ -20,16 +20,6 @@ function readEnv(name: string): string | undefined {
 export type VendorSession = { id: string; name: string; email: string; exp: number };
 export type VendorRow = { id: string; name: string; email: string; password_hash: string; password_salt: string; active: boolean };
 
-function toHex(bytes: ArrayBuffer | Uint8Array) {
-  return Array.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function fromHex(hex: string) {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i += 1) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return bytes;
-}
-
 function base64url(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -40,26 +30,6 @@ function base64urlToBytes(value: string) {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
   const binary = atob(padded);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function timingSafeEqualHex(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-// PBKDF2-SHA256 via Web Crypto (works in the Cloudflare Workers runtime without extra deps).
-export async function hashPassword(password: string, saltHex?: string): Promise<{ hash: string; salt: string }> {
-  const salt = saltHex ? fromHex(saltHex) : crypto.getRandomValues(new Uint8Array(16));
-  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: HASH_ALGO }, keyMaterial, 256);
-  return { hash: toHex(bits), salt: toHex(salt) };
-}
-
-export async function verifyPassword(password: string, saltHex: string, expectedHashHex: string): Promise<boolean> {
-  const { hash } = await hashPassword(password, saltHex);
-  return timingSafeEqualHex(hash, expectedHashHex);
 }
 
 function sessionSecret() {

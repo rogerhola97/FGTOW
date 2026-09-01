@@ -4,10 +4,10 @@
 // Uso:
 //   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/create-vendor.mjs "Nombre Apellido" correo@fgtow.com "contraseña"
 //
-// El hash debe calcularse exactamente igual que app/lib/vendorAuth.ts (PBKDF2-SHA256,
-// 100000 iteraciones, salt de 16 bytes, salida de 256 bits) para que el login funcione.
+// El hash se calcula con app/lib/passwordHash.mjs — el mismo módulo que usa app/lib/vendorAuth.ts
+// para verificar en el login — así que ambos lados no pueden divergir.
 
-import { webcrypto as crypto } from "node:crypto";
+import { hashPassword } from "../app/lib/passwordHash.mjs";
 
 const [, , name, email, password] = process.argv;
 
@@ -23,26 +23,14 @@ if (!supabaseUrl || !serviceKey) {
   process.exit(1);
 }
 
-const PBKDF2_ITERATIONS = 100_000;
-
-function toHex(bytes) {
-  return Array.from(new Uint8Array(bytes)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function hashPassword(rawPassword) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(rawPassword), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, keyMaterial, 256);
-  return { hash: toHex(bits), salt: toHex(salt) };
-}
-
 const { hash, salt } = await hashPassword(password);
 
+// Solo `apikey`: la service_role key de Supabase con el formato nuevo (sb_secret_...) no es un
+// JWT, así que no se manda como Authorization: Bearer (mismo criterio que app/lib/vendorAuth.ts).
 const response = await fetch(`${supabaseUrl}/rest/v1/vendors?on_conflict=email`, {
   method: "POST",
   headers: {
     apikey: serviceKey,
-    authorization: `Bearer ${serviceKey}`,
     "content-type": "application/json",
     prefer: "return=representation,resolution=merge-duplicates",
   },
