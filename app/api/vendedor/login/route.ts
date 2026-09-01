@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { VENDOR_COOKIE_NAME, findVendorByEmail, signVendorSession, verifyPassword } from "../../../lib/vendorAuth";
+import { VENDOR_COOKIE_NAME, debugEnvState, findVendorByEmail, signVendorSession, verifyPassword } from "../../../lib/vendorAuth";
 import { PBKDF2_ITERATIONS, HASH_ALGO, SALT_BYTES } from "../../../lib/passwordHash.mjs";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -7,6 +7,10 @@ const clean = (value: unknown, max = 200) => (typeof value === "string" ? value.
 
 export async function POST(request: Request) {
   try {
+    const envDebug = debugEnvState();
+    console.error(
+      `[vendor-login-debug] env: workerEnvAvailable=${envDebug.workerEnvAvailable} workerEnvKeyCount=${envDebug.workerEnvKeyCount} sources=${JSON.stringify(envDebug.sources)}`,
+    );
     const payload = (await request.json()) as Record<string, unknown>;
     const email = clean(payload.email, 160).toLowerCase();
     const password = clean(payload.password, 200);

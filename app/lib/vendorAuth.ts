@@ -11,10 +11,31 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 // nodejs_compat_populate_process_env flag actually populating it in time). The `env` binding from
 // cloudflare:workers is the authoritative source there — same pattern already used by db/index.ts —
 // with process.env kept only as the fallback for local dev / the standalone create-vendor.mjs path.
+// .trim() guards against a stray trailing space/newline from pasting the value into the dashboard.
 function readEnv(name: string): string | undefined {
   const bound = (workerEnv as Record<string, unknown> | undefined)?.[name];
-  if (typeof bound === "string" && bound) return bound;
-  return process.env[name];
+  if (typeof bound === "string" && bound.trim()) return bound.trim();
+  const fromProcess = process.env[name];
+  return typeof fromProcess === "string" && fromProcess.trim() ? fromProcess.trim() : undefined;
+}
+
+const DEBUG_ENV_NAMES = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "VENDOR_SESSION_SECRET"] as const;
+
+// TODO(temporal): quitar junto con el logging de app/api/vendedor/login/route.ts una vez
+// resuelto el problema de variables de entorno en producción. No expone ningún valor, solo de
+// dónde (o si) se pudo leer cada variable, para diferenciar un binding de Workers roto de un
+// valor vacío/typo en el dashboard.
+export function debugEnvState() {
+  const workerEnvAvailable = typeof workerEnv === "object" && workerEnv !== null;
+  const workerEnvKeyCount = workerEnvAvailable ? Object.keys(workerEnv as object).length : 0;
+  const sources: Record<string, "workerEnv" | "processEnv" | "missing"> = {};
+  for (const name of DEBUG_ENV_NAMES) {
+    const fromWorker = (workerEnv as Record<string, unknown> | undefined)?.[name];
+    if (typeof fromWorker === "string" && fromWorker.trim()) { sources[name] = "workerEnv"; continue; }
+    const fromProcess = process.env[name];
+    sources[name] = typeof fromProcess === "string" && fromProcess.trim() ? "processEnv" : "missing";
+  }
+  return { workerEnvAvailable, workerEnvKeyCount, sources };
 }
 
 export type VendorSession = { id: string; name: string; email: string; exp: number };

@@ -14,6 +14,16 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const localBindingConfig = {
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  // Without this, `wrangler deploy` treats this generated config as the source of truth and wipes
+  // any var/secret set through the Cloudflare dashboard that isn't declared here on every deploy —
+  // that's what deleted SUPABASE_URL. `keep_vars: true` makes Wrangler preserve dashboard values
+  // instead. Actual values are never declared here (no secrets in the repo) — only the dashboard
+  // holds them for: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY,
+  // VENDOR_SESSION_SECRET, RESEND_API_KEY.
+  keep_vars: true,
+  // Documents which secrets the Worker expects (names only, no values) — Wrangler uses this for
+  // local-dev validation warnings when one is missing, it does not create or store the secret.
+  secrets: { required: ["SUPABASE_SERVICE_ROLE_KEY", "VENDOR_SESSION_SECRET"] },
   d1_databases: d1
     ? [
         {
