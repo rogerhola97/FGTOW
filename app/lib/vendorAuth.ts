@@ -1,10 +1,21 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { env as workerEnv } from "cloudflare:workers";
 
 export const VENDOR_COOKIE_NAME = "fgtow_vendor";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PBKDF2_ITERATIONS = 100_000;
 const HASH_ALGO = "SHA-256";
+
+// process.env alone is unreliable for secrets on deployed Cloudflare Workers (it depends on the
+// nodejs_compat_populate_process_env flag actually populating it in time). The `env` binding from
+// cloudflare:workers is the authoritative source there — same pattern already used by db/index.ts —
+// with process.env kept only as the fallback for local dev / the standalone create-vendor.mjs path.
+function readEnv(name: string): string | undefined {
+  const bound = (workerEnv as Record<string, unknown> | undefined)?.[name];
+  if (typeof bound === "string" && bound) return bound;
+  return process.env[name];
+}
 
 export type VendorSession = { id: string; name: string; email: string; exp: number };
 export type VendorRow = { id: string; name: string; email: string; password_hash: string; password_salt: string; active: boolean };
@@ -52,8 +63,8 @@ export async function verifyPassword(password: string, saltHex: string, expected
 }
 
 function sessionSecret() {
-  const secret = process.env.VENDOR_SESSION_SECRET;
-  if (!secret) throw new Error("VENDOR_SESSION_SECRET no está configurada.");
+  const secret = readEnv("VENDOR_SESSION_SECRET");
+  if (!secret) throw new Error("Falta la variable de entorno VENDOR_SESSION_SECRET.");
   return secret;
 }
 
@@ -89,14 +100,22 @@ export async function verifyVendorSession(token: string | undefined | null): Pro
 // Vendor accounts live in Supabase (the app's real datastore — see app/api/quote/route.ts),
 // in a `vendors` table gated by RLS with no public policies: only the service role can read it.
 export async function findVendorByEmail(email: string): Promise<VendorRow | null> {
-  const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) throw new Error("Supabase (service role) no está configurado.");
+  const supabaseUrl = readEnv("SUPABASE_URL")?.replace(/\/$/, "");
+  const serviceKey = readEnv("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    const missing = [!supabaseUrl && "SUPABASE_URL", !serviceKey && "SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean).join(", ");
+    throw new Error(`Faltan variables de entorno para Supabase: ${missing}`);
+  }
+  // Supabase's newer sb_secret_/sb_publishable_ keys aren't JWTs, so only `apikey` is sent —
+  // same header pattern already used successfully in app/api/quote/route.ts and contact/route.ts.
   const response = await fetch(
     `${supabaseUrl}/rest/v1/vendors?email=eq.${encodeURIComponent(email)}&select=id,name,email,password_hash,password_salt,active`,
-    { headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}` } },
+    { headers: { apikey: serviceKey } },
   );
-  if (!response.ok) throw new Error(`Supabase rechazó la consulta de vendedores: ${response.status}`);
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    throw new Error(`Supabase rechazó la consulta de vendedores (status ${response.status}): ${details.slice(0, 300)}`);
+  }
   const rows = (await response.json()) as VendorRow[];
   return rows[0] ?? null;
 }

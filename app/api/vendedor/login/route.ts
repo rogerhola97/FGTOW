@@ -29,7 +29,9 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true }, { status: 200 });
   } catch (error) {
-    console.error("Error en login de vendedor:", error);
+    // Deliberately verbose (message + status from Supabase when available) to diagnose Workers env/
+    // fetch issues from Cloudflare Logs — never logs the actual secret values, only var names/status.
+    console.error(`Error en login de vendedor: ${error instanceof Error ? error.message : String(error)}`);
     return Response.json({ error: "No fue posible iniciar sesión. Intenta de nuevo." }, { status: 500 });
   }
 }
