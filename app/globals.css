@@ -153,6 +153,8 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .preset-facts small { color:var(--muted); font-size:8px; text-transform:uppercase; letter-spacing:.08em; }
 .preset-facts strong { margin-top:4px; font-size:12px; }
 .equipment-heading { margin-top:26px; }
+.addons-equipment-picker { padding:20px 20px 4px; border-bottom:1px solid var(--line); }
+.addons-equipment-picker .equipment-heading { margin-top:0; }
 .equipment-library { display:flex; flex-direction:column; gap:6px; max-height:605px; margin-top:13px; padding-right:4px; overflow:auto; }
 .equipment-row { width:100%; display:grid; grid-template-columns:7px 1fr auto auto; align-items:center; gap:10px; padding:10px 8px; border:1px solid transparent; background:#f7f9f8; color:var(--deep); }
 .equipment-row:hover { border-color:#aac1c3; background:#fff; }

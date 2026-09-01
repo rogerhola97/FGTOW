@@ -638,6 +638,27 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     }
   }
 
+  const equipmentPicker = (
+    <>
+      <div className="config-step equipment-heading"><span>02</span><div><strong>{meta.equipmentHeading}</strong><small>Elige cuántos y toca “Agregar”</small></div></div>
+      <div className="equipment-library">{equipmentList.map((equipment) => {
+        const qty = quantities[equipment.id] ?? 1;
+        return (
+          <div className="equipment-row" key={equipment.id}>
+            <i style={{ background: equipment.color }} />
+            <span><strong>{equipment.name}{equipment.mount === "outside" ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
+            <div className="qty-stepper">
+              <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
+              <span>{qty}</span>
+              <button type="button" aria-label="Agregar uno más" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.min(12, (current[equipment.id] ?? 1) + 1) }))}>+</button>
+            </div>
+            <button type="button" className="qty-add" onClick={() => addEquipment(equipment.id, qty)}>Agregar {qty > 1 ? `×${qty}` : ""}</button>
+          </div>
+        );
+      })}</div>
+    </>
+  );
+
   const doorGeo = doorGeometry(door, preset);
   const doorHitRect = placeOnWall(door.wall, door.offsetCm, door.widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
   const doorClearance = doorClearanceRect(door, preset.widthCm, preset.lengthCm);
@@ -684,22 +705,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
           )}
           <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
 
-          <div className="config-step equipment-heading"><span>02</span><div><strong>{meta.equipmentHeading}</strong><small>Elige cuántos y toca “Agregar”</small></div></div>
-          <div className="equipment-library">{equipmentList.map((equipment) => {
-            const qty = quantities[equipment.id] ?? 1;
-            return (
-              <div className="equipment-row" key={equipment.id}>
-                <i style={{ background: equipment.color }} />
-                <span><strong>{equipment.name}{equipment.mount === "outside" ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
-                <div className="qty-stepper">
-                  <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
-                  <span>{qty}</span>
-                  <button type="button" aria-label="Agregar uno más" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.min(12, (current[equipment.id] ?? 1) + 1) }))}>+</button>
-                </div>
-                <button type="button" className="qty-add" onClick={() => addEquipment(equipment.id, qty)}>Agregar {qty > 1 ? `×${qty}` : ""}</button>
-              </div>
-            );
-          })}</div>
+          {plano && equipmentPicker}
         </aside>
 
         {plano ? (
@@ -798,6 +804,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         </div>
         ) : (
         <div className="addons-workspace">
+          <div className="addons-equipment-picker">{equipmentPicker}</div>
           <div className="workspace-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{preset.label}</strong></div></div>
           {items.length ? (
             <ul className="addons-list">
@@ -814,7 +821,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
               })}
             </ul>
           ) : (
-            <div className="item-editor empty"><span>Agrega aditamentos desde la lista de la izquierda para armar tu configuración.</span></div>
+            <div className="item-editor empty"><span>Agrega aditamentos desde la lista de arriba para armar tu configuración.</span></div>
           )}
           {layoutErrors.length > 0 && (
             <div className="layout-status has-errors"><strong>Ajuste pendiente</strong><span>No caben todos los aditamentos con esta medida, quita alguno.</span></div>

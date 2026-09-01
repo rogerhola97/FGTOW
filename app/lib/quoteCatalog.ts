@@ -199,10 +199,10 @@ export type PlacedEquipment = {
 };
 
 export const TRAILER_PRESETS: TrailerPreset[] = [
-  { id: "rz-150-305", model: "rzr", label: "1.50 × 3.05 m · 1 eje", widthCm: 150, lengthCm: 305, heightCm: 55, axles: 1, basePrice: 41900, includedEquipment: 2, estimatedWeightKg: 400, estimatedCapacityKg: 900 },
-  { id: "rz-194-360", model: "rzr", label: "1.94 × 3.60 m · 1 eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 1, basePrice: 49900, includedEquipment: 3, estimatedWeightKg: 480, estimatedCapacityKg: 1300 },
-  { id: "rz-194-360-2e", model: "rzr", label: "1.94 × 3.60 m · doble eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 2, basePrice: 58900, includedEquipment: 3, estimatedWeightKg: 560, estimatedCapacityKg: 1900 },
-  { id: "rz-207-420-2e", model: "rzr", label: "2.07 × 4.20 m · doble eje", widthCm: 207, lengthCm: 420, heightCm: 55, axles: 2, basePrice: 69900, includedEquipment: 4, estimatedWeightKg: 650, estimatedCapacityKg: 2600 },
+  { id: "rz-150-305", model: "rzr", label: "1.50 × 3.05 m · 1 eje", widthCm: 150, lengthCm: 305, heightCm: 55, axles: 1, basePrice: 41900, includedEquipment: 5, estimatedWeightKg: 400, estimatedCapacityKg: 900 },
+  { id: "rz-194-360", model: "rzr", label: "1.94 × 3.60 m · 1 eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 1, basePrice: 49900, includedEquipment: 5, estimatedWeightKg: 480, estimatedCapacityKg: 1300 },
+  { id: "rz-194-360-2e", model: "rzr", label: "1.94 × 3.60 m · doble eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 2, basePrice: 58900, includedEquipment: 5, estimatedWeightKg: 560, estimatedCapacityKg: 1900 },
+  { id: "rz-207-420-2e", model: "rzr", label: "2.07 × 4.20 m · doble eje", widthCm: 207, lengthCm: 420, heightCm: 55, axles: 2, basePrice: 69900, includedEquipment: 5, estimatedWeightKg: 650, estimatedCapacityKg: 2600 },
 ];
 
 export const EQUIPMENT: EquipmentDefinition[] = [
@@ -348,7 +348,7 @@ const CUSTOM_CAPACITY_FACTOR: Record<1 | 2 | 3, number> = { 1: 2.2, 2: 3.2, 3: 4
 function includedEquipmentForCustom(model: CustomModelId, lengthCm: number) {
   const lengthM = lengthCm / 100;
   const raw = model === "food" ? Math.round(lengthM) : Math.round(lengthM * 0.8);
-  return Math.min(6, Math.max(2, raw));
+  return Math.min(7, Math.max(5, raw));
 }
 
 export function buildCustomPreset(model: CustomModelId, widthCmRaw: number, lengthCmRaw: number, heightCmRaw: number, axlesRaw: number): TrailerPreset {
