@@ -125,6 +125,7 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .configurator-intro>p { max-width:780px; color:var(--muted); font-size:18px; line-height:1.7; }
 
 .configurator-shell { max-width:1720px; margin:0 auto; padding:30px 2.5vw 50px; display:grid; grid-template-columns:290px minmax(570px,1fr) 330px; align-items:start; gap:18px; }
+.configurator-shell--simple { grid-template-columns:290px minmax(380px,640px) 330px; }
 .config-sidebar,.plan-workspace,.addons-workspace,.price-panel { background:#fff; border:1px solid var(--line); box-shadow:0 10px 35px rgba(6,41,62,.055); }
 .config-sidebar,.price-panel { padding:24px; }
 .config-step { display:flex; gap:13px; align-items:center; padding-bottom:18px; border-bottom:1px solid var(--line); }
@@ -306,6 +307,7 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 
 @media (max-width:1320px) {
   .configurator-shell { grid-template-columns:260px minmax(520px,1fr) 295px; padding-left:18px; padding-right:18px; }
+  .configurator-shell--simple { grid-template-columns:260px minmax(360px,540px) 295px; }
   .config-sidebar,.price-panel { padding:19px; }
   .item-editor { grid-template-columns:1fr 85px 85px; }
   .item-editor>button { grid-row:2; }

@@ -654,7 +654,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         <p>{plano ? meta.intro : meta.introAddons}</p>
       </section>
 
-      <section className="configurator-shell no-print">
+      <section className={`configurator-shell no-print ${plano ? "" : "configurator-shell--simple"}`}>
         <aside className="config-sidebar">
           <div className="config-step"><span>01</span><div><strong>Medida del remolque</strong><small>Dimensiones interiores de trabajo</small></div></div>
           {sizingMode === "preset" ? (
