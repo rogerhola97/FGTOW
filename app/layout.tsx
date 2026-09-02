@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "FG TOW | Remolques hechos para avanzar", template: "%s | FG TOW" },
-  description: "Diseño y fabricación de remolques compactos, plataformas, remolques para RZR, cuatrimotos y food trucks en Monterrey.",
+  description: "Diseño y fabricación de remolques, plataformas, remolques para RZR, cuatrimotos y food trucks en Monterrey.",
   icons: { icon: "/favicon.png", shortcut: "/favicon.png" },
   openGraph: { title: "FG TOW | Remolques hechos para avanzar", description: "Remolques para negocio, aventura y trabajo.", images: ["/og.png"] },
 };

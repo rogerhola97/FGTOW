@@ -324,12 +324,14 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [includeIva, setIncludeIva] = useState(false);
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
   const [quoteNumber, setQuoteNumber] = useState("BORRADOR");
   const [customer, setCustomer] = useState({ name: "", phone: "", email: "", city: "Monterrey, N.L.", state: DEFAULT_STATE, notes: "" });
   const svgRef = useRef<SVGSVGElement>(null);
+  const sentBannerRef = useRef<HTMLDivElement>(null);
   const [rulerHeightPx, setRulerHeightPx] = useState<number | null>(null);
 
   useEffect(() => {
@@ -342,6 +344,10 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (sendState === "sent") sentBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [sendState]);
 
   const quote = useMemo(() => calculateQuote(presetId, items, includeIva), [presetId, items, includeIva]);
   const layoutErrors = useMemo(() => validateLayout(preset, items, door), [preset, items, door]);
@@ -638,24 +644,44 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     }
   }
 
+  const stepChevron = <i className="step-chevron" aria-hidden="true">⌄</i>;
+
+  function stepHeader(step: 1 | 2 | 3, title: string, subtitle: string, extraClassName = "") {
+    return (
+      <div
+        className={`config-step ${extraClassName} ${activeStep === step ? "is-open" : ""}`}
+        onClick={() => setActiveStep(step)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setActiveStep(step); } }}
+      >
+        <span>{String(step).padStart(2, "0")}</span>
+        <div><strong>{title}</strong><small>{subtitle}</small></div>
+        {stepChevron}
+      </div>
+    );
+  }
+
   const equipmentPicker = (
     <>
-      <div className="config-step equipment-heading"><span>02</span><div><strong>{meta.equipmentHeading}</strong><small>Elige cuántos y toca “Agregar”</small></div></div>
-      <div className="equipment-library">{equipmentList.map((equipment) => {
-        const qty = quantities[equipment.id] ?? 1;
-        return (
-          <div className="equipment-row" key={equipment.id}>
-            <i style={{ background: equipment.color }} />
-            <span><strong>{equipment.name}{equipment.mount === "outside" ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
-            <div className="qty-stepper">
-              <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
-              <span>{qty}</span>
-              <button type="button" aria-label="Agregar uno más" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.min(12, (current[equipment.id] ?? 1) + 1) }))}>+</button>
+      {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — agrega los que necesites`, "equipment-heading")}
+      <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
+        <div className="equipment-library">{equipmentList.map((equipment) => {
+          const qty = quantities[equipment.id] ?? 1;
+          return (
+            <div className="equipment-row" key={equipment.id}>
+              <i style={{ background: equipment.color }} />
+              <span><strong>{equipment.name}{equipment.mount === "outside" ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
+              <div className="qty-stepper">
+                <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
+                <span>{qty}</span>
+                <button type="button" aria-label="Agregar uno más" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.min(12, (current[equipment.id] ?? 1) + 1) }))}>+</button>
+              </div>
+              <button type="button" className="qty-add" onClick={() => addEquipment(equipment.id, qty)}>Agregar {qty > 1 ? `×${qty}` : ""}</button>
             </div>
-            <button type="button" className="qty-add" onClick={() => addEquipment(equipment.id, qty)}>Agregar {qty > 1 ? `×${qty}` : ""}</button>
-          </div>
-        );
-      })}</div>
+          );
+        })}</div>
+      </div>
     </>
   );
 
@@ -675,9 +701,12 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         <p>{plano ? meta.intro : meta.introAddons}</p>
       </section>
 
+      <p className="configurator-steps-lead no-print">Sigue los pasos para configurar tu remolque.</p>
+
       <section className={`configurator-shell no-print ${plano ? "" : "configurator-shell--simple"}`}>
         <aside className="config-sidebar">
-          <div className="config-step"><span>01</span><div><strong>Medida del remolque</strong><small>Dimensiones interiores de trabajo</small></div></div>
+          {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", "Ancho, largo, altura y ejes")}
+          <div className={`step-panel ${activeStep === 1 ? "is-open" : ""}`}>
           {sizingMode === "preset" ? (
             <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{presets.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
           ) : (
@@ -704,6 +733,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
             </div>
           )}
           <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
+          <button type="button" className="step-advance button" onClick={() => setActiveStep(2)}>Continuar al paso 2 →</button>
+          </div>
 
           {plano && equipmentPicker}
         </aside>
@@ -805,6 +836,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         ) : (
         <div className="addons-workspace">
           <div className="addons-equipment-picker">{equipmentPicker}</div>
+          <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
           <div className="workspace-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{preset.label}</strong></div></div>
           {items.length ? (
             <ul className="addons-list">
@@ -826,17 +858,21 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
           {layoutErrors.length > 0 && (
             <div className="layout-status has-errors"><strong>Ajuste pendiente</strong><span>No caben todos los aditamentos con esta medida, quita alguno.</span></div>
           )}
+          <button type="button" className="step-advance button" onClick={() => setActiveStep(3)}>Continuar al paso 3 →</button>
+          </div>
         </div>
         )}
 
         <aside className="price-panel">
-          <div className="config-step"><span>03</span><div><strong>Cotización estimada</strong><small>Actualizada en tiempo real</small></div></div>
+          {stepHeader(3, "Paso 3 · Revisa tu cotización", "Después pasamos a tus datos")}
+          <div className={`step-panel ${activeStep === 3 ? "is-open" : ""}`}>
           <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
           <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : line.linePrice ? `+${money(line.linePrice)}` : "$0"}</strong></li>)}</ol>
           {!items.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
           <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(quote.iva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
           <p className="estimate-note">Estimación comercial basada en medidas y equipamiento. Requiere validación de ingeniería, capacidad, instalaciones, acabados y disponibilidad.</p>
           <a className="button config-continue" href="#enviar-cotizacion">Continuar con mis datos →</a>
+          </div>
         </aside>
       </section>
 
@@ -853,6 +889,13 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         </form>
       </section>
 
+      {sendState === "sent" && (
+      <>
+      <div className="quote-sent-banner no-print" role="status" ref={sentBannerRef}>
+        <strong>✓ Solicitud enviada</strong>
+        <span>{sendMessage}</span>
+      </div>
+
       <section className="quote-document" aria-label="Formato imprimible de cotización">
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
         <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
@@ -866,7 +909,9 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         <div className="document-footer"><span>FG TOW · De FG INV</span><span>contacto@fgtow.com · fgtow.com</span></div>
       </section>
 
-      <div className="quote-actions no-print"><button type="button" className="button" onClick={() => window.print()}>Guardar cotización en PDF</button><span>En la ventana de impresión selecciona “Guardar como PDF”.</span></div>
+      <div className="quote-actions no-print"><button type="button" className="button" onClick={() => window.print()}>Imprimir cotización</button><span>En la ventana de impresión selecciona “Guardar como PDF” si prefieres un archivo.</span></div>
+      </>
+      )}
     </>
   );
 }

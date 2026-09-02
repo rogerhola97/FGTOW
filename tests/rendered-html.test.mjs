@@ -35,10 +35,14 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(cargoConfiguratorPage, /TrailerConfigurator modelId="cargo" plano=\{false\}/);
   assert.match(rzrConfiguratorPage, /TrailerConfigurator modelId="rzr" plano=\{false\}/);
   assert.match(configurator, /onPointerMove/);
-  assert.match(configurator, /Guardar cotización en PDF/);
+  assert.match(configurator, /Imprimir cotización/);
   assert.match(configurator, /name="state"/);
   assert.match(configurator, /quote-submit-address/);
-  assert.match(configurator, /Medida del remolque/);
+  assert.match(configurator, /Elige la medida de tu remolque/);
+  assert.match(configurator, /Elige tus accesorios/);
+  assert.match(configurator, /Revisa tu cotización/);
+  assert.match(configurator, /sendState === "sent"/);
+  assert.match(configurator, /Sigue los pasos para configurar tu remolque/);
   assert.match(quoteCatalog, /custom-food-200-300-210-1/);
   assert.match(quoteCatalog, /export function buildCustomPreset/);
   assert.match(quoteCatalog, /export function isValidPresetId/);
