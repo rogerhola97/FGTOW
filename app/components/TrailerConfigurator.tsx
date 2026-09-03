@@ -344,7 +344,6 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const equipmentList = useMemo(() => getEquipmentForModel(modelId), [modelId]);
   const [presetId, setPresetId] = useState(meta.defaultPresetId);
   const preset = getPreset(presetId);
-  const allowedWidths = useMemo(() => getAllowedWidths(preset.lengthCm), [preset.lengthCm]);
   const lengthOptions = useMemo(() => getCustomLengthOptions(), []);
   const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
   const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
@@ -359,6 +358,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [equipmentAtEnd, setEquipmentAtEnd] = useState(false);
+  const equipmentLibraryRef = useRef<HTMLDivElement>(null);
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const toggleStep = (step: 1 | 2 | 3) => setActiveStep((current) => (current === step ? 0 : step));
   const [includeIva, setIncludeIva] = useState(false);
@@ -436,9 +437,14 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
 
   // Builds the next custom-size id by changing just one dimension; getPreset()/buildCustomPreset()
   // sanitizes the full combination (width/height/axles snap to whatever the new value allows).
+  // Width is never blocked: picking a width that doesn't fit the current length instead pulls the
+  // length down to the shortest option that does fit it (e.g. 1.80 m forces the length to 2.00 m).
   function updateCustomDim(part: "width" | "length" | "height" | "axles", value: number) {
     const nextWidth = part === "width" ? value : preset.widthCm;
-    const nextLength = part === "length" ? value : preset.lengthCm;
+    let nextLength = part === "length" ? value : preset.lengthCm;
+    if (part === "width" && !getAllowedWidths(nextLength).includes(nextWidth)) {
+      nextLength = lengthOptions.find((l) => getAllowedWidths(l).includes(nextWidth)) ?? nextLength;
+    }
     const nextHeight = part === "height" ? value : preset.heightCm;
     const nextAxles = part === "axles" ? value : preset.axles;
     updatePreset(buildCustomPresetId(modelId as "food" | "cargo", nextWidth, nextLength, nextHeight, nextAxles as 1 | 2 | 3));
@@ -802,19 +808,24 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     );
   }
 
-  // Mobile-only: the picker behaves like a looping carousel (~3 visible at a time) — scrolling
-  // past the last accessory wraps back to the first one instead of stopping.
+  // Toggles the "more accessories below" hint off once the list is scrolled to its end (or if it
+  // never overflows in the first place), instead of the old mobile carousel that looped forever.
   function handleEquipmentLibraryScroll(event: UIEvent<HTMLDivElement>) {
-    if (!window.matchMedia("(max-width:780px)").matches) return;
     const el = event.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) el.scrollTop = 0;
+    setEquipmentAtEnd(el.scrollTop + el.clientHeight >= el.scrollHeight - 4);
   }
+
+  useEffect(() => {
+    const el = equipmentLibraryRef.current;
+    if (el) setEquipmentAtEnd(el.scrollHeight <= el.clientHeight + 4);
+  }, [equipmentList]);
 
   const equipmentPicker = (
     <>
       {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — agrega los que necesites`, "equipment-heading")}
       <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
-        <div className="equipment-library" onScroll={handleEquipmentLibraryScroll}>{equipmentList.map((equipment) => {
+        <div className="equipment-library-wrap">
+        <div className="equipment-library" ref={equipmentLibraryRef} onScroll={handleEquipmentLibraryScroll}>{equipmentList.map((equipment) => {
           const qty = quantities[equipment.id] ?? 1;
           return (
             <div className="equipment-row" key={equipment.id}>
@@ -829,6 +840,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
             </div>
           );
         })}</div>
+        {!equipmentAtEnd && <div className="equipment-scroll-hint" aria-hidden="true"><i>⌄</i></div>}
+        </div>
 
         {plano && (
           <div className="special-item-box">
@@ -887,14 +900,14 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
                 <small>Ancho</small>
                 <div className="dim-options desktop-only">
                   {CUSTOM_WIDTH_OPTIONS_CM.map((w) => (
-                    <button key={w} type="button" className={`dim-option ${preset.widthCm === w ? "active" : ""}`} disabled={!allowedWidths.includes(w)} onClick={() => updateCustomDim("width", w)}>{(w / 100).toFixed(2)} m</button>
+                    <button key={w} type="button" className={`dim-option ${preset.widthCm === w ? "active" : ""}`} onClick={() => updateCustomDim("width", w)}>{(w / 100).toFixed(2)} m</button>
                   ))}
                 </div>
                 <select className="dim-select-mobile" value={preset.widthCm} onChange={(event) => updateCustomDim("width", Number(event.target.value))}>
-                  {CUSTOM_WIDTH_OPTIONS_CM.map((w) => <option key={w} value={w} disabled={!allowedWidths.includes(w)}>{(w / 100).toFixed(2)} m</option>)}
+                  {CUSTOM_WIDTH_OPTIONS_CM.map((w) => <option key={w} value={w}>{(w / 100).toFixed(2)} m</option>)}
                 </select>
               </div>
-              <label className="config-select dim-field">Largo<select value={preset.lengthCm} onChange={(event) => updateCustomDim("length", Number(event.target.value))}>{lengthOptions.map((l) => <option key={l} value={l}>{(l / 100).toFixed(2)} m</option>)}</select></label>
+              <label className="config-select dim-field">Largo<select value={preset.lengthCm} onChange={(event) => updateCustomDim("length", Number(event.target.value))}>{lengthOptions.map((l) => <option key={l} value={l} disabled={!getAllowedWidths(l).includes(preset.widthCm)}>{(l / 100).toFixed(2)} m</option>)}</select></label>
               <label className="config-select dim-field">Altura<select value={preset.heightCm} onChange={(event) => updateCustomDim("height", Number(event.target.value))}>{heightOptions.map((h) => <option key={h} value={h}>{(h / 100).toFixed(2)} m</option>)}</select></label>
               <div className="dim-field config-axle-box">
                 <small>Ejes</small>
