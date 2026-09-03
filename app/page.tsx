@@ -84,7 +84,7 @@ export default function Home() {
         <div className="product-grid">
           {products.map((product) => (
             <article className="product-card" key={product.name}>
-              <div className={`product-visual ${product.className}`}><span>{product.code}</span><div className="mini-trailer"><i className="mini-hitch"><b className="mini-hitch-leg" /></i></div></div>
+              <div className={`product-visual ${product.className}`}><span>{product.code}</span><div className="mini-trailer"><span className="mini-window" /><i className="mini-hitch"><b className="mini-hitch-leg" /></i></div></div>
               <div className="product-info"><small>{product.use}</small><h3>FG {product.name}</h3><p>{product.description}</p><Link className="button" href={`/cotizador/${product.id}`}>Configurar este modelo <span>→</span></Link></div>
             </article>
           ))}
