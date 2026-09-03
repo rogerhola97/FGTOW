@@ -63,7 +63,7 @@ export default function Home() {
             <div className="trailer-body"><b>FG</b></div>
             <div className="trailer-frame" />
             <div className="wheel wheel-a" /><div className="wheel wheel-b" />
-            <div className="hitch" />
+            <div className="hitch"><i className="hitch-leg" /></div>
           </div>
         </div>
       </section>
@@ -84,7 +84,7 @@ export default function Home() {
         <div className="product-grid">
           {products.map((product) => (
             <article className="product-card" key={product.name}>
-              <div className={`product-visual ${product.className}`}><span>{product.code}</span><div className="mini-trailer"><i className="mini-hitch" /></div></div>
+              <div className={`product-visual ${product.className}`}><span>{product.code}</span><div className="mini-trailer"><i className="mini-hitch"><b className="mini-hitch-leg" /></i></div></div>
               <div className="product-info"><small>{product.use}</small><h3>FG {product.name}</h3><p>{product.description}</p><Link className="button" href={`/cotizador/${product.id}`}>Configurar este modelo <span>→</span></Link></div>
             </article>
           ))}

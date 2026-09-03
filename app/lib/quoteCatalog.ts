@@ -114,23 +114,18 @@ export function windowHeightCm(wall: Wall) {
   return WINDOW_SPECS[windowWallType(wall)].heightCm;
 }
 
-// 2 windows per lateral wall, plus one on whichever front/back wall isn't holding the door.
-// Positions them at opposite ends of the wall so they only overlap when the trailer is too short
-// to fit two lateral windows at all (each is 220cm) — still kept inside the trailer's own bounds.
+// One window per wall, max: left, right, and whichever front/back wall isn't holding the door —
+// 3 total. Centered on each wall so it's always valid regardless of trailer size.
 export function defaultWindows(doorWall: Wall, trailerWidthCm: number, trailerLengthCm: number): WindowConfig[] {
   const oppositeFrontBack: Wall = doorWall === "front" ? "back" : "front";
   const frontalWall: Wall = doorWall === "left" || doorWall === "right" ? "front" : oppositeFrontBack;
-  const margin = 20;
   const lateralWidth = WINDOW_SPECS.lateral.widthCm;
-  const firstOffset = Math.min(margin, Math.max(0, trailerLengthCm - lateralWidth));
-  const secondOffset = Math.max(firstOffset, trailerLengthCm - lateralWidth - margin);
+  const lateralOffset = Math.max(0, (trailerLengthCm - lateralWidth) / 2);
   const frontalSpan = wallLengthCm(frontalWall, trailerWidthCm, trailerLengthCm);
   const frontalOffset = Math.max(0, (frontalSpan - WINDOW_SPECS.frontal.widthCm) / 2);
   return [
-    { id: "win-left-1", wall: "left", offsetCm: firstOffset },
-    { id: "win-left-2", wall: "left", offsetCm: secondOffset },
-    { id: "win-right-1", wall: "right", offsetCm: firstOffset },
-    { id: "win-right-2", wall: "right", offsetCm: secondOffset },
+    { id: "win-left", wall: "left", offsetCm: lateralOffset },
+    { id: "win-right", wall: "right", offsetCm: lateralOffset },
     { id: "win-frontal", wall: frontalWall, offsetCm: frontalOffset },
   ];
 }

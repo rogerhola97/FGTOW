@@ -309,8 +309,7 @@ function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLe
 }
 
 function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
-  if (modelId === "cargo") return buildStarterLayout(["caja-herramientas", "amarres", "salpicaderas", "salpicaderas", "rampa"], trailerWidthCm, trailerLengthCm, door);
-  if (modelId === "rzr") return buildStarterLayout(["anclajes", "anclajes", "portallantas", "freno-inercia", "rampa-reforzada"], trailerWidthCm, trailerLengthCm, door);
+  if (modelId === "cargo" || modelId === "rzr") return [];
   return buildStarterLayout(["plancha", "bano-maria", "freidora", "parrilla", "tarja"], trailerWidthCm, trailerLengthCm, door);
 }
 
@@ -350,7 +349,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
   const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
   const [door, setDoor] = useState<DoorConfig>(() => defaultDoor(preset.widthCm));
-  const [windows, setWindows] = useState<WindowConfig[]>(() => defaultWindows(door.wall, preset.widthCm, preset.lengthCm));
+  const [windows, setWindows] = useState<WindowConfig[]>(() => (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm) : []));
   const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
   const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>([]);
   const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "", price: "" });
@@ -425,18 +424,13 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const rect = placeOnWall(current.wall, current.offsetCm, current.widthCm, 1, next.widthCm, next.lengthCm);
       return { wall: current.wall, offsetCm: rect.offset, widthCm: current.widthCm };
     });
-    setWindows((current) => {
-      const placed: WindowConfig[] = [];
-      for (const w of current) {
-        const widthCm = windowWidthCm(w.wall);
-        const span = wallLengthCm(w.wall, next.widthCm, next.lengthCm);
-        const blockers = placed.filter((p) => p.wall === w.wall).map((p) => ({ offsetCm: p.offsetCm, widthCm: windowWidthCm(p.wall) }));
-        if (door.wall === w.wall) blockers.push({ offsetCm: door.offsetCm, widthCm: door.widthCm });
-        const offsetCm = findFreeOffsetOnWall(clamp(w.offsetCm, 0, Math.max(0, span - widthCm)), widthCm, span, blockers);
-        placed.push({ ...w, offsetCm });
-      }
-      return placed;
-    });
+    setWindows((current) => current.map((w) => {
+      const widthCm = windowWidthCm(w.wall);
+      const span = wallLengthCm(w.wall, next.widthCm, next.lengthCm);
+      const clamped = clamp(w.offsetCm, 0, Math.max(0, span - widthCm));
+      const blockers = door.wall === w.wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
+      return { ...w, offsetCm: findFreeOffsetOnWall(clamped, widthCm, span, blockers) };
+    }));
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -668,45 +662,51 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     setDrag(next);
   }
 
+  // A wall holds at most one window: if the target wall is already occupied by another window,
+  // that window is bumped to the dragged window's previous wall instead of letting both coexist.
+  function centeredWindowOffset(wall: Wall) {
+    const widthCm = windowWidthCm(wall);
+    const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
+    const blockers = door.wall === wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
+    return findFreeOffsetOnWall(Math.max(0, (span - widthCm) / 2), widthCm, span, blockers);
+  }
+
   function moveWindowTo(id: string, pointX: number, pointY: number) {
-    setWindows((current) => current.map((w) => {
-      if (w.id !== id) return w;
+    setWindows((current) => {
+      const dragged = current.find((w) => w.id === id);
+      if (!dragged) return current;
       const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
       const widthCm = windowWidthCm(wall);
       const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
       const desired = (wall === "front" || wall === "back" ? pointX : pointY) - widthCm / 2;
-      const blockers = windowBlockersOnWall(wall, id);
-      if (door.wall === wall) blockers.push({ offsetCm: door.offsetCm, widthCm: door.widthCm });
-      const offsetCm = findFreeOffsetOnWall(desired, widthCm, span, blockers);
-      return { ...w, wall, offsetCm };
-    }));
+      const doorBlocker = door.wall === wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
+      const offsetCm = findFreeOffsetOnWall(desired, widthCm, span, doorBlocker);
+      const occupant = wall !== dragged.wall ? current.find((w) => w.id !== id && w.wall === wall) : undefined;
+      return current.map((w) => {
+        if (w.id === id) return { ...w, wall, offsetCm };
+        if (occupant && w.id === occupant.id) return { ...w, wall: dragged.wall, offsetCm: centeredWindowOffset(dragged.wall) };
+        return w;
+      });
+    });
   }
 
   function cycleWindowWall(id: string) {
-    setWindows((current) => current.map((w) => {
-      if (w.id !== id) return w;
-      const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(w.wall) + 1) % WALL_ORDER.length];
-      const widthCm = windowWidthCm(nextWall);
-      const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
-      const blockers = windowBlockersOnWall(nextWall, id);
-      if (door.wall === nextWall) blockers.push({ offsetCm: door.offsetCm, widthCm: door.widthCm });
-      const centeredOffset = findFreeOffsetOnWall(Math.max(0, (span - widthCm) / 2), widthCm, span, blockers);
-      return { ...w, wall: nextWall, offsetCm: centeredOffset };
-    }));
+    setWindows((current) => {
+      const dragged = current.find((w) => w.id === id);
+      if (!dragged) return current;
+      const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(dragged.wall) + 1) % WALL_ORDER.length];
+      const centeredOffset = centeredWindowOffset(nextWall);
+      const occupant = current.find((w) => w.id !== id && w.wall === nextWall);
+      return current.map((w) => {
+        if (w.id === id) return { ...w, wall: nextWall, offsetCm: centeredOffset };
+        if (occupant && w.id === occupant.id) return { ...w, wall: dragged.wall, offsetCm: centeredWindowOffset(dragged.wall) };
+        return w;
+      });
+    });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
-  // Runs once, when the pointer is released: if the window landed on top of another window,
-  // swap their positions instead of leaving them overlapped.
-  function finalizeWindowPlacement(id: string, originWall: Wall, originOffsetCm: number) {
-    setWindows((current) => {
-      const win = current.find((w) => w.id === id);
-      if (!win) return current;
-      const widthCm = windowWidthCm(win.wall);
-      const blocker = current.find((o) => o.id !== id && o.wall === win.wall && segmentsOverlap(win.offsetCm, widthCm, o.offsetCm, windowWidthCm(o.wall)));
-      if (!blocker) return current;
-      return current.map((entry) => (entry.id === blocker.id ? { ...entry, wall: originWall, offsetCm: originOffsetCm } : entry));
-    });
+  function finalizeWindowPlacement() {
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -756,7 +756,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     dragRef.current = null;
     if (svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
     if (active.kind === "item") finalizeItemPlacement(active.instanceId, active.originWall, active.originOffsetCm);
-    else if (active.kind === "window") finalizeWindowPlacement(active.id, active.originWall, active.originOffsetCm);
+    else if (active.kind === "window") finalizeWindowPlacement();
     setDrag(null);
   }
 
