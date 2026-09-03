@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent, UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, MEXICAN_STATES } from "../lib/mexicanStates";
 import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL } from "../lib/company";
 import {
@@ -12,15 +12,18 @@ import {
   DoorConfig,
   MODEL_META,
   ModelId,
+  PERIMETER_TABLE_DEPTH_CM,
   PlacedEquipment,
   TrailerPreset,
   WALL_LABEL,
   Wall,
+  WindowConfig,
   axleBandCm,
   axleLabel,
   buildCustomPresetId,
   calculateQuote,
   defaultDoor,
+  defaultWindows,
   doorClearanceRect,
   getAllowedAxles,
   getAllowedWidths,
@@ -37,11 +40,13 @@ import {
   validateLayout,
   wallForPoint,
   wallLengthCm,
+  windowHeightCm,
+  windowWidthCm,
 } from "../lib/quoteCatalog";
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
-type DragState = { kind: "item"; instanceId: string; pointerId: number; originWall: Wall; originOffsetCm: number } | { kind: "door"; pointerId: number } | null;
+type DragState = { kind: "item"; instanceId: string; pointerId: number; originWall: Wall; originOffsetCm: number } | { kind: "door"; pointerId: number } | { kind: "window"; id: string; pointerId: number; originWall: Wall; originOffsetCm: number } | null;
 
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -107,6 +112,28 @@ function avoidDoor(wall: Wall, offset: number, alongCm: number, mount: "inside" 
   return clamp(candidate, 0, Math.max(0, span - alongCm));
 }
 
+function segmentsOverlap(aOffset: number, aWidth: number, bOffset: number, bWidth: number) {
+  return aOffset < bOffset + bWidth && aOffset + aWidth > bOffset;
+}
+
+// Windows and the door only need to avoid each other along their own wall (they don't block floor
+// equipment), so this is a simpler 1D version of the item collision resolver above.
+function findFreeOffsetOnWall(desiredOffset: number, widthCm: number, span: number, blockers: { offsetCm: number; widthCm: number }[]) {
+  const maxOffset = Math.max(0, span - widthCm);
+  const desired = clamp(desiredOffset, 0, maxOffset);
+  const isFree = (offset: number) => !blockers.some((b) => segmentsOverlap(offset, widthCm, b.offsetCm, b.widthCm));
+  if (isFree(desired)) return desired;
+  const step = 2;
+  const range = Math.max(desired, maxOffset - desired);
+  for (let d = step; d <= range + step; d += step) {
+    const left = desired - d;
+    const right = desired + d;
+    if (left >= 0 && isFree(left)) return left;
+    if (right <= maxOffset && isFree(right)) return right;
+  }
+  return desired;
+}
+
 // The axle band only exists along the left/right walls (that's where the wheels are drawn),
 // so the door can't be dropped, cycled onto, or widened into that band on those walls.
 function avoidAxleBand(wall: Wall, offset: number, widthCm: number, preset: TrailerPreset) {
@@ -135,6 +162,7 @@ type CollisionParams = {
   door: DoorConfig;
   originWall: Wall;
   originOffsetCm: number;
+  overlapExempt?: boolean;
 };
 
 const OVERLAP_SWAP_RATIO = 0.6;
@@ -142,7 +170,15 @@ const OVERLAP_SWAP_RATIO = 0.6;
 // When a dragged item would overlap another, push it to the nearest free spot along
 // the same wall, then other walls, and only swap places with the blocking item as a last resort.
 function resolveCollision(params: CollisionParams): { wall: Wall; offsetCm: number; swapWith?: SwapTarget } {
-  const { wall, alongCm, depthCm, mount, trailerWidthCm, trailerLengthCm, others, door, originWall, originOffsetCm } = params;
+  const { wall, alongCm, depthCm, mount, trailerWidthCm, trailerLengthCm, door, originWall, originOffsetCm } = params;
+  const others = params.others.filter((o) => !getEquipment(o.typeId)?.overlapExempt);
+
+  const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
+  const maxOffset = Math.max(0, span - alongCm);
+  const desired = clamp(params.offsetCm, 0, maxOffset);
+
+  // Items mounted above/below the counter (hood, low shelf) can sit anywhere without avoiding others.
+  if (params.overlapExempt) return { wall, offsetCm: desired };
 
   function rectFor(w: Wall, offset: number, a: number, d: number, m: "inside" | "outside") {
     const rect = placeOnWall(w, offset, a, d, trailerWidthCm, trailerLengthCm, m);
@@ -155,10 +191,6 @@ function resolveCollision(params: CollisionParams): { wall: Wall; offsetCm: numb
     if (clearance && rectsOverlap(candidate, clearance)) return false;
     return !others.some((o) => !exclude.includes(o.instanceId) && rectsOverlap(candidate, o));
   }
-
-  const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
-  const maxOffset = Math.max(0, span - alongCm);
-  const desired = clamp(params.offsetCm, 0, maxOffset);
 
   if (isFree(wall, desired)) return { wall, offsetCm: desired };
 
@@ -279,7 +311,7 @@ function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLe
 function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
   if (modelId === "cargo") return buildStarterLayout(["caja-herramientas", "amarres", "salpicaderas", "salpicaderas", "rampa"], trailerWidthCm, trailerLengthCm, door);
   if (modelId === "rzr") return buildStarterLayout(["anclajes", "anclajes", "portallantas", "freno-inercia", "rampa-reforzada"], trailerWidthCm, trailerLengthCm, door);
-  return buildStarterLayout(["plancha", "bano-maria", "freidora", "parrilla", "mesa", "tarja"], trailerWidthCm, trailerLengthCm, door);
+  return buildStarterLayout(["plancha", "bano-maria", "freidora", "parrilla", "tarja"], trailerWidthCm, trailerLengthCm, door);
 }
 
 function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig) {
@@ -295,7 +327,7 @@ function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerW
       const rect = placeOnWall(wall, offset, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount);
       const candidate = { xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm };
       const blockedByDoor = clearance ? rectsOverlap(candidate, clearance) : false;
-      const blockedByItem = existing.some((item) => rectsOverlap(candidate, item));
+      const blockedByItem = definition!.overlapExempt ? false : existing.some((item) => !getEquipment(item.typeId)?.overlapExempt && rectsOverlap(candidate, item));
       if (!blockedByDoor && !blockedByItem) return { wall, offsetCm: rect.offset, alongCm, depthCm };
     }
   }
@@ -318,13 +350,18 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
   const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
   const [door, setDoor] = useState<DoorConfig>(() => defaultDoor(preset.widthCm));
+  const [windows, setWindows] = useState<WindowConfig[]>(() => defaultWindows(door.wall, preset.widthCm, preset.lengthCm));
+  const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
+  const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>([]);
+  const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "", price: "" });
   const [items, setItems] = useState<PlacedItem[]>(() => starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
+  const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
+  const toggleStep = (step: 1 | 2 | 3) => setActiveStep((current) => (current === step ? 0 : step));
   const [includeIva, setIncludeIva] = useState(false);
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
@@ -350,6 +387,10 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   }, [sendState]);
 
   const quote = useMemo(() => calculateQuote(presetId, items, includeIva), [presetId, items, includeIva]);
+  const specialItemsTotal = useMemo(() => specialItems.reduce((sum, entry) => sum + entry.price, 0), [specialItems]);
+  const combinedSubtotal = quote.subtotal + specialItemsTotal;
+  const combinedIva = includeIva ? Math.round(combinedSubtotal * 0.16) : 0;
+  const combinedTotal = combinedSubtotal + combinedIva;
   const layoutErrors = useMemo(() => validateLayout(preset, items, door), [preset, items, door]);
   const selected = items.find((item) => item.instanceId === selectedId) ?? null;
   const selectedDefinition = selected ? getEquipment(selected.typeId) : null;
@@ -357,8 +398,9 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const selectedDepthLimits = selectedDefinition ? { min: selectedDefinition.minDepthCm, max: selectedDefinition.maxDepthCm } : null;
   const collisionIds = useMemo(() => {
     const ids = new Set<string>();
-    for (let i = 0; i < items.length; i += 1) for (let j = i + 1; j < items.length; j += 1) if (rectsOverlap(items[i], items[j])) {
-      ids.add(items[i].instanceId); ids.add(items[j].instanceId);
+    for (let i = 0; i < items.length; i += 1) for (let j = i + 1; j < items.length; j += 1) {
+      if (getEquipment(items[i].typeId)?.overlapExempt || getEquipment(items[j].typeId)?.overlapExempt) continue;
+      if (rectsOverlap(items[i], items[j])) { ids.add(items[i].instanceId); ids.add(items[j].instanceId); }
     }
     const clearance = doorClearanceRect(door, preset.widthCm, preset.lengthCm);
     for (const item of items) {
@@ -382,6 +424,18 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     setDoor((current) => {
       const rect = placeOnWall(current.wall, current.offsetCm, current.widthCm, 1, next.widthCm, next.lengthCm);
       return { wall: current.wall, offsetCm: rect.offset, widthCm: current.widthCm };
+    });
+    setWindows((current) => {
+      const placed: WindowConfig[] = [];
+      for (const w of current) {
+        const widthCm = windowWidthCm(w.wall);
+        const span = wallLengthCm(w.wall, next.widthCm, next.lengthCm);
+        const blockers = placed.filter((p) => p.wall === w.wall).map((p) => ({ offsetCm: p.offsetCm, widthCm: windowWidthCm(p.wall) }));
+        if (door.wall === w.wall) blockers.push({ offsetCm: door.offsetCm, widthCm: door.widthCm });
+        const offsetCm = findFreeOffsetOnWall(clamp(w.offsetCm, 0, Math.max(0, span - widthCm)), widthCm, span, blockers);
+        placed.push({ ...w, offsetCm });
+      }
+      return placed;
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
@@ -412,6 +466,24 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
+  // Vendor-only: a one-off accessory the client asked for that isn't in the standard catalog.
+  // It's priced and listed on the quote, but isn't placed on the 2D plan.
+  function addSpecialItem() {
+    const name = specialForm.name.trim();
+    const widthCm = Number(specialForm.widthCm);
+    const depthCm = Number(specialForm.depthCm);
+    const price = Number(specialForm.price);
+    if (!name || !Number.isFinite(widthCm) || widthCm <= 0 || !Number.isFinite(depthCm) || depthCm <= 0 || !Number.isFinite(price) || price < 0) return;
+    setSpecialItems((current) => [...current, { id: uid(), name, widthCm, depthCm, price }]);
+    setSpecialForm({ name: "", widthCm: "", depthCm: "", price: "" });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  function removeSpecialItem(id: string) {
+    setSpecialItems((current) => current.filter((entry) => entry.id !== id));
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
   function updateItemSize(instanceId: string, part: "along" | "depth", value: number) {
     if (!Number.isFinite(value) || value <= 0) return;
     setItems((current) => {
@@ -438,6 +510,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         door,
         originWall: item.wall,
         originOffsetCm,
+        overlapExempt: definition?.overlapExempt,
       });
       return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
     });
@@ -470,6 +543,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         door,
         originWall: item.wall,
         originOffsetCm: offsetOfItem(item),
+        overlapExempt: definition?.overlapExempt,
       });
       return applyPlacementResult(current, instanceId, clampedAlong, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
     });
@@ -533,10 +607,15 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         door,
         originWall,
         originOffsetCm,
+        overlapExempt: definition?.overlapExempt,
       });
       return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  function windowBlockersOnWall(wall: Wall, excludeId?: string) {
+    return windows.filter((w) => w.wall === wall && w.id !== excludeId).map((w) => ({ offsetCm: w.offsetCm, widthCm: windowWidthCm(w.wall) }));
   }
 
   function moveDoorTo(pointX: number, pointY: number) {
@@ -544,7 +623,9 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
       const desired = (wall === "front" || wall === "back" ? pointX : pointY) - current.widthCm / 2;
       const afterAxles = avoidAxleBand(wall, desired, current.widthCm, preset);
-      const rect = placeOnWall(wall, afterAxles, current.widthCm, 1, preset.widthCm, preset.lengthCm);
+      const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
+      const afterWindows = findFreeOffsetOnWall(afterAxles, current.widthCm, span, windowBlockersOnWall(wall));
+      const rect = placeOnWall(wall, afterWindows, current.widthCm, 1, preset.widthCm, preset.lengthCm);
       return { wall, offsetCm: rect.offset, widthCm: current.widthCm };
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
@@ -556,7 +637,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
       const clampedWidth = Math.min(current.widthCm, span);
       const centeredOffset = avoidAxleBand(nextWall, Math.max(0, (span - clampedWidth) / 2), clampedWidth, preset);
-      const rect = placeOnWall(nextWall, centeredOffset, clampedWidth, 1, preset.widthCm, preset.lengthCm);
+      const afterWindows = findFreeOffsetOnWall(centeredOffset, clampedWidth, span, windowBlockersOnWall(nextWall));
+      const rect = placeOnWall(nextWall, afterWindows, clampedWidth, 1, preset.widthCm, preset.lengthCm);
       return { wall: nextWall, offsetCm: rect.offset, widthCm: clampedWidth };
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
@@ -568,8 +650,62 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const span = wallLengthCm(current.wall, preset.widthCm, preset.lengthCm);
       const clampedWidth = Math.min(Math.max(value, DOOR_MIN_WIDTH_CM), Math.min(DOOR_MAX_WIDTH_CM, span));
       const afterAxles = avoidAxleBand(current.wall, current.offsetCm, clampedWidth, preset);
-      const rect = placeOnWall(current.wall, afterAxles, clampedWidth, 1, preset.widthCm, preset.lengthCm);
+      const afterWindows = findFreeOffsetOnWall(afterAxles, clampedWidth, span, windowBlockersOnWall(current.wall));
+      const rect = placeOnWall(current.wall, afterWindows, clampedWidth, 1, preset.widthCm, preset.lengthCm);
       return { wall: current.wall, offsetCm: rect.offset, widthCm: clampedWidth };
+    });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  function startWindowDrag(event: PointerEvent<SVGGElement>, win: WindowConfig) {
+    event.preventDefault(); event.stopPropagation();
+    svgRef.current?.setPointerCapture(event.pointerId);
+    setSelectedId(null);
+    setDoorSelected(false);
+    setWindowSelectedId(win.id);
+    const next: DragState = { kind: "window", id: win.id, pointerId: event.pointerId, originWall: win.wall, originOffsetCm: win.offsetCm };
+    dragRef.current = next;
+    setDrag(next);
+  }
+
+  function moveWindowTo(id: string, pointX: number, pointY: number) {
+    setWindows((current) => current.map((w) => {
+      if (w.id !== id) return w;
+      const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
+      const widthCm = windowWidthCm(wall);
+      const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
+      const desired = (wall === "front" || wall === "back" ? pointX : pointY) - widthCm / 2;
+      const blockers = windowBlockersOnWall(wall, id);
+      if (door.wall === wall) blockers.push({ offsetCm: door.offsetCm, widthCm: door.widthCm });
+      const offsetCm = findFreeOffsetOnWall(desired, widthCm, span, blockers);
+      return { ...w, wall, offsetCm };
+    }));
+  }
+
+  function cycleWindowWall(id: string) {
+    setWindows((current) => current.map((w) => {
+      if (w.id !== id) return w;
+      const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(w.wall) + 1) % WALL_ORDER.length];
+      const widthCm = windowWidthCm(nextWall);
+      const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
+      const blockers = windowBlockersOnWall(nextWall, id);
+      if (door.wall === nextWall) blockers.push({ offsetCm: door.offsetCm, widthCm: door.widthCm });
+      const centeredOffset = findFreeOffsetOnWall(Math.max(0, (span - widthCm) / 2), widthCm, span, blockers);
+      return { ...w, wall: nextWall, offsetCm: centeredOffset };
+    }));
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  // Runs once, when the pointer is released: if the window landed on top of another window,
+  // swap their positions instead of leaving them overlapped.
+  function finalizeWindowPlacement(id: string, originWall: Wall, originOffsetCm: number) {
+    setWindows((current) => {
+      const win = current.find((w) => w.id === id);
+      if (!win) return current;
+      const widthCm = windowWidthCm(win.wall);
+      const blocker = current.find((o) => o.id !== id && o.wall === win.wall && segmentsOverlap(win.offsetCm, widthCm, o.offsetCm, windowWidthCm(o.wall)));
+      if (!blocker) return current;
+      return current.map((entry) => (entry.id === blocker.id ? { ...entry, wall: originWall, offsetCm: originOffsetCm } : entry));
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
@@ -587,6 +723,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     svgRef.current?.setPointerCapture(event.pointerId);
     setSelectedId(item.instanceId);
     setDoorSelected(false);
+    setWindowSelectedId(null);
     const next: DragState = { kind: "item", instanceId: item.instanceId, pointerId: event.pointerId, originWall: item.wall, originOffsetCm: offsetOfItem(item) };
     dragRef.current = next;
     setDrag(next);
@@ -597,6 +734,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     svgRef.current?.setPointerCapture(event.pointerId);
     setSelectedId(null);
     setDoorSelected(true);
+    setWindowSelectedId(null);
     const next: DragState = { kind: "door", pointerId: event.pointerId };
     dragRef.current = next;
     setDrag(next);
@@ -606,6 +744,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     if (!drag) return;
     const point = pointInPlan(event);
     if (drag.kind === "item") moveItemTo(drag.instanceId, point.x, point.y);
+    else if (drag.kind === "window") moveWindowTo(drag.id, point.x, point.y);
     else moveDoorTo(point.x, point.y);
   }
 
@@ -617,6 +756,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     dragRef.current = null;
     if (svgRef.current?.hasPointerCapture(active.pointerId)) svgRef.current.releasePointerCapture(active.pointerId);
     if (active.kind === "item") finalizeItemPlacement(active.instanceId, active.originWall, active.originOffsetCm);
+    else if (active.kind === "window") finalizeWindowPlacement(active.id, active.originWall, active.originOffsetCm);
     setDrag(null);
   }
 
@@ -632,7 +772,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const response = await fetch("/api/quote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...values, presetId, items, door, includeIva }),
+        body: JSON.stringify({ ...values, presetId, items, door, includeIva, specialItems }),
       });
       const result = await response.json() as { error?: string; quoteNumber?: string; emailSent?: boolean; message?: string };
       if (!response.ok) throw new Error(result.error || "No fue posible enviar la cotización.");
@@ -650,10 +790,10 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     return (
       <div
         className={`config-step ${extraClassName} ${activeStep === step ? "is-open" : ""}`}
-        onClick={() => setActiveStep(step)}
+        onClick={() => toggleStep(step)}
         role="button"
         tabIndex={0}
-        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setActiveStep(step); } }}
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggleStep(step); } }}
       >
         <span>{String(step).padStart(2, "0")}</span>
         <div><strong>{title}</strong><small>{subtitle}</small></div>
@@ -662,16 +802,24 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     );
   }
 
+  // Mobile-only: the picker behaves like a looping carousel (~3 visible at a time) — scrolling
+  // past the last accessory wraps back to the first one instead of stopping.
+  function handleEquipmentLibraryScroll(event: UIEvent<HTMLDivElement>) {
+    if (!window.matchMedia("(max-width:780px)").matches) return;
+    const el = event.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) el.scrollTop = 0;
+  }
+
   const equipmentPicker = (
     <>
       {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — agrega los que necesites`, "equipment-heading")}
       <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
-        <div className="equipment-library">{equipmentList.map((equipment) => {
+        <div className="equipment-library" onScroll={handleEquipmentLibraryScroll}>{equipmentList.map((equipment) => {
           const qty = quantities[equipment.id] ?? 1;
           return (
             <div className="equipment-row" key={equipment.id}>
               <i style={{ background: equipment.color }} />
-              <span><strong>{equipment.name}{equipment.mount === "outside" ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
+              <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
               <div className="qty-stepper">
                 <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
                 <span>{qty}</span>
@@ -681,6 +829,30 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
             </div>
           );
         })}</div>
+
+        {plano && (
+          <div className="special-item-box">
+            <strong>Aditamento especial</strong>
+            <small>Solo para vendedores: algo fuera del catálogo, con su propio nombre, medida y precio.</small>
+            <div className="special-item-form">
+              <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
+              <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
+              <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
+              <label>Precio<input type="number" min={0} value={specialForm.price} onChange={(event) => setSpecialForm((current) => ({ ...current, price: event.target.value }))} /></label>
+              <button type="button" className="qty-add" onClick={addSpecialItem}>Agregar especial</button>
+            </div>
+            {specialItems.length > 0 && (
+              <ul className="special-item-list">
+                {specialItems.map((entry) => (
+                  <li key={entry.id}>
+                    <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {money(entry.price)}</small></span>
+                    <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
@@ -713,21 +885,27 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
             <div className="config-custom-dims">
               <div className="dim-field">
                 <small>Ancho</small>
-                <div className="dim-options">
+                <div className="dim-options desktop-only">
                   {CUSTOM_WIDTH_OPTIONS_CM.map((w) => (
                     <button key={w} type="button" className={`dim-option ${preset.widthCm === w ? "active" : ""}`} disabled={!allowedWidths.includes(w)} onClick={() => updateCustomDim("width", w)}>{(w / 100).toFixed(2)} m</button>
                   ))}
                 </div>
+                <select className="dim-select-mobile" value={preset.widthCm} onChange={(event) => updateCustomDim("width", Number(event.target.value))}>
+                  {CUSTOM_WIDTH_OPTIONS_CM.map((w) => <option key={w} value={w} disabled={!allowedWidths.includes(w)}>{(w / 100).toFixed(2)} m</option>)}
+                </select>
               </div>
               <label className="config-select dim-field">Largo<select value={preset.lengthCm} onChange={(event) => updateCustomDim("length", Number(event.target.value))}>{lengthOptions.map((l) => <option key={l} value={l}>{(l / 100).toFixed(2)} m</option>)}</select></label>
               <label className="config-select dim-field">Altura<select value={preset.heightCm} onChange={(event) => updateCustomDim("height", Number(event.target.value))}>{heightOptions.map((h) => <option key={h} value={h}>{(h / 100).toFixed(2)} m</option>)}</select></label>
               <div className="dim-field config-axle-box">
                 <small>Ejes</small>
-                <div className="dim-options">
+                <div className="dim-options desktop-only">
                   {[1, 2, 3].map((a) => (
                     <button key={a} type="button" className={`dim-option ${preset.axles === a ? "active" : ""}`} disabled={!allowedAxles.includes(a as 1 | 2 | 3)} onClick={() => updateCustomDim("axles", a)}>{a}</button>
                   ))}
                 </div>
+                <select className="dim-select-mobile" value={preset.axles} onChange={(event) => updateCustomDim("axles", Number(event.target.value))}>
+                  {[1, 2, 3].map((a) => <option key={a} value={a} disabled={!allowedAxles.includes(a as 1 | 2 | 3)}>{a} {a > 1 ? "ejes" : "eje"}</option>)}
+                </select>
               </div>
               <div className="dim-price-hint">Precio base estimado <strong>{money(preset.basePrice)}</strong></div>
             </div>
@@ -759,12 +937,15 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
                 onPointerMove={moveDrag}
                 onPointerUp={stopDrag}
                 onPointerCancel={stopDrag}
-                onPointerDown={() => { setSelectedId(null); setDoorSelected(false); }}
+                onPointerDown={() => { setSelectedId(null); setDoorSelected(false); setWindowSelectedId(null); }}
               >
                 <defs><pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#dce5e5" strokeWidth="0.7" /></pattern><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#smallGrid)" /><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b9c9cc" strokeWidth="1.3" /></pattern></defs>
                 <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
                 <circle cx={preset.widthCm / 2} cy="-66" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" />
                 <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
+                {modelId === "food" && preset.widthCm > PERIMETER_TABLE_DEPTH_CM * 2 && preset.lengthCm > PERIMETER_TABLE_DEPTH_CM * 2 && (
+                  <rect x={PERIMETER_TABLE_DEPTH_CM} y={PERIMETER_TABLE_DEPTH_CM} width={preset.widthCm - PERIMETER_TABLE_DEPTH_CM * 2} height={preset.lengthCm - PERIMETER_TABLE_DEPTH_CM * 2} fill="none" stroke="#5f7481" strokeDasharray="7 6" strokeWidth="1.5" opacity=".65" />
+                )}
                 {axleWheelYs.map((y, i) => <rect key={`axle-left-${i}`} x="-23" y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
                 {axleWheelYs.map((y, i) => <rect key={`axle-right-${i}`} x={preset.widthCm} y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
                 <text x={preset.widthCm / 2} y="-17" textAnchor="middle" className="plan-label">FRENTE / TIRÓN</text>
@@ -776,10 +957,11 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
                   if (!definition) return null;
                   const bad = collisionIds.has(item.instanceId);
                   const active = selectedId === item.instanceId;
-                  return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
-                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill={definition.color} fillOpacity=".92" />
-                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : "#0a3550"} strokeWidth={active ? 4 : 2} />
-                    <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className="item-label"><tspan x={item.widthCm / 2}>{index + 1}. {definition.shortName}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
+                  const faint = definition.overlapExempt ?? false;
+                  return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""} ${faint ? "faint" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
+                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill={faint ? "#9aa4a7" : definition.color} fillOpacity={faint ? ".16" : ".92"} />
+                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : faint ? "#b7c0c2" : "#0a3550"} strokeWidth={active ? 4 : faint ? 1.2 : 2} strokeDasharray={faint ? "4 3" : undefined} />
+                    <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className={`item-label ${faint ? "faint" : ""}`}><tspan x={item.widthCm / 2}>{index + 1}. {definition.shortName}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
                   </g>;
                 })}
 
@@ -788,6 +970,19 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
                   <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" strokeLinecap="butt" />
                   <text x={doorGeo.labelX} y={doorGeo.labelY} textAnchor="middle" className="door-label" transform={doorGeo.rotate ? `rotate(${doorGeo.rotate} ${doorGeo.labelX} ${doorGeo.labelY})` : undefined}>PUERTA {door.widthCm}cm</text>
                 </g>
+
+                {windows.map((win) => {
+                  const widthCm = windowWidthCm(win.wall);
+                  const winGeo = doorGeometry({ wall: win.wall, offsetCm: win.offsetCm, widthCm }, preset);
+                  const winHitRect = placeOnWall(win.wall, win.offsetCm, widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
+                  const active = windowSelectedId === win.id;
+                  return (
+                    <g key={win.id} className={`plan-window ${active ? "selected" : ""}`} onPointerDown={(event) => startWindowDrag(event, win)}>
+                      <rect x={winHitRect.xCm} y={winHitRect.yCm} width={winHitRect.widthCm} height={winHitRect.depthCm} fill="transparent" />
+                      <line x1={winGeo.x1} y1={winGeo.y1} x2={winGeo.x2} y2={winGeo.y2} stroke="#7cc3d8" strokeWidth="6" strokeLinecap="butt" />
+                    </g>
+                  );
+                })}
 
                 <line x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
 
@@ -829,8 +1024,19 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
               <label>Ancho<input type="number" min={DOOR_MIN_WIDTH_CM} max={Math.min(DOOR_MAX_WIDTH_CM, wallLengthCm(door.wall, preset.widthCm, preset.lengthCm))} value={door.widthCm} onChange={(event) => updateDoorWidth(Number(event.target.value))} /><b>cm</b></label>
               <button type="button" onClick={cycleDoorWall}>Cambiar de pared ↻</button>
             </div>
+          ) : windowSelectedId ? (
+            (() => {
+              const win = windows.find((w) => w.id === windowSelectedId);
+              if (!win) return null;
+              return (
+                <div className="item-editor door-editor">
+                  <div><span>VENTANA</span><strong>{WALL_LABEL[win.wall]}</strong><small>Incluida sin costo. {windowWidthCm(win.wall)} × {windowHeightCm(win.wall)} cm. No puede sobreponerse a la puerta ni a otra ventana.</small></div>
+                  <button type="button" onClick={() => cycleWindowWall(win.id)}>Cambiar de pared ↻</button>
+                </div>
+              );
+            })()
           ) : (
-            <div className="item-editor empty"><span>Selecciona un elemento o la puerta en el plano para ajustar su medida o cambiarlo de pared. Todo se desliza pegado a la orilla del remolque.</span></div>
+            <div className="item-editor empty"><span>Selecciona un elemento, la puerta o una ventana en el plano para ajustar su medida o cambiarlo de pared. Todo se desliza pegado a la orilla del remolque.</span></div>
           )}
         </div>
         ) : (
@@ -867,9 +1073,9 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
           {stepHeader(3, "Paso 3 · Revisa tu cotización", "Después pasamos a tus datos")}
           <div className={`step-panel ${activeStep === 3 ? "is-open" : ""}`}>
           <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
-          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : line.linePrice ? `+${money(line.linePrice)}` : "$0"}</strong></li>)}</ol>
-          {!items.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
-          <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(quote.iva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
+          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : line.linePrice ? `+${money(line.linePrice)}` : "$0"}</strong></li>)}{specialItems.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}</span><strong>+{money(entry.price)}</strong></li>)}</ol>
+          {!items.length && !specialItems.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
+          <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras + specialItemsTotal)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(combinedIva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
           <p className="estimate-note">Estimación comercial basada en medidas y equipamiento. Requiere validación de ingeniería, capacidad, instalaciones, acabados y disponibilidad.</p>
           <a className="button config-continue" href="#enviar-cotizacion">Continuar con mis datos →</a>
           </div>
@@ -898,12 +1104,12 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
 
       <section className="quote-document" aria-label="Formato imprimible de cotización">
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
-        <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(quote.total)}</strong></div></div>
+        <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(combinedTotal)}</strong></div></div>
         <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div><div><small>ESTADO</small><strong>{customer.state || "Por completar"}</strong></div></div>
         {plano && <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
-        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}</tbody></table>
-        <div className="document-total"><div><span>Subtotal</span><strong>{money(quote.subtotal)}</strong></div><div><span>IVA</span><strong>{money(quote.iva)}</strong></div><div><span>Total estimado</span><strong>{money(quote.total)}</strong></div></div>
+        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{specialItems.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial)</td><td>{entry.widthCm} × {entry.depthCm} cm</td><td>{money(entry.price)}</td></tr>)}</tbody></table>
+        <div className="document-total"><div><span>Subtotal</span><strong>{money(combinedSubtotal)}</strong></div><div><span>IVA</span><strong>{money(combinedIva)}</strong></div><div><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
         {customer.notes && <div className="document-notes"><strong>Notas del proyecto</strong><p>{customer.notes}</p></div>}
         <div className="document-footer"><span>FG TOW · De FG INV</span><span>contacto@fgtow.com · fgtow.com</span></div>

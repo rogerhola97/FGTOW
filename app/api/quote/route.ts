@@ -28,6 +28,22 @@ function parseItems(value: unknown): PlacedEquipment[] {
   });
 }
 
+type SpecialItem = { name: string; widthCm: number; depthCm: number; price: number };
+
+function parseSpecialItems(value: unknown): SpecialItem[] {
+  if (!Array.isArray(value) || value.length > 20) return [];
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const raw = candidate as Record<string, unknown>;
+    const name = clean(raw.name, 120);
+    const widthCm = Number(raw.widthCm);
+    const depthCm = Number(raw.depthCm);
+    const price = Number(raw.price);
+    if (!name || !Number.isFinite(widthCm) || widthCm <= 0 || !Number.isFinite(depthCm) || depthCm <= 0 || !Number.isFinite(price) || price < 0) return [];
+    return [{ name, widthCm: Math.round(widthCm), depthCm: Math.round(depthCm), price: Math.round(price) }];
+  });
+}
+
 function parseDoor(value: unknown, trailerWidthCm: number, trailerLengthCm: number): DoorConfig {
   const fallback = defaultDoor(trailerWidthCm);
   if (!value || typeof value !== "object") return fallback;
@@ -75,12 +91,17 @@ function toBase64(value: string) {
   return btoa(binary);
 }
 
-function makeEmailHtml(args: { folio: string; name: string; phone: string; email: string; city: string; state: string; notes: string; presetId: string; items: PlacedEquipment[]; includeIva: boolean; door: DoorConfig }) {
+function makeEmailHtml(args: { folio: string; name: string; phone: string; email: string; city: string; state: string; notes: string; presetId: string; items: PlacedEquipment[]; includeIva: boolean; door: DoorConfig; specialItems: SpecialItem[] }) {
   const quote = calculateQuote(args.presetId, args.items, args.includeIva);
   const modelLabel = MODEL_META[quote.preset.model].shortLabel.toUpperCase();
+  const specialTotal = args.specialItems.reduce((sum, entry) => sum + entry.price, 0);
+  const combinedSubtotal = quote.subtotal + specialTotal;
+  const combinedIva = args.includeIva ? Math.round(combinedSubtotal * 0.16) : 0;
+  const combinedTotal = combinedSubtotal + combinedIva;
   const rows = quote.lines.map((line, index) => `<tr><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${String(index + 2).padStart(2, "0")}</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${escapeHtml(line.definition.name)}</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${line.item.widthCm} × ${line.item.depthCm} cm</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2;text-align:right;font-weight:700">${line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>`).join("");
+  const specialRows = args.specialItems.map((entry, index) => `<tr><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${String(quote.lines.length + index + 2).padStart(2, "0")}</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${escapeHtml(entry.name)} (especial)</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${entry.widthCm} × ${entry.depthCm} cm</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2;text-align:right;font-weight:700">${money(entry.price)}</td></tr>`).join("");
   const doorRow = `<tr><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">--</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">Puerta (${escapeHtml(WALL_LABEL[args.door.wall])})</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${args.door.widthCm} cm</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2;text-align:right;font-weight:700">Incluida</td></tr>`;
-  return `<!doctype html><html lang="es"><body style="margin:0;background:#edf0ee;font-family:Arial,sans-serif;color:#06293e"><div style="max-width:760px;margin:0 auto;padding:28px 14px"><div style="background:#fff;border-top:7px solid #d6a229;padding:30px"><table style="width:100%;border-collapse:collapse"><tr><td><img src="https://fgtow.com/fg-tow-logo.png" alt="FG TOW" width="190" style="display:block;max-width:190px"></td><td style="text-align:right"><div style="font-size:11px;letter-spacing:1.5px;color:#075274;font-weight:800">COTIZACIÓN PRELIMINAR</div><div style="font-size:20px;font-weight:900;margin-top:6px">${escapeHtml(args.folio)}</div></td></tr></table><div style="background:#06293e;color:#fff;padding:20px;margin:28px 0;display:block"><div style="font-size:11px;color:#d6a229;letter-spacing:1px">${escapeHtml(modelLabel)} CONFIGURADO</div><div style="font-size:26px;font-weight:900;margin-top:5px">${(quote.preset.widthCm / 100).toFixed(2)} × ${(quote.preset.lengthCm / 100).toFixed(2)} m · ${axleLabel(quote.preset.axles).toUpperCase()}</div></div><h2 style="font-size:16px;text-transform:uppercase">Datos del cliente</h2><table style="width:100%;border-collapse:collapse;font-size:13px"><tr><td style="padding:7px 0"><b>Nombre:</b> ${escapeHtml(args.name)}</td><td style="padding:7px 0"><b>Teléfono:</b> ${escapeHtml(args.phone)}</td></tr><tr><td style="padding:7px 0"><b>Correo:</b> ${escapeHtml(args.email)}</td><td style="padding:7px 0"><b>Ciudad:</b> ${escapeHtml(args.city)}</td></tr><tr><td style="padding:7px 0"><b>Estado:</b> ${escapeHtml(args.state)}</td></tr></table><h2 style="font-size:16px;text-transform:uppercase;margin-top:30px">Desglose aproximado</h2><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#edf0ee"><th style="padding:10px;text-align:left">#</th><th style="padding:10px;text-align:left">Concepto</th><th style="padding:10px;text-align:left">Medida</th><th style="padding:10px;text-align:right">Importe</th></tr></thead><tbody><tr><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">01</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">Remolque base</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${quote.preset.label}</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2;text-align:right;font-weight:700">${money(quote.preset.basePrice)}</td></tr>${doorRow}${rows}</tbody></table><div style="margin:24px 0 0 auto;width:280px;font-size:13px"><div style="display:flex;justify-content:space-between;padding:7px 0"><span>Subtotal</span><b>${money(quote.subtotal)}</b></div><div style="display:flex;justify-content:space-between;padding:7px 0"><span>IVA</span><b>${money(quote.iva)}</b></div><div style="display:flex;justify-content:space-between;padding:13px 0;border-top:2px solid #d6a229;font-size:19px"><span>Total estimado</span><b>${money(quote.total)}</b></div></div>${args.notes ? `<h2 style="font-size:16px;text-transform:uppercase;margin-top:30px">Notas del cliente</h2><p style="font-size:13px;line-height:1.6">${escapeHtml(args.notes)}</p>` : ""}<div style="margin-top:30px;padding:18px;background:#f7f8f6;border-left:4px solid #d6a229;font-size:11px;line-height:1.55"><b>Estimación preliminar:</b> requiere revisión de ingeniería, distribución de peso, capacidad, instalaciones, acabados, impuestos y disponibilidad. El archivo SVG adjunto contiene el plano 2D enviado por el cliente.</div></div><div style="padding:18px 28px;background:#06293e;color:#fff;font-size:11px;display:flex;justify-content:space-between"><span>FG TOW · De FG INV</span><span>contacto@fgtow.com · fgtow.com</span></div></div></body></html>`;
+  return `<!doctype html><html lang="es"><body style="margin:0;background:#edf0ee;font-family:Arial,sans-serif;color:#06293e"><div style="max-width:760px;margin:0 auto;padding:28px 14px"><div style="background:#fff;border-top:7px solid #d6a229;padding:30px"><table style="width:100%;border-collapse:collapse"><tr><td><img src="https://fgtow.com/fg-tow-logo.png" alt="FG TOW" width="190" style="display:block;max-width:190px"></td><td style="text-align:right"><div style="font-size:11px;letter-spacing:1.5px;color:#075274;font-weight:800">COTIZACIÓN PRELIMINAR</div><div style="font-size:20px;font-weight:900;margin-top:6px">${escapeHtml(args.folio)}</div></td></tr></table><div style="background:#06293e;color:#fff;padding:20px;margin:28px 0;display:block"><div style="font-size:11px;color:#d6a229;letter-spacing:1px">${escapeHtml(modelLabel)} CONFIGURADO</div><div style="font-size:26px;font-weight:900;margin-top:5px">${(quote.preset.widthCm / 100).toFixed(2)} × ${(quote.preset.lengthCm / 100).toFixed(2)} m · ${axleLabel(quote.preset.axles).toUpperCase()}</div></div><h2 style="font-size:16px;text-transform:uppercase">Datos del cliente</h2><table style="width:100%;border-collapse:collapse;font-size:13px"><tr><td style="padding:7px 0"><b>Nombre:</b> ${escapeHtml(args.name)}</td><td style="padding:7px 0"><b>Teléfono:</b> ${escapeHtml(args.phone)}</td></tr><tr><td style="padding:7px 0"><b>Correo:</b> ${escapeHtml(args.email)}</td><td style="padding:7px 0"><b>Ciudad:</b> ${escapeHtml(args.city)}</td></tr><tr><td style="padding:7px 0"><b>Estado:</b> ${escapeHtml(args.state)}</td></tr></table><h2 style="font-size:16px;text-transform:uppercase;margin-top:30px">Desglose aproximado</h2><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#edf0ee"><th style="padding:10px;text-align:left">#</th><th style="padding:10px;text-align:left">Concepto</th><th style="padding:10px;text-align:left">Medida</th><th style="padding:10px;text-align:right">Importe</th></tr></thead><tbody><tr><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">01</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">Remolque base</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2">${quote.preset.label}</td><td style="padding:9px 10px;border-bottom:1px solid #dde3e2;text-align:right;font-weight:700">${money(quote.preset.basePrice)}</td></tr>${doorRow}${rows}${specialRows}</tbody></table><div style="margin:24px 0 0 auto;width:280px;font-size:13px"><div style="display:flex;justify-content:space-between;padding:7px 0"><span>Subtotal</span><b>${money(combinedSubtotal)}</b></div><div style="display:flex;justify-content:space-between;padding:7px 0"><span>IVA</span><b>${money(combinedIva)}</b></div><div style="display:flex;justify-content:space-between;padding:13px 0;border-top:2px solid #d6a229;font-size:19px"><span>Total estimado</span><b>${money(combinedTotal)}</b></div></div>${args.notes ? `<h2 style="font-size:16px;text-transform:uppercase;margin-top:30px">Notas del cliente</h2><p style="font-size:13px;line-height:1.6">${escapeHtml(args.notes)}</p>` : ""}<div style="margin-top:30px;padding:18px;background:#f7f8f6;border-left:4px solid #d6a229;font-size:11px;line-height:1.55"><b>Estimación preliminar:</b> requiere revisión de ingeniería, distribución de peso, capacidad, instalaciones, acabados, impuestos y disponibilidad. El archivo SVG adjunto contiene el plano 2D enviado por el cliente.</div></div><div style="padding:18px 28px;background:#06293e;color:#fff;font-size:11px;display:flex;justify-content:space-between"><span>FG TOW · De FG INV</span><span>contacto@fgtow.com · fgtow.com</span></div></div></body></html>`;
 }
 
 export async function POST(request: Request) {
@@ -99,6 +120,7 @@ export async function POST(request: Request) {
     const consent = clean(payload.consent) === "yes";
     const rawItems = Array.isArray(payload.items) ? payload.items : [];
     const items = parseItems(rawItems);
+    const specialItems = parseSpecialItems(payload.specialItems);
 
     if (!name || !phone || !email || !city || !state || !consent || !isValidPresetId(presetId) || rawItems.length !== items.length || items.length === 0) {
       return Response.json({ error: "Completa los datos y agrega al menos un equipo válido." }, { status: 400 });
@@ -109,6 +131,11 @@ export async function POST(request: Request) {
     const door = parseDoor(payload.door, quote.preset.widthCm, quote.preset.lengthCm);
     const layoutErrors = validateLayout(quote.preset, items, door);
     if (layoutErrors.length) return Response.json({ error: `El plano requiere ajustes: ${layoutErrors[0]}` }, { status: 400 });
+
+    const specialTotal = specialItems.reduce((sum, entry) => sum + entry.price, 0);
+    const combinedSubtotal = quote.subtotal + specialTotal;
+    const combinedIva = includeIva ? Math.round(combinedSubtotal * 0.16) : 0;
+    const combinedTotal = combinedSubtotal + combinedIva;
 
     const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
     const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -132,7 +159,7 @@ export async function POST(request: Request) {
             to: [toEmail],
             reply_to: email,
             subject: `${folio} · ${MODEL_META[quote.preset.model].shortLabel} ${(quote.preset.widthCm / 100).toFixed(2)} × ${(quote.preset.lengthCm / 100).toFixed(2)} m · ${name}`,
-            html: makeEmailHtml({ folio, name, phone, email, city, state, notes, presetId, items, includeIva, door }),
+            html: makeEmailHtml({ folio, name, phone, email, city, state, notes, presetId, items, includeIva, door, specialItems }),
             attachments: [{ filename: `${folio}-plano.svg`, content: toBase64(planSvg) }],
             tags: [{ name: "source", value: "fgtow_configurator" }],
           }),
@@ -162,10 +189,10 @@ export async function POST(request: Request) {
         trailer_width_cm: quote.preset.widthCm,
         trailer_length_cm: quote.preset.lengthCm,
         axles: quote.preset.axles,
-        configuration: { version: 2, items, door },
-        subtotal: quote.subtotal,
-        iva: quote.iva,
-        total: quote.total,
+        configuration: { version: 2, items, door, specialItems },
+        subtotal: combinedSubtotal,
+        iva: combinedIva,
+        total: combinedTotal,
         include_iva: includeIva,
         email_to: toEmail,
         email_sent: emailSent,

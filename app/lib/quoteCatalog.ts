@@ -31,7 +31,7 @@ export const MODEL_META: Record<ModelId, ModelMeta> = {
     equipmentHeading: "Equipamiento",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "equipos principales",
-    includesNote: "estructura, chasis, laminado, tren rodante, instalación eléctrica y de gas base",
+    includesNote: "estructura, chasis, laminado, tren rodante, instalación eléctrica y de gas base, mesa de trabajo perimetral",
     defaultPresetId: "custom-food-200-300-210-1",
   },
   cargo: {
@@ -88,6 +88,51 @@ export const WALL_LABEL: Record<Wall, string> = {
 
 export function defaultDoor(trailerWidthCm: number): DoorConfig {
   return { wall: "back", offsetCm: Math.max(0, (trailerWidthCm - DOOR_DEFAULT_WIDTH_CM) / 2), widthCm: DOOR_DEFAULT_WIDTH_CM };
+}
+
+// The food truck's perimeter work counter — always included, not one of the priced/placed accessories.
+export const PERIMETER_TABLE_DEPTH_CM = 55;
+
+export type WindowConfig = { id: string; wall: Wall; offsetCm: number };
+
+type WindowWallType = "lateral" | "frontal";
+
+export const WINDOW_SPECS: Record<WindowWallType, { widthCm: number; heightCm: number }> = {
+  lateral: { widthCm: 220, heightCm: 75 },
+  frontal: { widthCm: 50, heightCm: 60 },
+};
+
+export function windowWallType(wall: Wall): WindowWallType {
+  return wall === "left" || wall === "right" ? "lateral" : "frontal";
+}
+
+export function windowWidthCm(wall: Wall) {
+  return WINDOW_SPECS[windowWallType(wall)].widthCm;
+}
+
+export function windowHeightCm(wall: Wall) {
+  return WINDOW_SPECS[windowWallType(wall)].heightCm;
+}
+
+// 2 windows per lateral wall, plus one on whichever front/back wall isn't holding the door.
+// Positions them at opposite ends of the wall so they only overlap when the trailer is too short
+// to fit two lateral windows at all (each is 220cm) — still kept inside the trailer's own bounds.
+export function defaultWindows(doorWall: Wall, trailerWidthCm: number, trailerLengthCm: number): WindowConfig[] {
+  const oppositeFrontBack: Wall = doorWall === "front" ? "back" : "front";
+  const frontalWall: Wall = doorWall === "left" || doorWall === "right" ? "front" : oppositeFrontBack;
+  const margin = 20;
+  const lateralWidth = WINDOW_SPECS.lateral.widthCm;
+  const firstOffset = Math.min(margin, Math.max(0, trailerLengthCm - lateralWidth));
+  const secondOffset = Math.max(firstOffset, trailerLengthCm - lateralWidth - margin);
+  const frontalSpan = wallLengthCm(frontalWall, trailerWidthCm, trailerLengthCm);
+  const frontalOffset = Math.max(0, (frontalSpan - WINDOW_SPECS.frontal.widthCm) / 2);
+  return [
+    { id: "win-left-1", wall: "left", offsetCm: firstOffset },
+    { id: "win-left-2", wall: "left", offsetCm: secondOffset },
+    { id: "win-right-1", wall: "right", offsetCm: firstOffset },
+    { id: "win-right-2", wall: "right", offsetCm: secondOffset },
+    { id: "win-frontal", wall: frontalWall, offsetCm: frontalOffset },
+  ];
 }
 
 export function wallLengthCm(wall: Wall, trailerWidthCm: number, trailerLengthCm: number) {
@@ -186,6 +231,8 @@ export type EquipmentDefinition = {
   color: string;
   description: string;
   mount?: "inside" | "outside";
+  // Mounted above or below the working counter, so it doesn't compete for floor/wall space with other equipment.
+  overlapExempt?: boolean;
 };
 
 export type PlacedEquipment = {
@@ -207,20 +254,19 @@ export const TRAILER_PRESETS: TrailerPreset[] = [
 
 export const EQUIPMENT: EquipmentDefinition[] = [
   { id: "plancha", model: "food", name: "Plancha", shortName: "Plancha", category: "coccion", widthCm: 90, depthCm: 50, minWidthCm: 60, maxWidthCm: 180, minDepthCm: 45, maxDepthCm: 65, surcharge: 1000, includedEligible: true, color: "#d6a229", description: "Plancha de acero con quemador; medida base 90 × 50 cm." },
-  { id: "bano-maria", model: "food", name: "Baño María", shortName: "Baño María", category: "coccion", widthCm: 90, depthCm: 50, minWidthCm: 60, maxWidthCm: 140, minDepthCm: 40, maxDepthCm: 65, surcharge: 1500, includedEligible: true, color: "#d88726", description: "Módulo para insertos de 1/4; configuración base de 6 insertos." },
-  { id: "freidora", model: "food", name: "Freidora", shortName: "Freidora", category: "coccion", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, surcharge: 1200, includedEligible: true, color: "#c45d35", description: "Freidora integrada con zona de trabajo y alimentación de gas." },
-  { id: "parrilla", model: "food", name: "Parrilla con quemador", shortName: "Parrilla", category: "coccion", widthCm: 50, depthCm: 50, minWidthCm: 40, maxWidthCm: 90, minDepthCm: 40, maxDepthCm: 70, surcharge: 1200, includedEligible: true, color: "#b94733", description: "Parrilla o quemador de alta/baja presión según el menú." },
+  { id: "bano-maria", model: "food", name: "Baño María", shortName: "Baño María", category: "coccion", widthCm: 50, depthCm: 60, minWidthCm: 40, maxWidthCm: 140, minDepthCm: 40, maxDepthCm: 65, surcharge: 1500, includedEligible: true, color: "#d88726", description: "Módulo para insertos de 1/4; configuración base de 6 insertos." },
+  { id: "freidora", model: "food", name: "Freidora", shortName: "Freidora", category: "coccion", widthCm: 40, depthCm: 30, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 25, maxDepthCm: 60, surcharge: 1200, includedEligible: true, color: "#c45d35", description: "Freidora integrada con zona de trabajo y alimentación de gas." },
+  { id: "parrilla", model: "food", name: "Parrilla con quemador", shortName: "Parrilla", category: "coccion", widthCm: 40, depthCm: 50, minWidthCm: 40, maxWidthCm: 90, minDepthCm: 40, maxDepthCm: 70, surcharge: 1200, includedEligible: true, color: "#b94733", description: "Parrilla o quemador de alta/baja presión según el menú." },
   { id: "asador", model: "food", name: "Asador", shortName: "Asador", category: "coccion", widthCm: 90, depthCm: 50, minWidthCm: 80, maxWidthCm: 490, minDepthCm: 45, maxDepthCm: 70, surcharge: 2500, includedEligible: true, color: "#8d3c31", description: "Asador seccionado; el crecimiento de longitud se revisa por proyecto." },
-  { id: "tarja", model: "food", name: "Tarja con tanque de agua", shortName: "Tarja", category: "agua", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 80, minDepthCm: 35, maxDepthCm: 60, surcharge: 750, includedEligible: true, color: "#2f7f99", description: "Tarja chica, mezcladora y preparación para tanque de agua." },
-  { id: "lavamanos", model: "food", name: "Lavamanos exterior", shortName: "Lavamanos", category: "agua", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, surcharge: 2200, includedEligible: false, color: "#4f94aa", description: "Módulo exterior encajonado de aproximadamente 40 × 40 × 70 cm; va montado por fuera del remolque.", mount: "outside" },
-  { id: "mesa", model: "food", name: "Mesa de trabajo", shortName: "Mesa", category: "trabajo", widthCm: 120, depthCm: 50, minWidthCm: 40, maxWidthCm: 240, minDepthCm: 40, maxDepthCm: 70, surcharge: 0, includedEligible: false, color: "#5f7481", description: "Cubierta de trabajo en acero inoxidable, ajustable a la distribución." },
-  { id: "barra-fria", model: "food", name: "Barra fría con insertos", shortName: "Barra fría", category: "trabajo", widthCm: 90, depthCm: 50, minWidthCm: 60, maxWidthCm: 160, minDepthCm: 40, maxDepthCm: 65, surcharge: 2500, includedEligible: false, color: "#3c8f84", description: "Barra para insertos con cajón para hielo." },
-  { id: "panera", model: "food", name: "Panera", shortName: "Panera", category: "trabajo", widthCm: 50, depthCm: 40, minWidthCm: 40, maxWidthCm: 120, minDepthCm: 35, maxDepthCm: 60, surcharge: 1200, includedEligible: false, color: "#788f57", description: "Panera con tapas y división interior." },
-  { id: "refrigerador", model: "food", name: "Espacio para refrigerador", shortName: "Refrigerador", category: "trabajo", widthCm: 70, depthCm: 70, minWidthCm: 50, maxWidthCm: 180, minDepthCm: 50, maxDepthCm: 90, surcharge: 0, includedEligible: false, color: "#546ab1", description: "Reserva de espacio; el equipo no se incluye en el precio." },
-  { id: "campana", model: "food", name: "Campana con extracción", shortName: "Campana", category: "especial", widthCm: 180, depthCm: 55, minWidthCm: 90, maxWidthCm: 450, minDepthCm: 45, maxDepthCm: 75, surcharge: 4000, includedEligible: false, color: "#714d82", description: "Campana con extractores; base calculada con dos abanicos." },
-  { id: "repisa", model: "food", name: "Repisa baja", shortName: "Repisa", category: "especial", widthCm: 120, depthCm: 35, minWidthCm: 50, maxWidthCm: 300, minDepthCm: 25, maxDepthCm: 50, surcharge: 1000, includedEligible: false, color: "#7d6a4c", description: "Repisa bajo mesa de trabajo." },
-  { id: "barra-abatible", model: "food", name: "Barra abatible", shortName: "Barra", category: "especial", widthCm: 218, depthCm: 25, minWidthCm: 100, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, surcharge: 2500, includedEligible: false, color: "#2f5d70", description: "Barra cromada o antiderrapante abatible para servicio; va montada por fuera del remolque.", mount: "outside" },
-  { id: "base-gas", model: "food", name: "Base para gas", shortName: "Base gas", category: "especial", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, surcharge: 800, includedEligible: false, color: "#6f6f6f", description: "Base exterior para cilindro; la ubicación final requiere validación." },
+  { id: "tarja", model: "food", name: "Tarja con tanque de agua", shortName: "Tarja", category: "agua", widthCm: 50, depthCm: 45, minWidthCm: 35, maxWidthCm: 80, minDepthCm: 35, maxDepthCm: 60, surcharge: 750, includedEligible: true, color: "#2f7f99", description: "Tarja chica, mezcladora y preparación para tanque de agua." },
+  { id: "lavamanos", model: "food", name: "Tarja exterior", shortName: "Tarja ext.", category: "agua", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, surcharge: 2200, includedEligible: false, color: "#4f94aa", description: "Módulo exterior encajonado de aproximadamente 40 × 40 × 70 cm; va montado por fuera del remolque.", mount: "outside" },
+  { id: "barra-fria", model: "food", name: "Barra fría con insertos", shortName: "Barra fría", category: "trabajo", widthCm: 90, depthCm: 40, minWidthCm: 60, maxWidthCm: 160, minDepthCm: 40, maxDepthCm: 65, surcharge: 2500, includedEligible: false, color: "#3c8f84", description: "Barra para insertos con cajón para hielo." },
+  { id: "panera", model: "food", name: "Panera", shortName: "Panera", category: "trabajo", widthCm: 50, depthCm: 60, minWidthCm: 40, maxWidthCm: 120, minDepthCm: 35, maxDepthCm: 60, surcharge: 1200, includedEligible: false, color: "#788f57", description: "Panera con tapas y división interior." },
+  { id: "refrigerador", model: "food", name: "Espacio para refrigerador", shortName: "Refrigerador", category: "trabajo", widthCm: 75, depthCm: 70, minWidthCm: 50, maxWidthCm: 180, minDepthCm: 50, maxDepthCm: 90, surcharge: 0, includedEligible: false, color: "#546ab1", description: "Reserva de espacio; el equipo no se incluye en el precio." },
+  { id: "campana", model: "food", name: "Campana con extractor", shortName: "Campana", category: "especial", widthCm: 100, depthCm: 60, minWidthCm: 90, maxWidthCm: 450, minDepthCm: 45, maxDepthCm: 75, surcharge: 4000, includedEligible: false, color: "#714d82", description: "Campana con extractores; va montada en alto y puede sobreponerse a otros equipos.", overlapExempt: true },
+  { id: "repisa", model: "food", name: "Repisa baja", shortName: "Repisa", category: "especial", widthCm: 120, depthCm: 35, minWidthCm: 50, maxWidthCm: 300, minDepthCm: 25, maxDepthCm: 50, surcharge: 1000, includedEligible: false, color: "#7d6a4c", description: "Repisa bajo mesa de trabajo; puede sobreponerse a otros equipos.", overlapExempt: true },
+  { id: "barra-abatible", model: "food", name: "Barra abatible", shortName: "Barra", category: "especial", widthCm: 220, depthCm: 25, minWidthCm: 100, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, surcharge: 2500, includedEligible: false, color: "#2f5d70", description: "Barra cromada o antiderrapante abatible para servicio; va montada por fuera del remolque.", mount: "outside" },
+  { id: "base-gas", model: "food", name: "Base para gas", shortName: "Base gas", category: "especial", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, surcharge: 800, includedEligible: false, color: "#6f6f6f", description: "Base exterior para cilindro; va montada por fuera y no afecta el interior.", mount: "outside" },
 
   { id: "rampa", model: "cargo", name: "Rampa de acceso", shortName: "Rampa", category: "acceso", widthCm: 150, depthCm: 45, minWidthCm: 100, maxWidthCm: 220, minDepthCm: 35, maxDepthCm: 60, surcharge: 1800, includedEligible: true, color: "#c45d35", description: "Rampa abatible para carga y descarga por la parte trasera." },
   { id: "compuerta", model: "cargo", name: "Compuerta trasera abatible", shortName: "Compuerta", category: "acceso", widthCm: 150, depthCm: 20, minWidthCm: 100, maxWidthCm: 220, minDepthCm: 15, maxDepthCm: 30, surcharge: 2200, includedEligible: false, color: "#8d3c31", description: "Compuerta trasera con bisagras reforzadas." },
@@ -440,7 +486,10 @@ export function validateLayout(preset: TrailerPreset, items: PlacedEquipment[], 
     for (let j = i + 1; j < items.length; j += 1) {
       const a = items[i];
       const b = items[j];
-      if (rectsOverlap(a, b)) errors.push(`${getEquipment(a.typeId)?.name ?? "Equipo"} se cruza con ${getEquipment(b.typeId)?.name ?? "otro equipo"}.`);
+      const defA = getEquipment(a.typeId);
+      const defB = getEquipment(b.typeId);
+      if (defA?.overlapExempt || defB?.overlapExempt) continue;
+      if (rectsOverlap(a, b)) errors.push(`${defA?.name ?? "Equipo"} se cruza con ${defB?.name ?? "otro equipo"}.`);
     }
   }
   return [...new Set(errors)];
