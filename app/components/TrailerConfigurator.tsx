@@ -363,6 +363,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
   const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>([]);
   const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "", price: "" });
+  const [specialOpen, setSpecialOpen] = useState(false);
   const [items, setItems] = useState<PlacedItem[]>(() => starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
@@ -885,25 +886,32 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         </div>
 
         {plano && (
-          <div className="special-item-box">
-            <strong>Aditamento especial</strong>
-            <small>Solo para vendedores: algo fuera del catálogo, con su propio nombre, medida y precio.</small>
-            <div className="special-item-form">
-              <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
-              <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
-              <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
-              <label>Precio<input type="number" min={0} value={specialForm.price} onChange={(event) => setSpecialForm((current) => ({ ...current, price: event.target.value }))} /></label>
-              <button type="button" className="qty-add" onClick={addSpecialItem}>Agregar especial</button>
-            </div>
-            {specialItems.length > 0 && (
-              <ul className="special-item-list">
-                {specialItems.map((entry) => (
-                  <li key={entry.id}>
-                    <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {money(entry.price)}</small></span>
-                    <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
-                  </li>
-                ))}
-              </ul>
+          <div className={`special-item-box ${specialOpen ? "is-open" : ""}`}>
+            <button type="button" className="special-item-toggle" onClick={() => setSpecialOpen((current) => !current)} aria-expanded={specialOpen}>
+              <span><strong>Aditamento especial</strong><small>Solo para vendedores: algo fuera del catálogo, con su propio nombre, medida y precio.</small></span>
+              {specialItems.length > 0 && <em className="special-item-count">{specialItems.length}</em>}
+              <i className="special-item-chevron" aria-hidden="true">⌄</i>
+            </button>
+            {specialOpen && (
+              <div className="special-item-content">
+                <div className="special-item-form">
+                  <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
+                  <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
+                  <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
+                  <label>Precio<input type="number" min={0} value={specialForm.price} onChange={(event) => setSpecialForm((current) => ({ ...current, price: event.target.value }))} /></label>
+                  <button type="button" className="qty-add" onClick={addSpecialItem}>Agregar especial</button>
+                </div>
+                {specialItems.length > 0 && (
+                  <ul className="special-item-list">
+                    {specialItems.map((entry) => (
+                      <li key={entry.id}>
+                        <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {money(entry.price)}</small></span>
+                        <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -939,13 +947,20 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
             <div className="config-custom-dims">
               {quickModels && (
                 <div className="quick-model-picker">
-                  <label className="config-select dim-field">Modelo predeterminado
+                  <label className="config-select dim-field quick-model-select-field">Modelo predeterminado
                     <select value={activeQuickModel?.id ?? ""} onChange={(event) => { const model = quickModels.find((m) => m.id === event.target.value); if (model) selectQuickModel(model); }}>
                       <option value="" disabled>Selecciona un modelo</option>
-                      {quickModels.map((model) => <option key={model.id} value={model.id}>{model.name} — {(model.lengthCm / 100).toFixed(2)} × {(model.widthCm / 100).toFixed(2)} × {(model.heightCm / 100).toFixed(2)} m</option>)}
+                      {quickModels.map((model) => <option key={model.id} value={model.id}>{model.name.replace(/\s*\d+$/, "")}</option>)}
                     </select>
                   </label>
-                  {activeQuickModel && <div className="quick-model-ideal"><small>Ideal para:</small><span>{activeQuickModel.idealFor.join(", ")}</span></div>}
+                  {activeQuickModel && (
+                    <div className="quick-model-ideal">
+                      <small>Ideal para</small>
+                      <div className="quick-model-ideal-tags">
+                        {activeQuickModel.idealFor.map((tag) => <span key={tag}>{tag}</span>)}
+                      </div>
+                    </div>
+                  )}
                   <div className="quick-model-custom">
                     <span>¿Necesitas otras medidas?</span>
                     <button type="button" className="qty-add" onClick={() => setShowManualSizer((current) => !current)}>{showManualSizer ? "Ocultar medidas personalizadas" : "Personalizar a mi gusto"}</button>
