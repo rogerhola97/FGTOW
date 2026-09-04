@@ -347,9 +347,9 @@ export type QuickModel = {
 // custom width/length/height/axles the manual sizer already uses, so the pricing formula never changes.
 export const FOOD_QUICK_MODELS: QuickModel[] = [
   { id: "compact-250", name: "FG Compact 250", lengthCm: 250, widthCm: 180, heightCm: 210, idealFor: ["Café", "Bebidas", "Helados", "Postres", "Snacks"] },
-  { id: "street-300", name: "FG Street 300", lengthCm: 300, widthCm: 200, heightCm: 210, idealFor: ["Hot Dogs", "Elotes y Snacks", "Crepas", "Tacos", "Sándwiches"] },
-  { id: "cocina-400", name: "FG Cocina 400", lengthCm: 400, widthCm: 200, heightCm: 210, idealFor: ["Hamburguesas", "Tacos", "Alitas", "Antojitos", "Cocina"] },
-  { id: "pro-450", name: "FG Full 450", lengthCm: 450, widthCm: 220, heightCm: 210, idealFor: ["Pizza", "Mariscos", "Pollo Frito", "Parrilla", "Cocina de alto volumen"] },
+  { id: "street-300", name: "FG Street 300", lengthCm: 300, widthCm: 200, heightCm: 210, idealFor: ["Hot Dogs", "Elotes y Snacks", "Crepas", "Tacos", "Lonches"] },
+  { id: "cocina-400", name: "FG Cocina 400", lengthCm: 400, widthCm: 200, heightCm: 210, idealFor: ["Hamburguesas", "Tacos", "Alitas", "Antojitos", "Comida corrida"] },
+  { id: "pro-450", name: "FG Full 450", lengthCm: 450, widthCm: 220, heightCm: 210, idealFor: ["Pizza", "Mariscos", "Pollo Frito o Asado", "Parrilla", "Cocina de alto volumen"] },
 ];
 
 // 3m height is only offered from 5m of length onward, so shorter trailers don't look top-heavy.
