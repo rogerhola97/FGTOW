@@ -366,6 +366,10 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const [specialOpen, setSpecialOpen] = useState(false);
   const [items, setItems] = useState<PlacedItem[]>(() => starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Lets the Ancho/Fondo fields be cleared to blank while retyping instead of snapping back to the
+  // last committed number on every keystroke; null means "show the committed value as usual".
+  const [alongDraft, setAlongDraft] = useState<string | null>(null);
+  const [depthDraft, setDepthDraft] = useState<string | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
@@ -397,6 +401,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   useEffect(() => {
     if (sendState === "sent") sentBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [sendState]);
+
+  useEffect(() => { setAlongDraft(null); setDepthDraft(null); }, [selectedId]);
 
   const quote = useMemo(() => calculateQuote(presetId, items, includeIva), [presetId, items, includeIva]);
   const specialItemsTotal = useMemo(() => specialItems.reduce((sum, entry) => sum + entry.price, 0), [specialItems]);
@@ -1100,8 +1106,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
           {selected && selectedDefinition && selectedAlongLimits && selectedDepthLimits ? (
             <div className="item-editor">
               <div><span>ELEMENTO SELECCIONADO</span><strong>{selectedDefinition.name}</strong><small>{selectedDefinition.description} {(selectedDefinition.mount ?? "inside") === "outside" ? "Va montado por fuera del remolque." : `Pared actual: ${WALL_LABEL[selected.wall]}.`}</small></div>
-              <label>Ancho<input type="number" min={selectedAlongLimits.min} max={Math.min(selectedAlongLimits.max, wallLengthCm(selected.wall, preset.widthCm, preset.lengthCm))} value={selected.rotation === 0 ? selected.widthCm : selected.depthCm} onChange={(event) => updateItemSize(selected.instanceId, "along", Number(event.target.value))} /><b>cm</b></label>
-              <label>Fondo<input type="number" min={selectedDepthLimits.min} max={selectedDepthLimits.max} value={selected.rotation === 0 ? selected.depthCm : selected.widthCm} onChange={(event) => updateItemSize(selected.instanceId, "depth", Number(event.target.value))} /><b>cm</b></label>
+              <label>Ancho<input type="number" min={selectedAlongLimits.min} max={Math.min(selectedAlongLimits.max, wallLengthCm(selected.wall, preset.widthCm, preset.lengthCm))} value={alongDraft ?? (selected.rotation === 0 ? selected.widthCm : selected.depthCm)} onChange={(event) => { const raw = event.target.value; setAlongDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateItemSize(selected.instanceId, "along", parsed); }} onBlur={() => setAlongDraft(null)} /><b>cm</b></label>
+              <label>Fondo<input type="number" min={selectedDepthLimits.min} max={selectedDepthLimits.max} value={depthDraft ?? (selected.rotation === 0 ? selected.depthCm : selected.widthCm)} onChange={(event) => { const raw = event.target.value; setDepthDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateItemSize(selected.instanceId, "depth", parsed); }} onBlur={() => setDepthDraft(null)} /><b>cm</b></label>
               <button type="button" onClick={() => cycleWall(selected.instanceId)}>Cambiar de pared ↻</button>
               <button type="button" className="danger-button" onClick={removeSelected}>Eliminar</button>
             </div>
