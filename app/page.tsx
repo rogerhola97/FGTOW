@@ -54,6 +54,9 @@ export default function Home() {
           <span className="eyebrow">Remolques fabricados en Monterrey</span>
           <h1>Tu proyecto,<br /><em>listo para avanzar.</em></h1>
           <p>Remolques para negocio, aventura y trabajo. Diseñamos cada solución alrededor de lo que necesitas mover.</p>
+          <div className="hero-actions">
+            <a className="button" href="#modelos">Ver modelos</a>
+          </div>
           <div className="trust-row">
             <span>Hecho en México</span><span>Proyecto a medida</span><span>Atención directa</span>
           </div>

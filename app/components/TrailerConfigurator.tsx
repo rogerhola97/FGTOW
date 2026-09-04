@@ -24,6 +24,8 @@ import {
   axleLabel,
   buildCustomPresetId,
   calculateQuote,
+  clampWindowHeightCm,
+  clampWindowWidthCm,
   defaultDoor,
   defaultWindows,
   doorClearanceRect,
@@ -42,8 +44,10 @@ import {
   validateLayout,
   wallForPoint,
   wallLengthCm,
-  windowHeightCm,
-  windowWidthCm,
+  WINDOW_HEIGHT_MAX_CM,
+  WINDOW_HEIGHT_MIN_CM,
+  WINDOW_WIDTH_MAX_CM,
+  WINDOW_WIDTH_MIN_CM,
 } from "../lib/quoteCatalog";
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
@@ -349,6 +353,9 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const lengthOptions = useMemo(() => getCustomLengthOptions(), []);
   const quickModels = modelId === "food" ? FOOD_QUICK_MODELS : null;
   const [showManualSizer, setShowManualSizer] = useState(false);
+  // Drives the dropdown's selected option straight off the current dimensions — no separate state
+  // to keep in sync, and it still shows "selected" if those dims were reached by hand.
+  const activeQuickModel = quickModels?.find((m) => m.widthCm === preset.widthCm && m.lengthCm === preset.lengthCm && m.heightCm === preset.heightCm) ?? null;
   const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
   const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
   const [door, setDoor] = useState<DoorConfig>(() => defaultDoor(preset.widthCm));
@@ -430,11 +437,11 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       return { wall: current.wall, offsetCm: rect.offset, widthCm: current.widthCm };
     });
     setWindows((current) => current.map((w) => {
-      const widthCm = windowWidthCm(w.wall);
       const span = wallLengthCm(w.wall, next.widthCm, next.lengthCm);
+      const widthCm = Math.min(w.widthCm, span);
       const clamped = clamp(w.offsetCm, 0, Math.max(0, span - widthCm));
       const blockers = door.wall === w.wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
-      return { ...w, offsetCm: findFreeOffsetOnWall(clamped, widthCm, span, blockers) };
+      return { ...w, widthCm, offsetCm: findFreeOffsetOnWall(clamped, widthCm, span, blockers) };
     }));
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
@@ -454,12 +461,11 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     updatePreset(buildCustomPresetId(modelId as "food" | "cargo", nextWidth, nextLength, nextHeight, nextAxles as 1 | 2 | 3));
   }
 
-  // Quick-start cards just jump straight to buildCustomPresetId/updatePreset — the exact same path
+  // The dropdown just jumps straight to buildCustomPresetId/updatePreset — the exact same path
   // updateCustomDim uses — so pricing and every downstream step behave as if the client had picked
   // those measurements by hand. Axles default to 1; every quick model qualifies for it.
   function selectQuickModel(model: QuickModel) {
     updatePreset(buildCustomPresetId(modelId as "food" | "cargo", model.widthCm, model.lengthCm, model.heightCm, 1));
-    setShowManualSizer(true);
   }
 
   function addEquipment(typeId: string, quantity: number) {
@@ -627,7 +633,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   }
 
   function windowBlockersOnWall(wall: Wall, excludeId?: string) {
-    return windows.filter((w) => w.wall === wall && w.id !== excludeId).map((w) => ({ offsetCm: w.offsetCm, widthCm: windowWidthCm(w.wall) }));
+    return windows.filter((w) => w.wall === wall && w.id !== excludeId).map((w) => ({ offsetCm: w.offsetCm, widthCm: w.widthCm }));
   }
 
   function moveDoorTo(pointX: number, pointY: number) {
@@ -682,8 +688,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
 
   // A wall holds at most one window: if the target wall is already occupied by another window,
   // that window is bumped to the dragged window's previous wall instead of letting both coexist.
-  function centeredWindowOffset(wall: Wall) {
-    const widthCm = windowWidthCm(wall);
+  function centeredWindowOffset(wall: Wall, widthCm: number) {
     const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
     const blockers = door.wall === wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
     return findFreeOffsetOnWall(Math.max(0, (span - widthCm) / 2), widthCm, span, blockers);
@@ -694,15 +699,18 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const dragged = current.find((w) => w.id === id);
       if (!dragged) return current;
       const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
-      const widthCm = windowWidthCm(wall);
       const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
+      const widthCm = Math.min(dragged.widthCm, span);
       const desired = (wall === "front" || wall === "back" ? pointX : pointY) - widthCm / 2;
       const doorBlocker = door.wall === wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
       const offsetCm = findFreeOffsetOnWall(desired, widthCm, span, doorBlocker);
       const occupant = wall !== dragged.wall ? current.find((w) => w.id !== id && w.wall === wall) : undefined;
       return current.map((w) => {
-        if (w.id === id) return { ...w, wall, offsetCm };
-        if (occupant && w.id === occupant.id) return { ...w, wall: dragged.wall, offsetCm: centeredWindowOffset(dragged.wall) };
+        if (w.id === id) return { ...w, wall, offsetCm, widthCm };
+        if (occupant && w.id === occupant.id) {
+          const occupantWidth = Math.min(occupant.widthCm, wallLengthCm(dragged.wall, preset.widthCm, preset.lengthCm));
+          return { ...w, wall: dragged.wall, offsetCm: centeredWindowOffset(dragged.wall, occupantWidth), widthCm: occupantWidth };
+        }
         return w;
       });
     });
@@ -713,14 +721,35 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const dragged = current.find((w) => w.id === id);
       if (!dragged) return current;
       const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(dragged.wall) + 1) % WALL_ORDER.length];
-      const centeredOffset = centeredWindowOffset(nextWall);
+      const draggedWidth = Math.min(dragged.widthCm, wallLengthCm(nextWall, preset.widthCm, preset.lengthCm));
+      const centeredOffset = centeredWindowOffset(nextWall, draggedWidth);
       const occupant = current.find((w) => w.id !== id && w.wall === nextWall);
       return current.map((w) => {
-        if (w.id === id) return { ...w, wall: nextWall, offsetCm: centeredOffset };
-        if (occupant && w.id === occupant.id) return { ...w, wall: dragged.wall, offsetCm: centeredWindowOffset(dragged.wall) };
+        if (w.id === id) return { ...w, wall: nextWall, offsetCm: centeredOffset, widthCm: draggedWidth };
+        if (occupant && w.id === occupant.id) {
+          const occupantWidth = Math.min(occupant.widthCm, wallLengthCm(dragged.wall, preset.widthCm, preset.lengthCm));
+          return { ...w, wall: dragged.wall, offsetCm: centeredWindowOffset(dragged.wall, occupantWidth), widthCm: occupantWidth };
+        }
         return w;
       });
     });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  // Resizing only redraws the window on the plan — it never touches pricing. Width is clamped to
+  // the wall it's currently on; height has no on-plan effect (top-down view) but is kept for the
+  // quote's written spec.
+  function updateWindowSize(id: string, part: "width" | "height", value: number) {
+    if (!Number.isFinite(value) || value <= 0) return;
+    setWindows((current) => current.map((w) => {
+      if (w.id !== id) return w;
+      if (part === "height") return { ...w, heightCm: clampWindowHeightCm(value) };
+      const span = wallLengthCm(w.wall, preset.widthCm, preset.lengthCm);
+      const widthCm = Math.min(clampWindowWidthCm(value), span);
+      const blockers = windowBlockersOnWall(w.wall, w.id).concat(door.wall === w.wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : []);
+      const offsetCm = findFreeOffsetOnWall(Math.min(w.offsetCm, Math.max(0, span - widthCm)), widthCm, span, blockers);
+      return { ...w, widthCm, offsetCm };
+    }));
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -902,32 +931,29 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
 
       <section className={`configurator-shell no-print ${plano ? "" : "configurator-shell--simple"}`}>
         <aside className="config-sidebar">
-          {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", quickModels && !showManualSizer ? "Elige un modelo o personaliza tus medidas" : "Ancho, largo, altura y ejes")}
+          {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", quickModels ? "Elige un modelo o personaliza tus medidas" : "Ancho, largo, altura y ejes")}
           <div className={`step-panel ${activeStep === 1 ? "is-open" : ""}`}>
           {sizingMode === "preset" ? (
             <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{presets.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
-          ) : quickModels && !showManualSizer ? (
-            <div className="quick-model-picker">
-              <div className="quick-model-grid">
-                {quickModels.map((model) => (
-                  <article className="quick-model-card" key={model.id}>
-                    <h4>{model.name}</h4>
-                    <p className="quick-model-dims">{(model.lengthCm / 100).toFixed(2)} × {(model.widthCm / 100).toFixed(2)} × {(model.heightCm / 100).toFixed(2)} m</p>
-                    <div className="quick-model-ideal"><small>Ideal para:</small><span>{model.idealFor.join(", ")}</span></div>
-                    <button type="button" className="button button-small quick-model-select" onClick={() => selectQuickModel(model)}>Seleccionar</button>
-                  </article>
-                ))}
-              </div>
-              <div className="quick-model-custom">
-                <span>¿Necesitas otras medidas?</span>
-                <button type="button" className="qty-add" onClick={() => setShowManualSizer(true)}>Personalizar a mi gusto</button>
-              </div>
-            </div>
           ) : (
             <div className="config-custom-dims">
               {quickModels && (
-                <button type="button" className="quick-model-backlink" onClick={() => setShowManualSizer(false)}>‹ Elegir un modelo rápido</button>
+                <div className="quick-model-picker">
+                  <label className="config-select dim-field">Modelo predeterminado
+                    <select value={activeQuickModel?.id ?? ""} onChange={(event) => { const model = quickModels.find((m) => m.id === event.target.value); if (model) selectQuickModel(model); }}>
+                      <option value="" disabled>Selecciona un modelo</option>
+                      {quickModels.map((model) => <option key={model.id} value={model.id}>{model.name} — {(model.lengthCm / 100).toFixed(2)} × {(model.widthCm / 100).toFixed(2)} × {(model.heightCm / 100).toFixed(2)} m</option>)}
+                    </select>
+                  </label>
+                  {activeQuickModel && <div className="quick-model-ideal"><small>Ideal para:</small><span>{activeQuickModel.idealFor.join(", ")}</span></div>}
+                  <div className="quick-model-custom">
+                    <span>¿Necesitas otras medidas?</span>
+                    <button type="button" className="qty-add" onClick={() => setShowManualSizer((current) => !current)}>{showManualSizer ? "Ocultar medidas personalizadas" : "Personalizar a mi gusto"}</button>
+                  </div>
+                </div>
               )}
+              {(!quickModels || showManualSizer) && (
+              <>
               <div className="dim-field">
                 <small>Ancho</small>
                 <div className="dim-options desktop-only">
@@ -953,17 +979,18 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
                 </select>
               </div>
               <div className="dim-price-hint">Precio base estimado <strong>{money(preset.basePrice)}</strong></div>
+              </>
+              )}
             </div>
           )}
           <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
           <button type="button" className="step-advance button" onClick={() => setActiveStep(2)}>Continuar al paso 2 →</button>
           </div>
-
-          {plano && equipmentPicker}
         </aside>
 
         {plano ? (
         <div className="plan-workspace">
+          <div className="addons-equipment-picker">{equipmentPicker}</div>
           <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
           <div className="plan-scroll">
             <div className="plan-row">
@@ -1017,7 +1044,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
                 </g>
 
                 {windows.map((win) => {
-                  const widthCm = windowWidthCm(win.wall);
+                  const widthCm = win.widthCm;
                   const winGeo = doorGeometry({ wall: win.wall, offsetCm: win.offsetCm, widthCm }, preset);
                   const winHitRect = placeOnWall(win.wall, win.offsetCm, widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
                   const active = windowSelectedId === win.id;
@@ -1075,7 +1102,9 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
               if (!win) return null;
               return (
                 <div className="item-editor door-editor">
-                  <div><span>VENTANA</span><strong>{WALL_LABEL[win.wall]}</strong><small>Incluida sin costo. {windowWidthCm(win.wall)} × {windowHeightCm(win.wall)} cm. No puede sobreponerse a la puerta ni a otra ventana.</small></div>
+                  <div><span>VENTANA</span><strong>{WALL_LABEL[win.wall]}</strong><small>Incluida sin costo, solo cambia el dibujo del plano. No puede sobreponerse a la puerta ni a otra ventana.</small></div>
+                  <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={win.widthCm} onChange={(event) => updateWindowSize(win.id, "width", Number(event.target.value))} /><b>cm</b></label>
+                  <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={win.heightCm} onChange={(event) => updateWindowSize(win.id, "height", Number(event.target.value))} /><b>cm</b></label>
                   <button type="button" onClick={() => cycleWindowWall(win.id)}>Cambiar de pared ↻</button>
                 </div>
               );
@@ -1128,24 +1157,35 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       </section>
 
       <section className="quote-submit no-print" id="enviar-cotizacion">
-        <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>{plano ? "Guardaremos el plano y enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión." : "Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión."}</p><ul>{plano && <li>Plano y lista de equipos</li>}{!plano && <li>Lista de aditamentos</li>}<li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul>{!plano && <p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta: <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p>}</div>
+        {plano ? (
+          <div className="quote-submit-copy"><h2>Datos del cliente</h2></div>
+        ) : (
+          <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión.</p><ul><li>Lista de aditamentos</li><li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul><p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta: <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p></div>
+        )}
+        <div className="quote-submit-formcol">
         <form className="quote-customer-form" onSubmit={submitQuote}>
           <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
           <div className="form-row form-row-3"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
-          <label>Notas para el equipo<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
+          <label>{plano ? "Comentarios" : "Notas para el equipo"}<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
           <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>
           <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>
           <button className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Enviando cotización…" : layoutErrors.length ? "Corrige el plano para enviar" : "Enviar a FG TOW →"}</button>
           <p className={`form-status ${sendState}`} role="status">{sendMessage || "La cifra mostrada es una aproximación y no sustituye la cotización final firmada."}</p>
         </form>
+        {plano && (
+          <div className="quote-submit-print no-print"><button type="button" className="button" onClick={() => window.print()}>Imprimir cotización</button><span>En la ventana de impresión selecciona “Guardar como PDF” si prefieres un archivo.</span></div>
+        )}
+        </div>
       </section>
 
-      {sendState === "sent" && (
+      {(plano || sendState === "sent") && (
       <>
+      {sendState === "sent" && (
       <div className="quote-sent-banner no-print" role="status" ref={sentBannerRef}>
         <strong>✓ Solicitud enviada</strong>
         <span>{sendMessage}</span>
       </div>
+      )}
 
       <section className="quote-document" aria-label="Formato imprimible de cotización">
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>

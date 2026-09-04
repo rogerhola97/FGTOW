@@ -92,7 +92,9 @@ export function defaultDoor(trailerWidthCm: number): DoorConfig {
 // The food truck's perimeter work counter — always included, not one of the priced/placed accessories.
 export const PERIMETER_TABLE_DEPTH_CM = 55;
 
-export type WindowConfig = { id: string; wall: Wall; offsetCm: number };
+// widthCm/heightCm are each window's own current size — windows are resizable per-instance
+// (drawing only, no cost impact); WINDOW_SPECS below is just the starting size for a new window.
+export type WindowConfig = { id: string; wall: Wall; offsetCm: number; widthCm: number; heightCm: number };
 
 type WindowWallType = "lateral" | "frontal";
 
@@ -100,6 +102,11 @@ export const WINDOW_SPECS: Record<WindowWallType, { widthCm: number; heightCm: n
   lateral: { widthCm: 220, heightCm: 75 },
   frontal: { widthCm: 50, heightCm: 60 },
 };
+
+export const WINDOW_WIDTH_MIN_CM = 40;
+export const WINDOW_WIDTH_MAX_CM = 300;
+export const WINDOW_HEIGHT_MIN_CM = 35;
+export const WINDOW_HEIGHT_MAX_CM = 120;
 
 export function windowWallType(wall: Wall): WindowWallType {
   return wall === "left" || wall === "right" ? "lateral" : "frontal";
@@ -113,19 +120,27 @@ export function windowHeightCm(wall: Wall) {
   return WINDOW_SPECS[windowWallType(wall)].heightCm;
 }
 
+export function clampWindowWidthCm(value: number) {
+  return Math.min(WINDOW_WIDTH_MAX_CM, Math.max(WINDOW_WIDTH_MIN_CM, value));
+}
+
+export function clampWindowHeightCm(value: number) {
+  return Math.min(WINDOW_HEIGHT_MAX_CM, Math.max(WINDOW_HEIGHT_MIN_CM, value));
+}
+
 // One window per wall, max: left, right, and whichever front/back wall isn't holding the door —
 // 3 total. Centered on each wall so it's always valid regardless of trailer size.
 export function defaultWindows(doorWall: Wall, trailerWidthCm: number, trailerLengthCm: number): WindowConfig[] {
   const oppositeFrontBack: Wall = doorWall === "front" ? "back" : "front";
   const frontalWall: Wall = doorWall === "left" || doorWall === "right" ? "front" : oppositeFrontBack;
-  const lateralWidth = WINDOW_SPECS.lateral.widthCm;
+  const lateralWidth = windowWidthCm("left");
   const lateralOffset = Math.max(0, (trailerLengthCm - lateralWidth) / 2);
   const frontalSpan = wallLengthCm(frontalWall, trailerWidthCm, trailerLengthCm);
-  const frontalOffset = Math.max(0, (frontalSpan - WINDOW_SPECS.frontal.widthCm) / 2);
+  const frontalOffset = Math.max(0, (frontalSpan - windowWidthCm(frontalWall)) / 2);
   return [
-    { id: "win-left", wall: "left", offsetCm: lateralOffset },
-    { id: "win-right", wall: "right", offsetCm: lateralOffset },
-    { id: "win-frontal", wall: frontalWall, offsetCm: frontalOffset },
+    { id: "win-left", wall: "left", offsetCm: lateralOffset, widthCm: windowWidthCm("left"), heightCm: windowHeightCm("left") },
+    { id: "win-right", wall: "right", offsetCm: lateralOffset, widthCm: windowWidthCm("right"), heightCm: windowHeightCm("right") },
+    { id: "win-frontal", wall: frontalWall, offsetCm: frontalOffset, widthCm: windowWidthCm(frontalWall), heightCm: windowHeightCm(frontalWall) },
   ];
 }
 
@@ -334,7 +349,7 @@ export const FOOD_QUICK_MODELS: QuickModel[] = [
   { id: "compact-250", name: "FG Compact 250", lengthCm: 250, widthCm: 180, heightCm: 210, idealFor: ["Café", "Bebidas", "Helados", "Postres", "Snacks"] },
   { id: "street-300", name: "FG Street 300", lengthCm: 300, widthCm: 200, heightCm: 210, idealFor: ["Hot Dogs", "Elotes y Snacks", "Crepas", "Tacos", "Sándwiches"] },
   { id: "cocina-400", name: "FG Cocina 400", lengthCm: 400, widthCm: 200, heightCm: 210, idealFor: ["Hamburguesas", "Tacos", "Alitas", "Antojitos", "Cocina"] },
-  { id: "pro-450", name: "FG Pro 450", lengthCm: 450, widthCm: 220, heightCm: 210, idealFor: ["Pizza", "Mariscos", "Pollo Frito", "Parrilla", "Cocina de alto volumen"] },
+  { id: "pro-450", name: "FG Full 450", lengthCm: 450, widthCm: 220, heightCm: 210, idealFor: ["Pizza", "Mariscos", "Pollo Frito", "Parrilla", "Cocina de alto volumen"] },
 ];
 
 // 3m height is only offered from 5m of length onward, so shorter trailers don't look top-heavy.
