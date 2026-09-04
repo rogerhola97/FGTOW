@@ -154,6 +154,15 @@ function avoidAxleBand(wall: Wall, offset: number, widthCm: number, preset: Trai
   return clamp(candidate, 0, Math.max(0, preset.lengthCm - widthCm));
 }
 
+const CENTER_SNAP_THRESHOLD_CM = 15;
+
+// Magnetic snap: dropping the door or a window within a small distance of dead-center on its wall
+// aligns it exactly to center, instead of leaving it at whatever offset the pointer landed on.
+function snapOffsetToCenter(offsetCm: number, widthCm: number, span: number) {
+  const center = Math.max(0, (span - widthCm) / 2);
+  return Math.abs(offsetCm - center) <= CENTER_SNAP_THRESHOLD_CM ? center : offsetCm;
+}
+
 type SwapTarget = { instanceId: string; wall: Wall; offsetCm: number };
 type CollisionParams = {
   instanceId: string;
@@ -646,9 +655,9 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   function moveDoorTo(pointX: number, pointY: number) {
     setDoor((current) => {
       const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
-      const desired = (wall === "front" || wall === "back" ? pointX : pointY) - current.widthCm / 2;
-      const afterAxles = avoidAxleBand(wall, desired, current.widthCm, preset);
       const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
+      const desired = snapOffsetToCenter((wall === "front" || wall === "back" ? pointX : pointY) - current.widthCm / 2, current.widthCm, span);
+      const afterAxles = avoidAxleBand(wall, desired, current.widthCm, preset);
       const afterWindows = findFreeOffsetOnWall(afterAxles, current.widthCm, span, windowBlockersOnWall(wall));
       const rect = placeOnWall(wall, afterWindows, current.widthCm, 1, preset.widthCm, preset.lengthCm);
       return { wall, offsetCm: rect.offset, widthCm: current.widthCm };
@@ -708,7 +717,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
       const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
       const widthCm = Math.min(dragged.widthCm, span);
-      const desired = (wall === "front" || wall === "back" ? pointX : pointY) - widthCm / 2;
+      const desired = snapOffsetToCenter((wall === "front" || wall === "back" ? pointX : pointY) - widthCm / 2, widthCm, span);
       const doorBlocker = door.wall === wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
       const offsetCm = findFreeOffsetOnWall(desired, widthCm, span, doorBlocker);
       const occupant = wall !== dragged.wall ? current.find((w) => w.id !== id && w.wall === wall) : undefined;
@@ -1078,6 +1087,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
                 })}
 
                 <line x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
+                <line x1="8" x2={preset.widthCm - 8} y1={preset.lengthCm / 2} y2={preset.lengthCm / 2} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
 
                 <g className="ruler ruler-bottom">
                   <line x1={0} y1={preset.lengthCm + 6} x2={preset.widthCm} y2={preset.lengthCm + 6} className="ruler-line" />
