@@ -6,9 +6,9 @@ const products = [
   {
     code: "01",
     id: "food",
-    name: "Food Truck",
+    name: "Food Trailer",
     use: "Cocina móvil para café, snacks y servicio completo",
-    description: "Distribuye tu cocina, ventana de servicio e instalaciones sobre un plano 2D real antes de fabricar. Para café, snacks, tacos y operaciones de servicio completo.",
+    description: "Distribuye tu cocina, ventana de servicio e instalaciones antes de fabricar. Para café, snacks, tacos y operaciones de servicio completo.",
     className: "food",
   },
   {
@@ -107,7 +107,7 @@ export default function Home() {
       </section>
 
       <section className="quote-section" id="cotizar">
-        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food truck, cargo o RZR sport— y arma tu distribución en un plano 2D interactivo.</p><a className="button quote-config-button" href="#modelos">Elegir modelo y configurar →</a><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
+        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food trailer, cargo o RZR sport— y configura tus accesorios para armar tu cotización al instante.</p><a className="button quote-config-button" href="#modelos">Elegir modelo y configurar →</a><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
         <LeadForm />
       </section>
 

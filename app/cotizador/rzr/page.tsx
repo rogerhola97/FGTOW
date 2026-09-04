@@ -4,7 +4,7 @@ import { TrailerConfigurator } from "../../components/TrailerConfigurator";
 
 export const metadata = {
   title: "Configurador FG RZR Sport",
-  description: "Configura medidas, ejes y aditamentos de tu FG RZR Sport en un plano 2D y recibe una cotización aproximada.",
+  description: "Configura medidas, ejes y aditamentos de tu FG RZR Sport y recibe una cotización aproximada.",
 };
 
 export default function CotizadorRzrPage() {

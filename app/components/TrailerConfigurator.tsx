@@ -10,10 +10,12 @@ import {
   DOOR_MAX_WIDTH_CM,
   DOOR_MIN_WIDTH_CM,
   DoorConfig,
+  FOOD_QUICK_MODELS,
   MODEL_META,
   ModelId,
   PERIMETER_TABLE_DEPTH_CM,
   PlacedEquipment,
+  QuickModel,
   TrailerPreset,
   WALL_LABEL,
   Wall,
@@ -345,6 +347,8 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const [presetId, setPresetId] = useState(meta.defaultPresetId);
   const preset = getPreset(presetId);
   const lengthOptions = useMemo(() => getCustomLengthOptions(), []);
+  const quickModels = modelId === "food" ? FOOD_QUICK_MODELS : null;
+  const [showManualSizer, setShowManualSizer] = useState(false);
   const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
   const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
   const [door, setDoor] = useState<DoorConfig>(() => defaultDoor(preset.widthCm));
@@ -448,6 +452,14 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
     const nextHeight = part === "height" ? value : preset.heightCm;
     const nextAxles = part === "axles" ? value : preset.axles;
     updatePreset(buildCustomPresetId(modelId as "food" | "cargo", nextWidth, nextLength, nextHeight, nextAxles as 1 | 2 | 3));
+  }
+
+  // Quick-start cards just jump straight to buildCustomPresetId/updatePreset — the exact same path
+  // updateCustomDim uses — so pricing and every downstream step behave as if the client had picked
+  // those measurements by hand. Axles default to 1; every quick model qualifies for it.
+  function selectQuickModel(model: QuickModel) {
+    updatePreset(buildCustomPresetId(modelId as "food" | "cargo", model.widthCm, model.lengthCm, model.heightCm, 1));
+    setShowManualSizer(true);
   }
 
   function addEquipment(typeId: string, quantity: number) {
@@ -890,12 +902,32 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
 
       <section className={`configurator-shell no-print ${plano ? "" : "configurator-shell--simple"}`}>
         <aside className="config-sidebar">
-          {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", "Ancho, largo, altura y ejes")}
+          {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", quickModels && !showManualSizer ? "Elige un modelo o personaliza tus medidas" : "Ancho, largo, altura y ejes")}
           <div className={`step-panel ${activeStep === 1 ? "is-open" : ""}`}>
           {sizingMode === "preset" ? (
             <label className="config-select">Modelo base<select value={presetId} onChange={(event) => updatePreset(event.target.value)}>{presets.map((option) => <option key={option.id} value={option.id}>{option.label} · {money(option.basePrice)}</option>)}</select></label>
+          ) : quickModels && !showManualSizer ? (
+            <div className="quick-model-picker">
+              <div className="quick-model-grid">
+                {quickModels.map((model) => (
+                  <article className="quick-model-card" key={model.id}>
+                    <h4>{model.name}</h4>
+                    <p className="quick-model-dims">{(model.lengthCm / 100).toFixed(2)} × {(model.widthCm / 100).toFixed(2)} × {(model.heightCm / 100).toFixed(2)} m</p>
+                    <div className="quick-model-ideal"><small>Ideal para:</small><span>{model.idealFor.join(", ")}</span></div>
+                    <button type="button" className="button button-small quick-model-select" onClick={() => selectQuickModel(model)}>Seleccionar</button>
+                  </article>
+                ))}
+              </div>
+              <div className="quick-model-custom">
+                <span>¿Necesitas otras medidas?</span>
+                <button type="button" className="qty-add" onClick={() => setShowManualSizer(true)}>Personalizar a mi gusto</button>
+              </div>
+            </div>
           ) : (
             <div className="config-custom-dims">
+              {quickModels && (
+                <button type="button" className="quick-model-backlink" onClick={() => setShowManualSizer(false)}>‹ Elegir un modelo rápido</button>
+              )}
               <div className="dim-field">
                 <small>Ancho</small>
                 <div className="dim-options desktop-only">
@@ -1096,7 +1128,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       </section>
 
       <section className="quote-submit no-print" id="enviar-cotizacion">
-        <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>{plano ? "Guardaremos el plano y enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión." : "Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión."}</p><ul>{plano && <li>Plano 2D y lista de equipos</li>}{!plano && <li>Lista de aditamentos</li>}<li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul>{!plano && <p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta: <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p>}</div>
+        <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>{plano ? "Guardaremos el plano y enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión." : "Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión."}</p><ul>{plano && <li>Plano y lista de equipos</li>}{!plano && <li>Lista de aditamentos</li>}<li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul>{!plano && <p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta: <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p>}</div>
         <form className="quote-customer-form" onSubmit={submitQuote}>
           <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
           <div className="form-row form-row-3"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
@@ -1119,7 +1151,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
         <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(combinedTotal)}</strong></div></div>
         <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div><div><small>ESTADO</small><strong>{customer.state || "Por completar"}</strong></div></div>
-        {plano && <div className="document-plan-wrap"><div><small>PLANO 2D / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
+        {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
         <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{specialItems.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial)</td><td>{entry.widthCm} × {entry.depthCm} cm</td><td>{money(entry.price)}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(combinedSubtotal)}</strong></div><div><span>IVA</span><strong>{money(combinedIva)}</strong></div><div><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>

@@ -3,8 +3,8 @@ import Link from "next/link";
 import { TrailerConfigurator } from "../../components/TrailerConfigurator";
 
 export const metadata = {
-  title: "Configurador FG Food Truck",
-  description: "Diseña la distribución de tu FG Food Truck en un plano 2D y recibe una cotización aproximada.",
+  title: "Configurador FG Food Trailer",
+  description: "Configura tu FG Food Trailer con los equipos de cocina que necesitas y recibe una cotización aproximada.",
 };
 
 export default function CotizadorFoodPage() {

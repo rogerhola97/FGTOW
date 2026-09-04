@@ -20,14 +20,13 @@ export type ModelMeta = {
 export const MODEL_META: Record<ModelId, ModelMeta> = {
   food: {
     id: "food",
-    label: "FG Food Truck",
-    shortLabel: "Food Truck",
+    label: "FG Food Trailer",
+    shortLabel: "Food Trailer",
     tagline: "Cocina móvil",
-    heroTitleLine: "Diseña tu food truck",
-    heroEm: "sobre un plano real.",
-    heroEmAddons: "con los equipos que necesitas.",
-    intro: "Elige una medida, agrega equipos de cocina y arrástralos dentro del remolque. La plataforma evita que salgan de los límites y detecta cruces antes de enviar el proyecto.",
-    introAddons: "Elige la medida y los equipos de cocina de tu food truck para armar tu cotización al instante.",
+    heroTitleLine: "Elige tu",
+    heroEm: "Food Trailer.",
+    intro: "Selecciona el modelo que mejor se adapte a tu negocio.",
+    introAddons: "Selecciona el modelo que mejor se adapte a tu negocio.",
     equipmentHeading: "Equipamiento",
     equipmentSub: "Toca para añadir al plano",
     equipmentLabel: "equipos principales",
@@ -319,6 +318,24 @@ export const CUSTOM_HEIGHT_STEP_CM = 10;
 export function getAllowedWidths(lengthCm: number): number[] {
   return lengthCm <= 250 ? [...CUSTOM_WIDTH_OPTIONS_CM] : [200, 220];
 }
+
+export type QuickModel = {
+  id: string;
+  name: string;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+  idealFor: string[];
+};
+
+// Quick-start sizes for Paso 1 of the food truck configurator — just a shortcut into the same
+// custom width/length/height/axles the manual sizer already uses, so the pricing formula never changes.
+export const FOOD_QUICK_MODELS: QuickModel[] = [
+  { id: "compact-250", name: "FG Compact 250", lengthCm: 250, widthCm: 180, heightCm: 210, idealFor: ["Café", "Bebidas", "Helados", "Postres", "Snacks"] },
+  { id: "street-300", name: "FG Street 300", lengthCm: 300, widthCm: 200, heightCm: 210, idealFor: ["Hot Dogs", "Elotes y Snacks", "Crepas", "Tacos", "Sándwiches"] },
+  { id: "cocina-400", name: "FG Cocina 400", lengthCm: 400, widthCm: 200, heightCm: 210, idealFor: ["Hamburguesas", "Tacos", "Alitas", "Antojitos", "Cocina"] },
+  { id: "pro-450", name: "FG Pro 450", lengthCm: 450, widthCm: 220, heightCm: 210, idealFor: ["Pizza", "Mariscos", "Pollo Frito", "Parrilla", "Cocina de alto volumen"] },
+];
 
 // 3m height is only offered from 5m of length onward, so shorter trailers don't look top-heavy.
 export function getMaxHeightCm(lengthCm: number): number {

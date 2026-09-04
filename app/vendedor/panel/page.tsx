@@ -6,7 +6,7 @@ import { requireVendor } from "../../lib/vendorAuth";
 export const metadata = { title: "Panel de vendedor", robots: { index: false, follow: false } };
 
 const configurators = [
-  { id: "food", label: "FG Food Truck", description: "Plano completo de distribución de cocina." },
+  { id: "food", label: "FG Food Trailer", description: "Plano completo de distribución de cocina." },
   { id: "cargo", label: "FG Cargo", description: "Plano completo de aditamentos de carga." },
   { id: "rzr", label: "FG RZR Sport", description: "Plano completo de aditamentos para UTV." },
 ];
@@ -23,7 +23,7 @@ export default async function VendedorPanelPage() {
     <section className="vendor-panel-shell">
       <span className="eyebrow">Hola, {vendor.name}</span>
       <h1>Configuradores<br /><em>completos.</em></h1>
-      <p>Los tres modelos con el plano interactivo tal como se muestran hoy en el sitio.</p>
+      <p>Los tres modelos con el plano interactivo.</p>
       <div className="vendor-panel-grid">
         {configurators.map((item) => (
           <Link key={item.id} href={`/vendedor/cotizador/${item.id}`} className="vendor-panel-card">

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { TrailerConfigurator } from "../../../components/TrailerConfigurator";
 import { requireVendor } from "../../../lib/vendorAuth";
 
-export const metadata = { title: "Vendedor · FG Food Truck", robots: { index: false, follow: false } };
+export const metadata = { title: "Vendedor · FG Food Trailer", robots: { index: false, follow: false } };
 
 export default async function VendedorCotizadorFoodPage() {
   await requireVendor("/vendedor/cotizador/food");

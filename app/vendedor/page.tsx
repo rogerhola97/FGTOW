@@ -22,7 +22,7 @@ export default async function VendedorAccesoPage({ searchParams }: { searchParam
       <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/#modelos">Modelos</Link></nav>
     </header>
     <section className="vendor-gate-shell">
-      <div className="vendor-gate-copy"><span className="eyebrow">Acceso interno</span><h1>Iniciar sesión<br /><em>como vendedor.</em></h1><p>Esta sección es para el equipo comercial de FG TOW: aquí se configuran los tres modelos con el plano completo, tal como funciona hoy la herramienta.</p></div>
+      <div className="vendor-gate-copy"><span className="eyebrow">Acceso interno</span><h1>Iniciar sesión<br /><em>como vendedor.</em></h1><p>Esta sección es para el equipo comercial de FG TOW: aquí se configuran los tres modelos con el plano completo.</p></div>
       <VendorLoginForm returnTo={returnTo} />
     </section>
   </main>;

@@ -4,7 +4,7 @@ import { TrailerConfigurator } from "../../components/TrailerConfigurator";
 
 export const metadata = {
   title: "Configurador FG Cargo",
-  description: "Configura medidas, ejes y aditamentos de tu FG Cargo en un plano 2D y recibe una cotización aproximada.",
+  description: "Configura medidas, ejes y aditamentos de tu FG Cargo y recibe una cotización aproximada.",
 };
 
 export default function CotizadorCargoPage() {
