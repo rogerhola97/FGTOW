@@ -19,7 +19,7 @@ test("contains the complete FG TOW commercial experience", async () => {
   ]);
   assert.match(home, /Tu proyecto/);
   assert.match(home, /name: "RZR Sport"/);
-  assert.match(home, /name: "Food Truck"/);
+  assert.match(home, /name: "Food Trailer"/);
   assert.match(home, /name: "Cargo"/);
   assert.match(home, /id="modelos"/);
   assert.doesNotMatch(home, /\/catalogo/);
