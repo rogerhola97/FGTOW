@@ -150,8 +150,9 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .quick-model-select-field select { border:2px solid var(--blue); background:#f1f7f9; color:var(--blue); font-weight:800; }
 .quick-model-select-field select:focus { border-color:var(--deep); box-shadow:0 0 0 3px rgba(7,82,116,.14); }
 .quick-model-ideal small { display:block; color:var(--blue); font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.1em; }
-.quick-model-ideal-tags { display:flex; flex-wrap:wrap; gap:7px; margin-top:8px; }
-.quick-model-ideal-tags span { padding:6px 12px; border-radius:20px; background:var(--deep); color:var(--gold); font-size:10px; font-weight:800; letter-spacing:.02em; }
+.quick-model-ideal-tags { display:flex; flex-wrap:wrap; gap:6px 4px; margin-top:8px; }
+.quick-model-ideal-tags span { color:var(--deep); font-size:13px; font-weight:800; }
+.quick-model-ideal-tags span:not(:last-child):after { content:"·"; margin-left:9px; color:var(--gold); font-weight:900; }
 .quick-model-custom { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px; border:1px solid var(--line); }
 .quick-model-custom span { color:var(--muted); font-size:11px; font-weight:700; }
 .dim-field.config-select { margin:0; }
@@ -301,7 +302,7 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .quote-submit-copy li { padding:10px 0; border-bottom:1px solid var(--line); font-size:12px; }
 .quote-submit-copy li:before { content:"✓"; margin-right:9px; color:var(--gold); font-weight:900; }
 .quote-submit-address { margin:22px 0 0; color:var(--muted); font-size:11px; }
-.quote-submit-address a { color:var(--blue); font-weight:700; text-decoration:none; }
+.quote-submit-address a { display:inline-block; margin-top:8px; color:var(--blue); font-size:18px; font-weight:800; letter-spacing:-.01em; text-decoration:none; }
 .quote-submit-address a:hover { text-decoration:underline; }
 .quote-submit-formcol { display:flex; flex-direction:column; gap:18px; }
 .quote-submit-print { display:flex; flex-wrap:wrap; align-items:center; gap:16px; }

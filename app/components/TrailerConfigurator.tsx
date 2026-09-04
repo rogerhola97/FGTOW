@@ -998,7 +998,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
               )}
             </div>
           )}
-          <div className="preset-facts"><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
+          <div className="preset-facts"><div><small>Ancho</small><strong>{(preset.widthCm / 100).toFixed(2)} m</strong></div><div><small>Largo</small><strong>{(preset.lengthCm / 100).toFixed(2)} m</strong></div><div><small>Altura</small><strong>{(preset.heightCm / 100).toFixed(2)} m</strong></div><div><small>Tren rodante</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>Peso est.</small><strong>{preset.estimatedWeightKg} kg</strong></div><div><small>Carga ref.</small><strong>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</strong></div></div>
           <button type="button" className="step-advance button" onClick={() => setActiveStep(2)}>Continuar al paso 2 →</button>
           </div>
         </aside>
@@ -1175,7 +1175,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
         {plano ? (
           <div className="quote-submit-copy"><h2>Datos del cliente</h2></div>
         ) : (
-          <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu distribución.</em></h2><p>Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión.</p><ul><li>Lista de aditamentos</li><li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul><p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta: <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p></div>
+          <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu configuración.</em></h2><p>Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión.</p><ul><li>Lista de aditamentos</li><li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul><p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta:<br /><a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p></div>
         )}
         <div className="quote-submit-formcol">
         <form className="quote-customer-form" onSubmit={submitQuote}>
