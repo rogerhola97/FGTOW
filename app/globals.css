@@ -319,12 +319,13 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .document-head strong,.document-head span { display:block; }
 .document-head strong { color:var(--blue); font-size:13px; letter-spacing:.12em; }
 .document-head span { margin-top:5px; color:var(--muted); font-size:10px; }
-.document-banner { display:grid; grid-template-columns:1.5fr 1fr 1fr; gap:1px; margin:27px 0; background:#214c62; }
-.document-banner>div { padding:18px; background:var(--deep); color:#fff; }
+.document-summary { display:grid; grid-template-columns:1fr 1fr; align-items:stretch; gap:22px; margin:27px 0; padding-bottom:22px; border-bottom:1px solid var(--line); }
+.document-banner { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px; background:#214c62; }
+.document-banner>div { padding:14px; background:var(--deep); color:#fff; }
 .document-banner small,.document-banner strong { display:block; }
 .document-banner small { color:var(--gold); font-size:8px; letter-spacing:.12em; }
-.document-banner strong { margin-top:6px; font-size:15px; }
-.document-customer { display:grid; grid-template-columns:1.1fr .9fr .9fr .9fr; gap:20px; padding:0 0 22px; border-bottom:1px solid var(--line); }
+.document-banner strong { margin-top:6px; font-size:14px; }
+.document-customer { display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; align-content:start; }
 .document-customer small,.document-customer strong { display:block; }
 .document-customer small { color:var(--muted); font-size:8px; letter-spacing:.1em; }
 .document-customer strong { margin-top:5px; font-size:11px; }
@@ -419,6 +420,7 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
   .quote-sent-banner { margin:40px 16px 0; padding:18px 20px; }
   .document-head,.document-footer { flex-direction:column; }
   .document-head>div { text-align:left; }
+  .document-summary { grid-template-columns:1fr; gap:16px; }
   .document-banner { grid-template-columns:1fr; }
   .document-customer { grid-template-columns:1fr; gap:10px; }
   .document-plan-wrap { grid-template-columns:1fr; min-height:0; }
@@ -476,10 +478,10 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
   .document-head img { width:170px; height:auto; }
   .document-head strong { font-size:11px; }
   .document-head span { margin-top:3px; font-size:9px; }
-  .document-banner { margin:16px 0; }
-  .document-banner>div { padding:10px 14px; }
-  .document-banner strong { margin-top:4px; font-size:13px; }
-  .document-customer { padding:0 0 14px; }
+  .document-summary { margin:14px 0; gap:14px; padding-bottom:14px; }
+  .document-banner>div { padding:8px 10px; }
+  .document-banner strong { margin-top:3px; font-size:12px; }
+  .document-customer { gap:8px 14px; }
   .document-plan-wrap { min-height:0; margin:16px 0; padding:14px; gap:20px; }
   .document-plan { max-height:220px; }
   .document-grid { margin:16px 0; gap:30px; }
