@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { DeleteQuoteButton } from "../../components/DeleteQuoteButton";
 import { VendorLogoutButton } from "../../components/VendorLogoutButton";
 import { MODEL_META } from "../../lib/quoteCatalog";
 import { requireVendor } from "../../lib/vendorAuth";
@@ -48,7 +49,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
       {quotes && quotes.length > 0 && (
         <div className="vendor-quotes-table-wrap">
         <table className="vendor-quotes-table">
-          <thead><tr><th>Cliente</th><th>Contacto</th><th>Modelo</th><th>Total</th><th>Estado</th><th>Fecha</th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Contacto</th><th>Modelo</th><th>Total</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
           <tbody>
             {quotes.map((quote) => (
               <tr key={quote.id}>
@@ -58,6 +59,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
                 <td>{moneyFormatter.format(Number(quote.total))}</td>
                 <td><span className={`vendor-quote-status status-${quote.status}`}>{STATUS_LABEL[quote.status] ?? quote.status}</span></td>
                 <td>{dateFormatter.format(new Date(quote.created_at))}</td>
+                <td><DeleteQuoteButton id={quote.id} quoteNumber={quote.quote_number} /></td>
               </tr>
             ))}
           </tbody>

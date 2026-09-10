@@ -77,6 +77,31 @@ acciones:
 Ninguna de las dos acciones manda correo — el correo a `contacto@fgtow.com` solo se dispara
 cuando el cliente envía su cotización desde `/cotizador/*`.
 
+Cada fila de `/vendedor/clientes` (y la propia página de detalle) tiene un botón **Eliminar** que
+pide confirmación antes de borrar la cotización de Supabase de forma permanente.
+
+## Captcha del cotizador público (Cloudflare Turnstile)
+
+`/cotizador/food`, `/cotizador/rzr` y `/cotizador/cargo` pueden mostrar un captcha de
+[Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile) justo antes del botón
+de enviar, para frenar envíos automatizados (bots) al formulario público. El cotizador interno del
+vendedor (`/vendedor/cotizador/*`) nunca lo muestra ni lo necesita: una sesión de vendedor ya
+autenticada se salta la verificación.
+
+1. En el dashboard de Cloudflare, crea un **Widget** de Turnstile para el dominio `fgtow.com`
+   (modo *Managed* es suficiente).
+2. Copia el **Site Key** y el **Secret Key** que te da.
+3. En el Worker del sitio, agrega estas variables:
+
+```env
+TURNSTILE_SITE_KEY=0x...      # pública, no requiere ser secreto
+TURNSTILE_SECRET_KEY=0x...    # debe guardarse como secreto
+```
+
+Si estas variables no están configuradas, el formulario sigue funcionando exactamente igual que
+antes (sin captcha) — el sitio nunca se rompe por faltar esta protección, pero tampoco queda
+protegido hasta que se configure.
+
 ## Probar localmente
 
 ```powershell

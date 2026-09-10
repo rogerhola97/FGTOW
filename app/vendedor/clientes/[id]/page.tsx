@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DeleteQuoteButton } from "../../../components/DeleteQuoteButton";
 import { InitialQuoteData, TrailerConfigurator } from "../../../components/TrailerConfigurator";
 import { DoorConfig, ModelId, PlacedEquipment, WindowConfig } from "../../../lib/quoteCatalog";
 import { getQuoteById, getSiblingQuotes } from "../../../lib/quotesDb";
@@ -46,8 +47,13 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
     </header>
 
     <section className="vendor-quote-detail-head no-print">
-      <span className="eyebrow">Folio {quote.quote_number} · versión {quote.version}</span>
-      <h1>{quote.name}</h1>
+      <div className="vendor-quote-detail-headline">
+        <div>
+          <span className="eyebrow">Folio {quote.quote_number} · versión {quote.version}</span>
+          <h1>{quote.name}</h1>
+        </div>
+        <DeleteQuoteButton id={quote.id} quoteNumber={quote.quote_number} redirectTo="/vendedor/clientes" />
+      </div>
       <p>{quote.email} · {quote.phone} · {quote.city}, {quote.state}</p>
       <p className="vendor-quote-meta">Guardada el {dateFormatter.format(new Date(quote.created_at))}{quote.updated_at ? ` · última edición ${dateFormatter.format(new Date(quote.updated_at))}` : ""}{quote.vendor_email ? ` por ${quote.vendor_email}` : ""}</p>
 

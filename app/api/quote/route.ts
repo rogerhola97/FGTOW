@@ -1,7 +1,7 @@
 import { calculateQuote, isValidPresetId, validateLayout } from "../../lib/quoteCatalog";
-import { clean, emailPattern, parseDoor, parseItems, parseSpecialItems, parseWindows, quoteFolio, sendQuoteEmail } from "../../lib/quoteSubmission";
+import { clean, emailPattern, parseDoor, parseItems, parseSpecialItems, parseWindows, quoteFolio, sendQuoteEmail, verifyTurnstile } from "../../lib/quoteSubmission";
 import { insertQuotePublic, patchQuoteEmailStatus } from "../../lib/quotesDb";
-import { readEnv } from "../../lib/vendorAuth";
+import { getVendor, readEnv } from "../../lib/vendorAuth";
 
 type Payload = Record<string, unknown>;
 
@@ -9,6 +9,15 @@ export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as Payload;
     if (clean(payload.company)) return Response.json({ ok: true }, { status: 201 });
+
+    // El captcha solo se le pide a un visitante público — un vendedor con sesión ya está
+    // autenticado y su cotizador ni siquiera muestra el widget (ver TrailerConfigurator).
+    const turnstileSecretKey = readEnv("TURNSTILE_SECRET_KEY");
+    if (turnstileSecretKey && !(await getVendor())) {
+      const captchaToken = clean(payload["cf-turnstile-response"], 2000);
+      const captchaOk = await verifyTurnstile(captchaToken, turnstileSecretKey, request.headers.get("cf-connecting-ip") || undefined);
+      if (!captchaOk) return Response.json({ error: "No pudimos verificar que no eres un robot. Recarga la página e intenta de nuevo." }, { status: 400 });
+    }
 
     const name = clean(payload.name, 100);
     const phone = clean(payload.phone, 40);

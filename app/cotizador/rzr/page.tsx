@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { TrailerConfigurator } from "../../components/TrailerConfigurator";
+import { readEnv } from "../../lib/vendorAuth";
 
 export const metadata = {
   title: "Configurador FG RZR Sport",
@@ -14,7 +15,7 @@ export default function CotizadorRzrPage() {
       <nav aria-label="Navegación principal"><Link href="/">Inicio</Link><Link href="/#modelos">Modelos</Link><a href="#enviar-cotizacion">Enviar proyecto</a></nav>
       <Link className="button button-small" href="/#modelos">Ver modelos</Link>
     </header>
-    <TrailerConfigurator modelId="rzr" plano={false} />
+    <TrailerConfigurator modelId="rzr" plano={false} turnstileSiteKey={readEnv("TURNSTILE_SITE_KEY")} />
     <footer className="no-print"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/">Inicio</Link><Link href="/#modelos">Modelos</Link></div><small>© 2026 FG TOW · De FG INV · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
   </main>;
 }

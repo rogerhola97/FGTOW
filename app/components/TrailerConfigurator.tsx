@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import { FormEvent, PointerEvent, UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, MEXICAN_STATES } from "../lib/mexicanStates";
 import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL } from "../lib/company";
@@ -369,7 +370,7 @@ function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerW
 
 const WALL_ORDER: Wall[] = ["front", "right", "back", "left"];
 
-export function TrailerConfigurator({ modelId, plano = true, initialQuote }: { modelId: ModelId; plano?: boolean; initialQuote?: InitialQuoteData }) {
+export function TrailerConfigurator({ modelId, plano = true, initialQuote, turnstileSiteKey }: { modelId: ModelId; plano?: boolean; initialQuote?: InitialQuoteData; turnstileSiteKey?: string }) {
   const meta = MODEL_META[modelId];
   const sizingMode = getSizingMode(modelId);
   const presets = useMemo(() => getPresetsForModel(modelId), [modelId]);
@@ -1285,6 +1286,12 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote }: { m
           <div className="form-row form-row-3"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
           <label>{plano ? "Comentarios" : "Notas para el equipo"}<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
           {!initialQuote && <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>}
+          {!initialQuote && turnstileSiteKey && (
+            <>
+              <Script src="https://challenge.cloudflare.com/turnstile/v0/api.js" async defer strategy="afterInteractive" />
+              <div className="cf-turnstile quote-captcha" data-sitekey={turnstileSiteKey} />
+            </>
+          )}
           {!initialQuote && <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>}
           {initialQuote ? (
             <div className="vendor-save-actions">

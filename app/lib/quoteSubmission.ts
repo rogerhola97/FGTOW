@@ -178,3 +178,21 @@ export async function sendQuoteEmail(args: SendEmailArgs): Promise<{ emailSent: 
     return { emailSent: false, emailError };
   }
 }
+
+// Verifica el token de Cloudflare Turnstile del formulario público de /api/quote contra la API de
+// siteverify. Nunca lanza: un error de red o de Cloudflare se trata igual que un token inválido,
+// para que quien llama rechace el envío en vez de dejarlo pasar por accidente.
+export async function verifyTurnstile(token: string, secretKey: string, remoteIp?: string): Promise<boolean> {
+  if (!token) return false;
+  try {
+    const body = new URLSearchParams({ secret: secretKey, response: token });
+    if (remoteIp) body.set("remoteip", remoteIp);
+    const response = await fetch("https://challenge.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body });
+    if (!response.ok) return false;
+    const result = (await response.json()) as { success?: boolean };
+    return result.success === true;
+  } catch (error) {
+    console.error("No fue posible verificar el captcha:", error);
+    return false;
+  }
+}

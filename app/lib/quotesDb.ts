@@ -113,6 +113,19 @@ export async function patchQuoteById(id: number, patch: Record<string, unknown>)
   return { ok: true, row: rows[0] };
 }
 
+export async function deleteQuoteById(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const response = await serviceRoleFetch(`/rest/v1/quotes?id=eq.${id}`, {
+    method: "DELETE",
+    headers: { prefer: "return=minimal" },
+  });
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    console.error("Supabase rechazó la eliminación de la cotización:", response.status, details);
+    return { ok: false, error: details.slice(0, 500) };
+  }
+  return { ok: true };
+}
+
 export async function getQuoteById(id: number): Promise<QuoteRow | null> {
   const response = await serviceRoleFetch(`/rest/v1/quotes?id=eq.${id}&select=*&limit=1`);
   if (!response.ok) throw new Error(`Supabase rechazó la consulta de la cotización (status ${response.status}).`);

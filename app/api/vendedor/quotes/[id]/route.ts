@@ -1,6 +1,6 @@
 import { calculateQuote, isValidPresetId, validateLayout } from "../../../../lib/quoteCatalog";
 import { clean, emailPattern, parseDoor, parseItems, parseSpecialItems, parseWindows } from "../../../../lib/quoteSubmission";
-import { getQuoteById, patchQuoteById } from "../../../../lib/quotesDb";
+import { deleteQuoteById, getQuoteById, patchQuoteById } from "../../../../lib/quotesDb";
 import { getVendor } from "../../../../lib/vendorAuth";
 
 // "Guardar cambios" en el editor de vendedor: actualiza la MISMA cotización (mismo folio y
@@ -74,5 +74,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (error) {
     console.error("Error al editar una cotización desde el panel de vendedor:", error);
     return Response.json({ error: "No fue posible guardar los cambios. Intenta de nuevo." }, { status: 500 });
+  }
+}
+
+// Elimina una cotización desde el panel de vendedor. La confirmación ("¿seguro que quieres
+// eliminarla?") vive en el cliente (DeleteQuoteButton) — aquí solo se valida sesión y existencia.
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const vendor = await getVendor();
+  if (!vendor) return Response.json({ error: "No autorizado." }, { status: 401 });
+
+  const { id: idParam } = await params;
+  const id = Number(idParam);
+  if (!Number.isInteger(id) || id <= 0) return Response.json({ error: "Cotización inválida." }, { status: 400 });
+
+  try {
+    const existing = await getQuoteById(id);
+    if (!existing) return Response.json({ error: "La cotización no existe." }, { status: 404 });
+
+    const result = await deleteQuoteById(id);
+    if (!result.ok) throw new Error("No fue posible eliminar la cotización.");
+
+    return Response.json({ ok: true }, { status: 200 });
+  } catch (error) {
+    console.error("Error al eliminar una cotización desde el panel de vendedor:", error);
+    return Response.json({ error: "No fue posible eliminar la cotización. Intenta de nuevo." }, { status: 500 });
   }
 }
