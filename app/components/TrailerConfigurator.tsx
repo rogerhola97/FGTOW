@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { FormEvent, PointerEvent, UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, MEXICAN_STATES } from "../lib/mexicanStates";
 import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL } from "../lib/company";
@@ -52,6 +53,22 @@ import {
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
+type CustomerInfo = { name: string; phone: string; email: string; city: string; state: string; notes: string };
+type InitialSpecialItem = { name: string; widthCm: number; depthCm: number; price: number };
+// Datos de una cotización ya guardada que el panel de vendedor precarga en el configurador para
+// editarla o partir de ella hacia una versión nueva — ver app/vendedor/clientes/[id]/page.tsx.
+export type InitialQuoteData = {
+  id: number;
+  quoteNumber: string;
+  version: number;
+  presetId: string;
+  items: PlacedEquipment[];
+  door: DoorConfig;
+  windows: WindowConfig[];
+  specialItems: InitialSpecialItem[];
+  customer: CustomerInfo;
+  includeIva: boolean;
+};
 type DragState = { kind: "item"; instanceId: string; pointerId: number; originWall: Wall; originOffsetCm: number } | { kind: "door"; pointerId: number } | { kind: "window"; id: string; pointerId: number; originWall: Wall; originOffsetCm: number } | null;
 
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -352,12 +369,12 @@ function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerW
 
 const WALL_ORDER: Wall[] = ["front", "right", "back", "left"];
 
-export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelId; plano?: boolean }) {
+export function TrailerConfigurator({ modelId, plano = true, initialQuote }: { modelId: ModelId; plano?: boolean; initialQuote?: InitialQuoteData }) {
   const meta = MODEL_META[modelId];
   const sizingMode = getSizingMode(modelId);
   const presets = useMemo(() => getPresetsForModel(modelId), [modelId]);
   const equipmentList = useMemo(() => getEquipmentForModel(modelId), [modelId]);
-  const [presetId, setPresetId] = useState(meta.defaultPresetId);
+  const [presetId, setPresetId] = useState(initialQuote?.presetId ?? meta.defaultPresetId);
   const preset = getPreset(presetId);
   const lengthOptions = useMemo(() => getCustomLengthOptions(), []);
   const quickModels = modelId === "food" ? FOOD_QUICK_MODELS : null;
@@ -367,13 +384,15 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const activeQuickModel = quickModels?.find((m) => m.widthCm === preset.widthCm && m.lengthCm === preset.lengthCm && m.heightCm === preset.heightCm) ?? null;
   const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
   const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
-  const [door, setDoor] = useState<DoorConfig>(() => defaultDoor(preset.widthCm));
-  const [windows, setWindows] = useState<WindowConfig[]>(() => (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm) : []));
+  const [door, setDoor] = useState<DoorConfig>(() => initialQuote?.door ?? defaultDoor(preset.widthCm));
+  const [windows, setWindows] = useState<WindowConfig[]>(() => initialQuote?.windows ?? (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm) : []));
   const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
-  const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>([]);
+  const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ id: uid(), ...entry })));
   const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "", price: "" });
   const [specialOpen, setSpecialOpen] = useState(false);
-  const [items, setItems] = useState<PlacedItem[]>(() => starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
+  const [items, setItems] = useState<PlacedItem[]>(() => initialQuote
+    ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
+    : starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Lets the Ancho/Fondo fields be cleared to blank while retyping instead of snapping back to the
   // last committed number on every keystroke; null means "show the committed value as usual".
@@ -387,11 +406,12 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
   const equipmentLibraryRef = useRef<HTMLDivElement>(null);
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const toggleStep = (step: 1 | 2 | 3) => setActiveStep((current) => (current === step ? 0 : step));
-  const [includeIva, setIncludeIva] = useState(false);
+  const [includeIva, setIncludeIva] = useState(initialQuote?.includeIva ?? false);
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
-  const [quoteNumber, setQuoteNumber] = useState("BORRADOR");
-  const [customer, setCustomer] = useState({ name: "", phone: "", email: "", city: "Monterrey, N.L.", state: DEFAULT_STATE, notes: "" });
+  const [quoteNumber, setQuoteNumber] = useState(initialQuote?.quoteNumber ?? "BORRADOR");
+  const [customer, setCustomer] = useState<CustomerInfo>(initialQuote?.customer ?? { name: "", phone: "", email: "", city: "Monterrey, N.L.", state: DEFAULT_STATE, notes: "" });
+  const router = useRouter();
   const svgRef = useRef<SVGSVGElement>(null);
   const sentBannerRef = useRef<HTMLDivElement>(null);
   const [rulerHeightPx, setRulerHeightPx] = useState<number | null>(null);
@@ -825,6 +845,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
 
   async function submitQuote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (sendState === "sending" || sendState === "sent") return;
     if (layoutErrors.length) {
       setSendState("error"); setSendMessage("Corrige los cruces o elementos fuera del plano antes de enviar."); return;
     }
@@ -835,7 +856,7 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       const response = await fetch("/api/quote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...values, presetId, items, door, includeIva, specialItems }),
+        body: JSON.stringify({ ...values, presetId, items, door, windows, includeIva, specialItems }),
       });
       const result = await response.json() as { error?: string; quoteNumber?: string; emailSent?: boolean; message?: string };
       if (!response.ok) throw new Error(result.error || "No fue posible enviar la cotización.");
@@ -844,6 +865,65 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
       setSendMessage(result.message || (result.emailSent ? "Cotización enviada a contacto@fgtow.com." : "Cotización guardada; falta configurar el servicio de correo."));
     } catch (error) {
       setSendState("error"); setSendMessage(error instanceof Error ? error.message : "No fue posible enviar la cotización.");
+    }
+  }
+
+  // Vuelve al formulario y al plano en blanco para mandar una cotización distinta sin recargar
+  // la página, tras haber enviado una con éxito.
+  function startNewQuote() {
+    const freshDoor = defaultDoor(preset.widthCm);
+    setCustomer({ name: "", phone: "", email: "", city: "Monterrey, N.L.", state: DEFAULT_STATE, notes: "" });
+    setSpecialItems([]);
+    setDoor(freshDoor);
+    setWindows(modelId === "food" ? defaultWindows(freshDoor.wall, preset.widthCm, preset.lengthCm) : []);
+    setItems(starterLayout(modelId, preset.widthCm, preset.lengthCm, freshDoor));
+    setSendState("idle");
+    setSendMessage("");
+    setQuoteNumber("BORRADOR");
+  }
+
+  function vendorQuotePayload() {
+    return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems };
+  }
+
+  // "Guardar cambios": actualiza la MISMA cotización que se precargó (mismo folio y versión).
+  async function saveVendorChanges() {
+    if (!initialQuote || sendState === "sending") return;
+    if (layoutErrors.length) { setSendState("error"); setSendMessage("Corrige los cruces o elementos fuera del plano antes de guardar."); return; }
+    setSendState("sending"); setSendMessage("Guardando cambios…");
+    try {
+      const response = await fetch(`/api/vendedor/quotes/${initialQuote.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(vendorQuotePayload()),
+      });
+      const result = await response.json() as { error?: string; quoteNumber?: string };
+      if (!response.ok) throw new Error(result.error || "No fue posible guardar los cambios.");
+      setSendState("sent"); setSendMessage(`Cambios guardados en ${result.quoteNumber}.`);
+      router.refresh();
+    } catch (error) {
+      setSendState("error"); setSendMessage(error instanceof Error ? error.message : "No fue posible guardar los cambios.");
+    }
+  }
+
+  // "Guardar como nueva cotización": crea un registro nuevo enlazado a initialQuote como su
+  // versión siguiente, y lleva al vendedor a la página de esa nueva cotización.
+  async function saveAsNewVersion() {
+    if (sendState === "sending") return;
+    if (layoutErrors.length) { setSendState("error"); setSendMessage("Corrige los cruces o elementos fuera del plano antes de guardar."); return; }
+    setSendState("sending"); setSendMessage("Guardando nueva cotización…");
+    try {
+      const response = await fetch("/api/vendedor/quotes", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...vendorQuotePayload(), basedOnQuoteId: initialQuote?.id }),
+      });
+      const result = await response.json() as { error?: string; id?: number; quoteNumber?: string };
+      if (!response.ok) throw new Error(result.error || "No fue posible guardar la cotización.");
+      setSendState("sent"); setSendMessage(`Nueva cotización guardada: ${result.quoteNumber}.`);
+      if (result.id) router.push(`/vendedor/clientes/${result.id}`);
+    } catch (error) {
+      setSendState("error"); setSendMessage(error instanceof Error ? error.message : "No fue posible guardar la cotización.");
     }
   }
 
@@ -1194,15 +1274,29 @@ export function TrailerConfigurator({ modelId, plano = true }: { modelId: ModelI
           <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu configuración.</em></h2><p>Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión.</p><ul><li>Lista de aditamentos</li><li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul><p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta:<br /><a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p></div>
         )}
         <div className="quote-submit-formcol">
-        <form className="quote-customer-form" onSubmit={submitQuote}>
+        {!initialQuote && sendState === "sent" ? (
+          <div className="quote-customer-form quote-sent-confirm">
+            <p className="form-status sent" role="status"><strong>✓ Cotización enviada</strong><br />{sendMessage}</p>
+            <button type="button" className="button" onClick={startNewQuote}>Enviar otra cotización</button>
+          </div>
+        ) : (
+        <form className="quote-customer-form" onSubmit={initialQuote ? (event) => { event.preventDefault(); saveVendorChanges(); } : submitQuote}>
           <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
           <div className="form-row form-row-3"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
           <label>{plano ? "Comentarios" : "Notas para el equipo"}<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
-          <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>
-          <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>
-          <button className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Enviando cotización…" : layoutErrors.length ? "Corrige el plano para enviar" : "Enviar a FG TOW →"}</button>
-          <p className={`form-status ${sendState}`} role="status">{sendMessage || "La cifra mostrada es una aproximación y no sustituye la cotización final firmada."}</p>
+          {!initialQuote && <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>}
+          {!initialQuote && <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>}
+          {initialQuote ? (
+            <div className="vendor-save-actions">
+              <button type="submit" className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Guardando…" : "Guardar cambios"}</button>
+              <button type="button" className="button" onClick={saveAsNewVersion} disabled={sendState === "sending" || layoutErrors.length > 0}>Guardar como nueva cotización</button>
+            </div>
+          ) : (
+            <button className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Enviando cotización…" : layoutErrors.length ? "Corrige el plano para enviar" : "Enviar a FG TOW →"}</button>
+          )}
+          <p className={`form-status ${sendState}`} role="status">{sendMessage || (initialQuote ? `Folio ${initialQuote.quoteNumber} · versión ${initialQuote.version}.` : "La cifra mostrada es una aproximación y no sustituye la cotización final firmada.")}</p>
         </form>
+        )}
         {plano && (
           <div className="quote-submit-print no-print"><button type="button" className="button" onClick={() => window.print()}>Imprimir cotización</button><span>En la ventana de impresión selecciona “Guardar como PDF” si prefieres un archivo.</span></div>
         )}

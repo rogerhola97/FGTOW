@@ -25,6 +25,10 @@ export default async function VendedorPanelPage() {
       <h1>Configuradores<br /><em>completos.</em></h1>
       <p>Los tres modelos con el plano interactivo.</p>
       <div className="vendor-panel-grid">
+        <Link href="/vendedor/clientes" className="vendor-panel-card vendor-panel-card-clients">
+          <strong>Clientes y cotizaciones</strong>
+          <span>Busca, revisa y edita las cotizaciones que los clientes mandan desde el sitio.</span>
+        </Link>
         {configurators.map((item) => (
           <Link key={item.id} href={`/vendedor/cotizador/${item.id}`} className="vendor-panel-card">
             <strong>{item.label}</strong>

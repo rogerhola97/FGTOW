@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("contains the complete FG TOW commercial experience", async () => {
-  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteCatalog, quoteSchema, mexicanStates] = await Promise.all([
+  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/LeadForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/contact/route.ts", import.meta.url), "utf8"),
@@ -13,8 +13,11 @@ test("contains the complete FG TOW commercial experience", async () => {
     readFile(new URL("../app/cotizador/rzr/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/TrailerConfigurator.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/quote/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/quoteSubmission.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/quotesDb.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/quoteCatalog.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/quotes.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/quotes-vendor-panel.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/mexicanStates.ts", import.meta.url), "utf8"),
   ]);
   assert.match(home, /Tu proyecto/);
@@ -49,12 +52,18 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(quoteCatalog, /model: "cargo"/);
   assert.match(quoteCatalog, /model: "rzr"/);
   assert.match(quoteApi, /contacto@fgtow\.com/);
-  assert.match(quoteApi, /api\.resend\.com\/emails/);
   assert.match(quoteApi, /validateLayout/);
   assert.match(quoteApi, /!state/);
+  assert.match(quoteApi, /insertQuotePublic/);
+  assert.match(quoteApi, /sendQuoteEmail/);
+  assert.match(quoteApi, /patchQuoteEmailStatus/);
+  assert.match(quoteSubmission, /api\.resend\.com\/emails/);
+  assert.match(quotesDb, /rest\/v1\/quotes/);
   assert.match(quoteSchema, /create table if not exists public\.quotes/);
   assert.match(quoteSchema, /enable row level security/);
   assert.match(quoteSchema, /trailer_length_cm between 200 and 900/);
   assert.match(quoteSchema, /axles in \(1, 2, 3\)/);
+  assert.match(vendorPanelSchema, /add column if not exists state/);
+  assert.match(vendorPanelSchema, /parent_quote_id/);
   assert.doesNotMatch(home, /SkeletonPreview|codex-preview/);
 });

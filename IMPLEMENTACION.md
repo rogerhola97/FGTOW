@@ -25,8 +25,12 @@ Las tablas necesarias están definidas en:
 
 - `supabase/leads.sql`: formulario general.
 - `supabase/quotes.sql`: cotizador 2D.
+- `supabase/quotes-vendor-panel.sql`: **pendiente de ejecutar** — agrega la columna `state`
+  que faltaba en `quotes` y `leads` (por eso ninguna cotización ni solicitud se estaba
+  guardando) y las columnas que usa `/vendedor/clientes` (modelo, versión, quién de ventas
+  editó). Corre este archivo una sola vez en Supabase > SQL Editor antes de usar esa sección.
 
-En el proyecto actual de FG TOW ya se aplicó la migración de `quotes`. Las políticas RLS permiten que un visitante registre una solicitud, pero no que consulte, modifique o elimine datos de otros clientes.
+Las políticas RLS permiten que un visitante registre una solicitud, pero no que consulte, modifique o elimine datos de otros clientes. El panel de vendedor (`/vendedor/clientes`) lee y escribe con la Service Role key desde el servidor, protegido por la sesión de vendedor — nunca desde el navegador.
 
 Variables necesarias:
 
@@ -56,6 +60,22 @@ QUOTE_FROM_EMAIL=FG TOW Cotizaciones <cotizaciones@fgtow.com>
 `RESEND_API_KEY` debe guardarse como secreto. No la subas a GitHub. Las otras dos pueden ser variables normales.
 
 Si la clave todavía no está configurada, la cotización se conserva en Supabase con estado `email_pending`; el sitio lo indica al terminar. Después de activar Resend, las nuevas cotizaciones se enviarán automáticamente.
+
+## Panel de vendedor · clientes y cotizaciones
+
+`/vendedor/clientes` (enlazado desde `/vendedor/panel`) muestra todas las cotizaciones que los
+clientes mandan desde el sitio público, con búsqueda por nombre, correo o teléfono. Al abrir una
+(`/vendedor/clientes/[id]`) se precarga el mismo configurador con plano, datos del cliente y
+herramientas de vendedor (aditamento especial) que ya usan `/vendedor/cotizador/*`, con dos
+acciones:
+
+- **Guardar cambios** — actualiza esa misma cotización (mismo folio) con los precios recalculados.
+- **Guardar como nueva cotización** — crea un folio nuevo enlazado como la siguiente versión de
+  esa cotización, sin tocar la original; queda listada junto a las demás versiones del mismo
+  cliente en esa misma página.
+
+Ninguna de las dos acciones manda correo — el correo a `contacto@fgtow.com` solo se dispara
+cuando el cliente envía su cotización desde `/cotizador/*`.
 
 ## Probar localmente
 

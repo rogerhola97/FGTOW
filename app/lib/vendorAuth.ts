@@ -12,7 +12,7 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 // cloudflare:workers is the authoritative source there — same pattern already used by db/index.ts —
 // with process.env kept only as the fallback for local dev / the standalone create-vendor.mjs path.
 // .trim() guards against a stray trailing space/newline from pasting the value into the dashboard.
-function readEnv(name: string): string | undefined {
+export function readEnv(name: string): string | undefined {
   const bound = (workerEnv as Record<string, unknown> | undefined)?.[name];
   if (typeof bound === "string" && bound.trim()) return bound.trim();
   const fromProcess = process.env[name];
