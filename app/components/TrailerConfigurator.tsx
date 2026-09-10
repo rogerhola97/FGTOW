@@ -12,6 +12,7 @@ import {
   DOOR_MAX_WIDTH_CM,
   DOOR_MIN_WIDTH_CM,
   DoorConfig,
+  EXTRA_EQUIPMENT_PRICE,
   FOOD_QUICK_MODELS,
   MODEL_META,
   ModelId,
@@ -389,7 +390,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [windows, setWindows] = useState<WindowConfig[]>(() => initialQuote?.windows ?? (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm) : []));
   const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
   const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ id: uid(), ...entry })));
-  const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "", price: "" });
+  const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "" });
   const [specialOpen, setSpecialOpen] = useState(false);
   const [items, setItems] = useState<PlacedItem[]>(() => initialQuote
     ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
@@ -434,11 +435,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
   useEffect(() => { setAlongDraft(null); setDepthDraft(null); }, [selectedId]);
 
-  const quote = useMemo(() => calculateQuote(presetId, items, includeIva), [presetId, items, includeIva]);
-  const specialItemsTotal = useMemo(() => specialItems.reduce((sum, entry) => sum + entry.price, 0), [specialItems]);
-  const combinedSubtotal = quote.subtotal + specialItemsTotal;
-  const combinedIva = includeIva ? Math.round(combinedSubtotal * 0.16) : 0;
-  const combinedTotal = combinedSubtotal + combinedIva;
+  const quote = useMemo(() => calculateQuote(presetId, items, specialItems, includeIva), [presetId, items, specialItems, includeIva]);
+  const combinedSubtotal = quote.subtotal;
+  const combinedIva = quote.iva;
+  const combinedTotal = quote.total;
   const layoutErrors = useMemo(() => validateLayout(preset, items, door), [preset, items, door]);
   const selected = items.find((item) => item.instanceId === selectedId) ?? null;
   const selectedDefinition = selected ? getEquipment(selected.typeId) : null;
@@ -522,15 +522,17 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
 
   // Vendor-only: a one-off accessory the client asked for that isn't in the standard catalog.
-  // It's priced and listed on the quote, but isn't placed on the 2D plan.
+  // Listado en la cotización pero no colocado en el plano 2D. Su precio ya no lo escribe el
+  // vendedor: cuenta igual que un equipo del catálogo en la regla de "primeros 5 gratis, resto a
+  // $2,500 fijo" (ver calculateQuote) — el campo price se conserva en 0 solo por compatibilidad
+  // con cotizaciones ya guardadas que sí tenían un precio propio.
   function addSpecialItem() {
     const name = specialForm.name.trim();
     const widthCm = Number(specialForm.widthCm);
     const depthCm = Number(specialForm.depthCm);
-    const price = Number(specialForm.price);
-    if (!name || !Number.isFinite(widthCm) || widthCm <= 0 || !Number.isFinite(depthCm) || depthCm <= 0 || !Number.isFinite(price) || price < 0) return;
-    setSpecialItems((current) => [...current, { id: uid(), name, widthCm, depthCm, price }]);
-    setSpecialForm({ name: "", widthCm: "", depthCm: "", price: "" });
+    if (!name || !Number.isFinite(widthCm) || widthCm <= 0 || !Number.isFinite(depthCm) || depthCm <= 0) return;
+    setSpecialItems((current) => [...current, { id: uid(), name, widthCm, depthCm, price: 0 }]);
+    setSpecialForm({ name: "", widthCm: "", depthCm: "" });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -960,7 +962,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
   const equipmentPicker = (
     <>
-      {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — agrega los que necesites`, "equipment-heading")}
+      {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — cada adicional cuesta ${money(EXTRA_EQUIPMENT_PRICE)}`, "equipment-heading")}
       <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
         <div className="equipment-library-wrap">
         <div className="equipment-library" ref={equipmentLibraryRef} onScroll={handleEquipmentLibraryScroll}>{equipmentList.map((equipment) => {
@@ -968,7 +970,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           return (
             <div className="equipment-row" key={equipment.id}>
               <i style={{ background: equipment.color }} />
-              <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm {equipment.surcharge ? `· +${money(equipment.surcharge)}` : ""}</small></span>
+              <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm</small></span>
               <div className="qty-stepper">
                 <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
                 <span>{qty}</span>
@@ -984,7 +986,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         {plano && (
           <div className={`special-item-box ${specialOpen ? "is-open" : ""}`}>
             <button type="button" className="special-item-toggle" onClick={() => setSpecialOpen((current) => !current)} aria-expanded={specialOpen}>
-              <span><strong>Aditamento especial</strong><small>Solo para vendedores: algo fuera del catálogo, con su propio nombre, medida y precio.</small></span>
+              <span><strong>Aditamento especial</strong><small>Solo para vendedores: algo fuera del catálogo, con su propio nombre y medida — cuenta igual que un equipo del catálogo para los 5 gratis y el precio fijo del resto.</small></span>
               {specialItems.length > 0 && <em className="special-item-count">{specialItems.length}</em>}
               <i className="special-item-chevron" aria-hidden="true">⌄</i>
             </button>
@@ -994,17 +996,19 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
                   <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
                   <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
-                  <label>Precio<input type="number" min={0} value={specialForm.price} onChange={(event) => setSpecialForm((current) => ({ ...current, price: event.target.value }))} /></label>
                   <button type="button" className="qty-add" onClick={addSpecialItem}>Agregar especial</button>
                 </div>
                 {specialItems.length > 0 && (
                   <ul className="special-item-list">
-                    {specialItems.map((entry) => (
-                      <li key={entry.id}>
-                        <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {money(entry.price)}</small></span>
-                        <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
-                      </li>
-                    ))}
+                    {specialItems.map((entry, index) => {
+                      const line = quote.specialLines[index];
+                      return (
+                        <li key={entry.id}>
+                          <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {line?.included ? "Incluido" : money(line?.linePrice ?? EXTRA_EQUIPMENT_PRICE)}</small></span>
+                          <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
@@ -1259,9 +1263,9 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           {stepHeader(3, "Paso 3 · Revisa tu cotización", "Después pasamos a tus datos")}
           <div className={`step-panel ${activeStep === 3 ? "is-open" : ""}`}>
           <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
-          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : line.linePrice ? `+${money(line.linePrice)}` : "$0"}</strong></li>)}{specialItems.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}</span><strong>+{money(entry.price)}</strong></li>)}</ol>
+          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}</ol>
           {!items.length && !specialItems.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
-          <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras + specialItemsTotal)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(combinedIva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
+          <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(combinedIva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
           <p className="estimate-note">Estimación comercial basada en medidas y equipamiento. Requiere validación de ingeniería, capacidad, instalaciones, acabados y disponibilidad.</p>
           <a className="button config-continue" href="#enviar-cotizacion">Continuar con mis datos →</a>
           </div>
@@ -1288,7 +1292,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           {!initialQuote && <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>}
           {!initialQuote && turnstileSiteKey && (
             <>
-              <Script src="https://challenge.cloudflare.com/turnstile/v0/api.js" async defer strategy="afterInteractive" />
+              <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer strategy="afterInteractive" />
               <div className="cf-turnstile quote-captcha" data-sitekey={turnstileSiteKey} />
             </>
           )}

@@ -38,15 +38,14 @@ export async function POST(request: Request) {
     }
     if (!emailPattern.test(email)) return Response.json({ error: "El correo electrónico no es válido." }, { status: 400 });
 
-    const quote = calculateQuote(presetId, items, includeIva);
+    const quote = calculateQuote(presetId, items, specialItems, includeIva);
     const door = parseDoor(payload.door, quote.preset.widthCm, quote.preset.lengthCm);
     const layoutErrors = validateLayout(quote.preset, items, door);
     if (layoutErrors.length) return Response.json({ error: `El plano requiere ajustes: ${layoutErrors[0]}` }, { status: 400 });
 
-    const specialTotal = specialItems.reduce((sum, entry) => sum + entry.price, 0);
-    const combinedSubtotal = quote.subtotal + specialTotal;
-    const combinedIva = includeIva ? Math.round(combinedSubtotal * 0.16) : 0;
-    const combinedTotal = combinedSubtotal + combinedIva;
+    const combinedSubtotal = quote.subtotal;
+    const combinedIva = quote.iva;
+    const combinedTotal = quote.total;
 
     const folio = quoteFolio();
     const toEmail = readEnv("QUOTE_TO_EMAIL") || "contacto@fgtow.com";
