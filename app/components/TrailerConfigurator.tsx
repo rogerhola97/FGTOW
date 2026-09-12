@@ -1293,7 +1293,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           {!initialQuote && turnstileSiteKey && (
             <>
               <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer strategy="afterInteractive" />
-              <div className="cf-turnstile quote-captcha" data-sitekey={turnstileSiteKey} />
+              <div className="cf-turnstile quote-captcha" data-sitekey={turnstileSiteKey} data-appearance="always" />
             </>
           )}
           {!initialQuote && <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>}
