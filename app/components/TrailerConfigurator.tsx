@@ -1124,50 +1124,56 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 <defs><pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#dce5e5" strokeWidth="0.7" /></pattern><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#smallGrid)" /><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b9c9cc" strokeWidth="1.3" /></pattern></defs>
                 <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
                 <circle cx={preset.widthCm / 2} cy="-66" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" />
-                <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
-                {modelId === "food" && preset.widthCm > PERIMETER_TABLE_DEPTH_CM * 2 && preset.lengthCm > PERIMETER_TABLE_DEPTH_CM * 2 && (
-                  <rect x={PERIMETER_TABLE_DEPTH_CM} y={PERIMETER_TABLE_DEPTH_CM} width={preset.widthCm - PERIMETER_TABLE_DEPTH_CM * 2} height={preset.lengthCm - PERIMETER_TABLE_DEPTH_CM * 2} fill="none" stroke="#5f7481" strokeDasharray="7 6" strokeWidth="1.5" opacity=".65" />
-                )}
-                {axleWheelYs.map((y, i) => <rect key={`axle-left-${i}`} x="-23" y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
-                {axleWheelYs.map((y, i) => <rect key={`axle-right-${i}`} x={preset.widthCm} y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
                 <text x={preset.widthCm / 2} y="-17" textAnchor="middle" className="plan-label">FRENTE / TIRÓN</text>
 
-                {doorSelected && <rect x={doorClearance.xCm} y={doorClearance.yCm} width={doorClearance.widthCm} height={doorClearance.depthCm} fill="rgba(214,162,41,.14)" stroke="#d6a229" strokeDasharray="6 5" strokeWidth="1.2" />}
+                {/* Único grupo con touch-action:none — en móvil, el scroll táctil sigue activo justo
+                    arriba (tirón) y abajo (reglas/medida) de este grupo, y solo se captura el gesto
+                    para arrastrar aditamentos dentro de él. */}
+                <g className="plan-interactive">
+                  <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
+                  {modelId === "food" && preset.widthCm > PERIMETER_TABLE_DEPTH_CM * 2 && preset.lengthCm > PERIMETER_TABLE_DEPTH_CM * 2 && (
+                    <rect x={PERIMETER_TABLE_DEPTH_CM} y={PERIMETER_TABLE_DEPTH_CM} width={preset.widthCm - PERIMETER_TABLE_DEPTH_CM * 2} height={preset.lengthCm - PERIMETER_TABLE_DEPTH_CM * 2} fill="none" stroke="#5f7481" strokeDasharray="7 6" strokeWidth="1.5" opacity=".65" />
+                  )}
+                  {axleWheelYs.map((y, i) => <rect key={`axle-left-${i}`} x="-23" y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
+                  {axleWheelYs.map((y, i) => <rect key={`axle-right-${i}`} x={preset.widthCm} y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
 
-                {items.map((item, index) => {
-                  const definition = getEquipment(item.typeId);
-                  if (!definition) return null;
-                  const bad = collisionIds.has(item.instanceId);
-                  const active = selectedId === item.instanceId;
-                  const faint = definition.overlapExempt ?? false;
-                  return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""} ${faint ? "faint" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
-                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill={faint ? "#9aa4a7" : definition.color} fillOpacity={faint ? ".16" : ".92"} />
-                    <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : faint ? "#b7c0c2" : "#0a3550"} strokeWidth={active ? 4 : faint ? 1.2 : 2} strokeDasharray={faint ? "4 3" : undefined} />
-                    <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className={`item-label ${faint ? "faint" : ""}`}><tspan x={item.widthCm / 2}>{index + 1}. {definition.shortName}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
-                  </g>;
-                })}
+                  {doorSelected && <rect x={doorClearance.xCm} y={doorClearance.yCm} width={doorClearance.widthCm} height={doorClearance.depthCm} fill="rgba(214,162,41,.14)" stroke="#d6a229" strokeDasharray="6 5" strokeWidth="1.2" />}
 
-                <g className={`plan-door ${doorSelected ? "selected" : ""}`} onPointerDown={startDoorDrag}>
-                  <rect x={doorHitRect.xCm} y={doorHitRect.yCm} width={doorHitRect.widthCm} height={doorHitRect.depthCm} fill="transparent" />
-                  <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" strokeLinecap="butt" />
-                  <text x={doorGeo.labelX} y={doorGeo.labelY} textAnchor="middle" className="door-label" transform={doorGeo.rotate ? `rotate(${doorGeo.rotate} ${doorGeo.labelX} ${doorGeo.labelY})` : undefined}>PUERTA {door.widthCm}cm</text>
+                  {items.map((item, index) => {
+                    const definition = getEquipment(item.typeId);
+                    if (!definition) return null;
+                    const bad = collisionIds.has(item.instanceId);
+                    const active = selectedId === item.instanceId;
+                    const faint = definition.overlapExempt ?? false;
+                    return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""} ${faint ? "faint" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
+                      <rect width={item.widthCm} height={item.depthCm} rx="3" fill={faint ? "#9aa4a7" : definition.color} fillOpacity={faint ? ".16" : ".92"} />
+                      <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : faint ? "#b7c0c2" : "#0a3550"} strokeWidth={active ? 4 : faint ? 1.2 : 2} strokeDasharray={faint ? "4 3" : undefined} />
+                      <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className={`item-label ${faint ? "faint" : ""}`}><tspan x={item.widthCm / 2}>{index + 1}. {definition.shortName}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
+                    </g>;
+                  })}
+
+                  <g className={`plan-door ${doorSelected ? "selected" : ""}`} onPointerDown={startDoorDrag}>
+                    <rect x={doorHitRect.xCm} y={doorHitRect.yCm} width={doorHitRect.widthCm} height={doorHitRect.depthCm} fill="transparent" />
+                    <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" strokeLinecap="butt" />
+                    <text x={doorGeo.labelX} y={doorGeo.labelY} textAnchor="middle" className="door-label" transform={doorGeo.rotate ? `rotate(${doorGeo.rotate} ${doorGeo.labelX} ${doorGeo.labelY})` : undefined}>PUERTA {door.widthCm}cm</text>
+                  </g>
+
+                  {windows.map((win) => {
+                    const widthCm = win.widthCm;
+                    const winGeo = doorGeometry({ wall: win.wall, offsetCm: win.offsetCm, widthCm }, preset);
+                    const winHitRect = placeOnWall(win.wall, win.offsetCm, widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
+                    const active = windowSelectedId === win.id;
+                    return (
+                      <g key={win.id} className={`plan-window ${active ? "selected" : ""}`} onPointerDown={(event) => startWindowDrag(event, win)}>
+                        <rect x={winHitRect.xCm} y={winHitRect.yCm} width={winHitRect.widthCm} height={winHitRect.depthCm} fill="transparent" />
+                        <line x1={winGeo.x1} y1={winGeo.y1} x2={winGeo.x2} y2={winGeo.y2} stroke="#7cc3d8" strokeWidth="6" strokeLinecap="butt" />
+                      </g>
+                    );
+                  })}
+
+                  <line x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
+                  <line x1="8" x2={preset.widthCm - 8} y1={preset.lengthCm / 2} y2={preset.lengthCm / 2} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
                 </g>
-
-                {windows.map((win) => {
-                  const widthCm = win.widthCm;
-                  const winGeo = doorGeometry({ wall: win.wall, offsetCm: win.offsetCm, widthCm }, preset);
-                  const winHitRect = placeOnWall(win.wall, win.offsetCm, widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
-                  const active = windowSelectedId === win.id;
-                  return (
-                    <g key={win.id} className={`plan-window ${active ? "selected" : ""}`} onPointerDown={(event) => startWindowDrag(event, win)}>
-                      <rect x={winHitRect.xCm} y={winHitRect.yCm} width={winHitRect.widthCm} height={winHitRect.depthCm} fill="transparent" />
-                      <line x1={winGeo.x1} y1={winGeo.y1} x2={winGeo.x2} y2={winGeo.y2} stroke="#7cc3d8" strokeWidth="6" strokeLinecap="butt" />
-                    </g>
-                  );
-                })}
-
-                <line x1={preset.widthCm / 2} x2={preset.widthCm / 2} y1="8" y2={preset.lengthCm - 8} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
-                <line x1="8" x2={preset.widthCm - 8} y1={preset.lengthCm / 2} y2={preset.lengthCm / 2} stroke="#d6a229" strokeDasharray="7 6" strokeWidth="1.5" opacity=".7" />
 
                 <g className="ruler ruler-bottom">
                   <line x1={0} y1={preset.lengthCm + 6} x2={preset.widthCm} y2={preset.lengthCm + 6} className="ruler-line" />
