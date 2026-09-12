@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import { FormEvent, PointerEvent, UIEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, MEXICAN_STATES } from "../lib/mexicanStates";
 import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL } from "../lib/company";
 import {
@@ -392,6 +392,12 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ id: uid(), ...entry })));
   const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "" });
   const [specialOpen, setSpecialOpen] = useState(false);
+  // Público (!plano) únicamente: el cliente entra al plano 2D completo por su cuenta — hasta
+  // entonces ve la lista simple de Paso 2 con acomodo automático. El vendedor (plano=true) ya
+  // parte siempre del plano, así que estos dos nunca aplican en su flujo.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedIntroOpen, setAdvancedIntroOpen] = useState(false);
+  const showPlanEditor = plano || advancedOpen;
   const [items, setItems] = useState<PlacedItem[]>(() => initialQuote
     ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
     : starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
@@ -404,8 +410,6 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [equipmentAtEnd, setEquipmentAtEnd] = useState(false);
-  const equipmentLibraryRef = useRef<HTMLDivElement>(null);
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const toggleStep = (step: 1 | 2 | 3) => setActiveStep((current) => (current === step ? 0 : step));
   const [includeIva, setIncludeIva] = useState(initialQuote?.includeIva ?? false);
@@ -521,9 +525,9 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
-  // Vendor-only: a one-off accessory the client asked for that isn't in the standard catalog.
-  // Listado en la cotización pero no colocado en el plano 2D. Su precio ya no lo escribe el
-  // vendedor: cuenta igual que un equipo del catálogo en la regla de "primeros 5 gratis, resto a
+  // Un accesorio fuera del catálogo estándar, con nombre y medida propios (cliente o vendedor).
+  // Listado en la cotización pero no colocado en el plano 2D. Su precio ya no lo escribe quien lo
+  // agrega: cuenta igual que un equipo del catálogo en la regla de "primeros 5 gratis, resto a
   // $2,500 fijo" (ver calculateQuote) — el campo price se conserva en 0 solo por compatibilidad
   // con cotizaciones ya guardadas que sí tenían un precio propio.
   function addSpecialItem() {
@@ -948,24 +952,12 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     );
   }
 
-  // Toggles the "more accessories below" hint off once the list is scrolled to its end (or if it
-  // never overflows in the first place), instead of the old mobile carousel that looped forever.
-  function handleEquipmentLibraryScroll(event: UIEvent<HTMLDivElement>) {
-    const el = event.currentTarget;
-    setEquipmentAtEnd(el.scrollTop + el.clientHeight >= el.scrollHeight - 4);
-  }
-
-  useEffect(() => {
-    const el = equipmentLibraryRef.current;
-    if (el) setEquipmentAtEnd(el.scrollHeight <= el.clientHeight + 4);
-  }, [equipmentList]);
-
   const equipmentPicker = (
     <>
       {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — cada adicional cuesta ${money(EXTRA_EQUIPMENT_PRICE)}`, "equipment-heading")}
       <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
         <div className="equipment-library-wrap">
-        <div className="equipment-library" ref={equipmentLibraryRef} onScroll={handleEquipmentLibraryScroll}>{equipmentList.map((equipment) => {
+        <div className="equipment-library">{equipmentList.map((equipment) => {
           const qty = quantities[equipment.id] ?? 1;
           return (
             <div className="equipment-row" key={equipment.id}>
@@ -980,41 +972,39 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
             </div>
           );
         })}</div>
-        {!equipmentAtEnd && <div className="equipment-scroll-hint" aria-hidden="true"><i>⌄</i></div>}
+        <div className="equipment-scroll-hint" aria-hidden="true"><i>⌄</i></div>
         </div>
 
-        {plano && (
-          <div className={`special-item-box ${specialOpen ? "is-open" : ""}`}>
-            <button type="button" className="special-item-toggle" onClick={() => setSpecialOpen((current) => !current)} aria-expanded={specialOpen}>
-              <span><strong>Aditamento especial</strong><small>Solo para vendedores: algo fuera del catálogo, con su propio nombre y medida — cuenta igual que un equipo del catálogo para los 5 gratis y el precio fijo del resto.</small></span>
-              {specialItems.length > 0 && <em className="special-item-count">{specialItems.length}</em>}
-              <i className="special-item-chevron" aria-hidden="true">⌄</i>
-            </button>
-            {specialOpen && (
-              <div className="special-item-content">
-                <div className="special-item-form">
-                  <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
-                  <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
-                  <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
-                  <button type="button" className="qty-add" onClick={addSpecialItem}>Agregar especial</button>
-                </div>
-                {specialItems.length > 0 && (
-                  <ul className="special-item-list">
-                    {specialItems.map((entry, index) => {
-                      const line = quote.specialLines[index];
-                      return (
-                        <li key={entry.id}>
-                          <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {line?.included ? "Incluido" : money(line?.linePrice ?? EXTRA_EQUIPMENT_PRICE)}</small></span>
-                          <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+        <div className={`special-item-box ${specialOpen ? "is-open" : ""}`}>
+          <button type="button" className="special-item-toggle" onClick={() => setSpecialOpen((current) => !current)} aria-expanded={specialOpen}>
+            <span><strong>Aditamento especial</strong><small>{plano ? "Algo fuera del catálogo, con su propio nombre y medida — cuenta igual que un equipo del catálogo para los 5 gratis y el precio fijo del resto." : "¿Necesitas algo que no está en la lista? Dinos su nombre, ancho y fondo. El precio de este aditamento puede variar según fabricación y costo — nuestro equipo te lo confirmará al revisar tu proyecto."}</small></span>
+            {specialItems.length > 0 && <em className="special-item-count">{specialItems.length}</em>}
+            <i className="special-item-chevron" aria-hidden="true">⌄</i>
+          </button>
+          {specialOpen && (
+            <div className="special-item-content">
+              <div className="special-item-form">
+                <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
+                <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
+                <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
+                <button type="button" className="qty-add" onClick={addSpecialItem}>Agregar especial</button>
               </div>
-            )}
-          </div>
-        )}
+              {specialItems.length > 0 && (
+                <ul className="special-item-list">
+                  {specialItems.map((entry, index) => {
+                    const line = quote.specialLines[index];
+                    return (
+                      <li key={entry.id}>
+                        <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {line?.included ? "Incluido" : money(line?.linePrice ?? EXTRA_EQUIPMENT_PRICE)}</small></span>
+                        <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
@@ -1037,7 +1027,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
       <p className="configurator-steps-lead no-print">Sigue los pasos para configurar tu remolque.</p>
 
-      <section className={`configurator-shell no-print ${plano ? "" : "configurator-shell--simple"}`}>
+      <section className={`configurator-shell no-print ${showPlanEditor ? "" : "configurator-shell--simple"}`}>
         <aside className="config-sidebar">
           {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", quickModels ? "Elige un modelo o personaliza tus medidas" : "Ancho, largo, altura y ejes")}
           <div className={`step-panel ${activeStep === 1 ? "is-open" : ""}`}>
@@ -1103,9 +1093,14 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           </div>
         </aside>
 
-        {plano ? (
+        {showPlanEditor ? (
         <div className="plan-workspace">
           <div className="addons-equipment-picker">{equipmentPicker}</div>
+          {!plano && (
+            <div className="advanced-mode-back">
+              <button type="button" onClick={() => setAdvancedOpen(false)}>← Volver a la configuración simple</button>
+            </div>
+          )}
           <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
           <div className="plan-scroll">
             <div className="plan-row">
@@ -1231,7 +1226,21 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         </div>
         ) : (
         <div className="addons-workspace">
-          <div className="addons-equipment-picker">{equipmentPicker}</div>
+          <div className="addons-equipment-picker">
+            {equipmentPicker}
+            <div className={`special-item-box advanced-mode-box ${advancedIntroOpen ? "is-open" : ""}`}>
+              <button type="button" className="special-item-toggle" onClick={() => setAdvancedIntroOpen((current) => !current)} aria-expanded={advancedIntroOpen}>
+                <span><strong>Configuración avanzada</strong><small>Solo si ya sabes exactamente cómo quieres acomodar tu equipo dentro del remolque.</small></span>
+                <i className="special-item-chevron" aria-hidden="true">⌄</i>
+              </button>
+              {advancedIntroOpen && (
+                <div className="special-item-content">
+                  <p className="advanced-mode-copy">Diseña tu propio plano 2D, igual al que usa nuestro equipo, en vez de la lista de arriba. Ahí acomodas cada aditamento en la pared exacta donde lo quieres, ajustas su tamaño y evitas cruces con la puerta o las ventanas.</p>
+                  <button type="button" className="qty-add" onClick={() => setAdvancedOpen(true)}>Diseñar mi plano 2D →</button>
+                </div>
+              )}
+            </div>
+          </div>
           <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
           <div className="workspace-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{preset.label}</strong></div></div>
           {items.length ? (
@@ -1279,33 +1288,35 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           <div className="quote-submit-copy"><span className="eyebrow">Termina tu proyecto</span><h2>Recibe una propuesta<br /><em>con tu configuración.</em></h2><p>Enviaremos la cotización preliminar al equipo comercial de FG TOW para revisión.</p><ul><li>Lista de aditamentos</li><li>Importe aproximado desglosado</li><li>Seguimiento desde contacto@fgtow.com</li></ul><p className="quote-submit-address">¿Prefieres verlo en persona? Te esperamos en nuestra planta:<br /><a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">📍 {FABRICATION_ADDRESS}</a></p></div>
         )}
         <div className="quote-submit-formcol">
-        {!initialQuote && sendState === "sent" ? (
+        {!initialQuote && !plano && sendState === "sent" ? (
           <div className="quote-customer-form quote-sent-confirm">
             <p className="form-status sent" role="status"><strong>✓ Cotización enviada</strong><br />{sendMessage}</p>
             <button type="button" className="button" onClick={startNewQuote}>Enviar otra cotización</button>
           </div>
         ) : (
-        <form className="quote-customer-form" onSubmit={initialQuote ? (event) => { event.preventDefault(); saveVendorChanges(); } : submitQuote}>
+        <form className="quote-customer-form" onSubmit={initialQuote ? (event) => { event.preventDefault(); saveVendorChanges(); } : plano ? (event) => { event.preventDefault(); saveAsNewVersion(); } : submitQuote}>
           <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
           <div className="form-row form-row-3"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
           <label>{plano ? "Comentarios" : "Notas para el equipo"}<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
-          {!initialQuote && <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>}
-          {!initialQuote && turnstileSiteKey && (
+          {!initialQuote && !plano && <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>}
+          {!initialQuote && !plano && turnstileSiteKey && (
             <>
               <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer strategy="afterInteractive" />
               <div className="cf-turnstile quote-captcha" data-sitekey={turnstileSiteKey} data-appearance="always" />
             </>
           )}
-          {!initialQuote && <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>}
+          {!initialQuote && !plano && <label className="consent"><input name="consent" value="yes" type="checkbox" required /> Autorizo que FG TOW guarde esta configuración y me contacte para revisar el proyecto.</label>}
           {initialQuote ? (
             <div className="vendor-save-actions">
               <button type="submit" className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Guardando…" : "Guardar cambios"}</button>
               <button type="button" className="button" onClick={saveAsNewVersion} disabled={sendState === "sending" || layoutErrors.length > 0}>Guardar como nueva cotización</button>
             </div>
+          ) : plano ? (
+            <button className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Guardando…" : layoutErrors.length ? "Corrige el plano para guardar" : "Guardar cotización"}</button>
           ) : (
             <button className="button submit" disabled={sendState === "sending" || layoutErrors.length > 0}>{sendState === "sending" ? "Enviando cotización…" : layoutErrors.length ? "Corrige el plano para enviar" : "Enviar a FG TOW →"}</button>
           )}
-          <p className={`form-status ${sendState}`} role="status">{sendMessage || (initialQuote ? `Folio ${initialQuote.quoteNumber} · versión ${initialQuote.version}.` : "La cifra mostrada es una aproximación y no sustituye la cotización final firmada.")}</p>
+          <p className={`form-status ${sendState}`} role="status">{sendMessage || (initialQuote ? `Folio ${initialQuote.quoteNumber} · versión ${initialQuote.version}.` : plano ? "" : "La cifra mostrada es una aproximación y no sustituye la cotización final firmada.")}</p>
         </form>
         )}
         {plano && (
