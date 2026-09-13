@@ -236,9 +236,12 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .plan-legend i.door { width:11px; height:4px; border-radius:0; background:#d6a229; }
 .plan-scroll { min-height:620px; max-height:850px; padding:20px; display:flex; align-items:center; justify-content:center; overflow:auto; background:#f4f7f6; }
 .plan-row { display:flex; align-items:flex-start; justify-content:center; width:100%; max-width:820px; }
-.ruler-strip { display:block; flex:0 0 26px; width:26px; align-self:stretch; touch-action:auto; }
-.trailer-plan { display:block; flex:1 1 0%; min-width:0; max-width:760px; max-height:800px; touch-action:auto; user-select:none; filter:drop-shadow(0 13px 18px rgba(6,41,62,.10)); }
-.plan-interactive { touch-action:none; }
+.ruler-strip-col { display:flex; flex-direction:column; flex:0 0 26px; width:26px; }
+.ruler-strip-spacer { flex:0 0 auto; }
+.ruler-strip { display:block; width:100%; touch-action:auto; }
+.plan-column { display:flex; flex-direction:column; flex:1 1 0%; min-width:0; max-width:760px; filter:drop-shadow(0 13px 18px rgba(6,41,62,.10)); }
+.trailer-plan-margin { display:block; width:100%; touch-action:auto; user-select:none; }
+.trailer-plan { display:block; width:100%; touch-action:none; user-select:none; }
 .ruler-line { stroke:#8b9ba1; stroke-width:1; }
 .ruler-tick { stroke:#8b9ba1; stroke-width:.8; }
 .ruler-label { fill:#5c6d73; font:700 6.5px monospace; }
@@ -417,8 +420,8 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
   .equipment-library { max-height:192px; }
   .plan-scroll { min-height:0; padding:14px; align-items:flex-start; justify-content:center; }
   .plan-row { max-width:100%; }
-  .trailer-plan { max-width:100%; height:auto; }
-  .ruler-strip { flex-basis:22px; width:22px; }
+  .plan-column { max-width:100%; }
+  .ruler-strip-col { flex-basis:22px; width:22px; }
   .workspace-head { align-items:flex-start; flex-direction:column; gap:10px; }
   .item-editor { grid-template-columns:1fr 1fr; }
   .item-editor>div { grid-column:1/-1; }
