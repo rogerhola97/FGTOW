@@ -51,6 +51,8 @@ import {
   WINDOW_HEIGHT_MIN_CM,
   WINDOW_WIDTH_MAX_CM,
   WINDOW_WIDTH_MIN_CM,
+  windowHeightCm,
+  windowWidthCm,
 } from "../lib/quoteCatalog";
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
@@ -415,6 +417,11 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [alongDraft, setAlongDraft] = useState<string | null>(null);
   const [depthDraft, setDepthDraft] = useState<string | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
+  // Las ventanas son fijas por default en los dos cotizadores (cliente y vendedor). Solo el
+  // vendedor tiene el botón "Ajustar ventanas" para activar temporalmente el arrastre/redimensión;
+  // el cliente nunca puede moverlas.
+  const [windowsEditMode, setWindowsEditMode] = useState(false);
+  const windowsEditable = plano && windowsEditMode;
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -687,13 +694,29 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     return windows.filter((w) => w.wall === wall && w.id !== excludeId).map((w) => ({ offsetCm: w.offsetCm, widthCm: w.widthCm }));
   }
 
+  // Si la puerta se muda a una pared que ya tiene una ventana, esa ventana ya no comparte la pared
+  // con la puerta: se reubica a la primera pared libre (sin puerta ni otra ventana) en vez de solo
+  // recorrerse para no encimarse.
+  function relocateWindowAwayFrom(wall: Wall) {
+    setWindows((current) => {
+      const occupant = current.find((w) => w.wall === wall);
+      if (!occupant) return current;
+      const freeWall = WALL_ORDER.find((candidate) => candidate !== wall && !current.some((w) => w.id !== occupant.id && w.wall === candidate));
+      if (!freeWall) return current;
+      const widthCm = Math.min(occupant.widthCm, wallLengthCm(freeWall, preset.widthCm, preset.lengthCm));
+      return current.map((w) => (w.id === occupant.id ? { ...w, wall: freeWall, offsetCm: centeredWindowOffset(freeWall, widthCm), widthCm } : w));
+    });
+  }
+
   function moveDoorTo(pointX: number, pointY: number) {
+    const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
+    const changingWall = wall !== door.wall;
+    if (changingWall) relocateWindowAwayFrom(wall);
     setDoor((current) => {
-      const wall = wallForPoint(clamp(pointX, 0, preset.widthCm), clamp(pointY, 0, preset.lengthCm), preset.widthCm, preset.lengthCm);
       const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
       const desired = snapOffsetToCenter((wall === "front" || wall === "back" ? pointX : pointY) - current.widthCm / 2, current.widthCm, span);
       const afterAxles = avoidAxleBand(wall, desired, current.widthCm, preset);
-      const afterWindows = findFreeOffsetOnWall(afterAxles, current.widthCm, span, windowBlockersOnWall(wall));
+      const afterWindows = findFreeOffsetOnWall(afterAxles, current.widthCm, span, changingWall ? [] : windowBlockersOnWall(wall));
       const rect = placeOnWall(wall, afterWindows, current.widthCm, 1, preset.widthCm, preset.lengthCm);
       return { wall, offsetCm: rect.offset, widthCm: current.widthCm };
     });
@@ -701,13 +724,13 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
 
   function cycleDoorWall() {
+    const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(door.wall) + 1) % WALL_ORDER.length];
+    relocateWindowAwayFrom(nextWall);
     setDoor((current) => {
-      const nextWall = WALL_ORDER[(WALL_ORDER.indexOf(current.wall) + 1) % WALL_ORDER.length];
       const span = wallLengthCm(nextWall, preset.widthCm, preset.lengthCm);
       const clampedWidth = Math.min(current.widthCm, span);
       const centeredOffset = avoidAxleBand(nextWall, Math.max(0, (span - clampedWidth) / 2), clampedWidth, preset);
-      const afterWindows = findFreeOffsetOnWall(centeredOffset, clampedWidth, span, windowBlockersOnWall(nextWall));
-      const rect = placeOnWall(nextWall, afterWindows, clampedWidth, 1, preset.widthCm, preset.lengthCm);
+      const rect = placeOnWall(nextWall, centeredOffset, clampedWidth, 1, preset.widthCm, preset.lengthCm);
       return { wall: nextWall, offsetCm: rect.offset, widthCm: clampedWidth };
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
@@ -726,7 +749,16 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
+  // Al salir del modo de edición se limpia la ventana seleccionada, para que el panel de edición
+  // (inputs de ancho/alto, cambiar de pared, quitar) no se quede activo con las ventanas ya fijas.
+  function toggleWindowsEditMode() {
+    const next = !windowsEditMode;
+    setWindowsEditMode(next);
+    if (!next) setWindowSelectedId(null);
+  }
+
   function startWindowDrag(event: PointerEvent<SVGGElement>, win: WindowConfig) {
+    if (!windowsEditable) return;
     event.preventDefault(); event.stopPropagation();
     svgRef.current?.setPointerCapture(event.pointerId);
     setSelectedId(null);
@@ -768,6 +800,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
 
   function cycleWindowWall(id: string) {
+    if (!windowsEditable) return;
     setWindows((current) => {
       const dragged = current.find((w) => w.id === id);
       if (!dragged) return current;
@@ -787,11 +820,45 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
+  // Espacio libre más grande junto a la puerta, en su propia pared (antes o después de ella), para
+  // que "Agregar ventana junto a la puerta" nunca la encime. null si la puerta no es lateral o si
+  // no cabe ni la ventana más angosta permitida (WINDOW_WIDTH_MIN_CM) de ningún lado.
+  function freeSpaceNextToDoor(): { offsetCm: number; widthCm: number } | null {
+    if (door.wall !== "left" && door.wall !== "right") return null;
+    const span = wallLengthCm(door.wall, preset.widthCm, preset.lengthCm);
+    const before = door.offsetCm;
+    const after = span - (door.offsetCm + door.widthCm);
+    const widthCm = Math.min(windowWidthCm(door.wall), Math.max(before, after));
+    if (widthCm < WINDOW_WIDTH_MIN_CM) return null;
+    const offsetCm = before >= after ? Math.max(0, before - widthCm) : door.offsetCm + door.widthCm;
+    return { offsetCm, widthCm };
+  }
+
+  // Solo vendedor: agrega una ventana junto a la puerta cuando esta está en un lateral (izquierda
+  // o derecha), encogiéndola si hace falta para que quepa en el espacio libre sin encimarse. No
+  // hace nada si la puerta no es lateral, si esa pared ya tiene una ventana, o si no cabe ninguna.
+  function addWindowNextToDoor() {
+    setWindows((current) => {
+      if (current.some((w) => w.wall === door.wall)) return current;
+      const spot = freeSpaceNextToDoor();
+      if (!spot) return current;
+      return [...current, { id: uid(), wall: door.wall, offsetCm: spot.offsetCm, widthCm: spot.widthCm, heightCm: windowHeightCm(door.wall) }];
+    });
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  function removeWindow(id: string) {
+    if (!windowsEditable) return;
+    setWindows((current) => current.filter((w) => w.id !== id));
+    setWindowSelectedId(null);
+    setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
   // Resizing only redraws the window on the plan — it never touches pricing. Width is clamped to
   // the wall it's currently on; height has no on-plan effect (top-down view) but is kept for the
   // quote's written spec.
   function updateWindowSize(id: string, part: "width" | "height", value: number) {
-    if (!Number.isFinite(value) || value <= 0) return;
+    if (!windowsEditable || !Number.isFinite(value) || value <= 0) return;
     setWindows((current) => current.map((w) => {
       if (w.id !== id) return w;
       if (part === "height") return { ...w, heightCm: clampWindowHeightCm(value) };
@@ -1115,6 +1182,17 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
             </div>
           )}
           <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
+
+          {plano && (
+            <div className="window-controls">
+              {windows.length > 0 && (
+                <button type="button" className={`qty-add ${windowsEditMode ? "is-active" : ""}`} onClick={toggleWindowsEditMode}>{windowsEditMode ? "Listo con ventanas" : "Ajustar ventanas"}</button>
+              )}
+              {!windows.some((w) => w.wall === door.wall) && freeSpaceNextToDoor() && (
+                <button type="button" className="qty-add" onClick={addWindowNextToDoor}>Agregar ventana junto a la puerta</button>
+              )}
+            </div>
+          )}
           <div className="plan-scroll">
             <div className="plan-row">
               <div className="ruler-strip-col">
@@ -1189,7 +1267,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                     const winHitRect = placeOnWall(win.wall, win.offsetCm, widthCm, 22, preset.widthCm, preset.lengthCm, "inside");
                     const active = windowSelectedId === win.id;
                     return (
-                      <g key={win.id} className={`plan-window ${active ? "selected" : ""}`} onPointerDown={(event) => startWindowDrag(event, win)}>
+                      <g key={win.id} className={`plan-window ${active ? "selected" : ""} ${windowsEditable ? "" : "locked"}`} onPointerDown={(event) => startWindowDrag(event, win)}>
                         <rect x={winHitRect.xCm} y={winHitRect.yCm} width={winHitRect.widthCm} height={winHitRect.depthCm} fill="transparent" />
                         <line x1={winGeo.x1} y1={winGeo.y1} x2={winGeo.x2} y2={winGeo.y2} stroke="#7cc3d8" strokeWidth="6" strokeLinecap="butt" />
                       </g>
@@ -1251,6 +1329,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={win.widthCm} onChange={(event) => updateWindowSize(win.id, "width", Number(event.target.value))} /><b>cm</b></label>
                   <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={win.heightCm} onChange={(event) => updateWindowSize(win.id, "height", Number(event.target.value))} /><b>cm</b></label>
                   <button type="button" onClick={() => cycleWindowWall(win.id)}>Cambiar de pared ↻</button>
+                  <button type="button" className="danger-button" onClick={() => removeWindow(win.id)}>Quitar ventana</button>
                 </div>
               );
             })()

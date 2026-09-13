@@ -234,6 +234,8 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .plan-legend i { width:8px; height:8px; border-radius:50%; background:#488260; }
 .plan-legend i.danger { background:#b3261e; }
 .plan-legend i.door { width:11px; height:4px; border-radius:0; background:#d6a229; }
+.window-controls { display:flex; flex-wrap:wrap; gap:8px; padding:14px 20px 0; }
+.window-controls .qty-add.is-active { background:var(--deep); }
 .plan-scroll { min-height:620px; max-height:850px; padding:20px; display:flex; align-items:center; justify-content:center; overflow:auto; background:#f4f7f6; }
 .plan-row { display:flex; align-items:flex-start; justify-content:center; width:100%; max-width:820px; }
 .ruler-strip-col { display:flex; flex-direction:column; flex:0 0 26px; width:26px; }
@@ -251,6 +253,7 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .door-label { fill:#8a6a12; font:800 6.5px Arial,sans-serif; letter-spacing:.04em; }
 .plan-window { cursor:grab; }
 .plan-window:active { cursor:grabbing; }
+.plan-window.locked { cursor:default; }
 .plan-window.selected line { stroke:#1d6f88; stroke-width:8; }
 .plan-label,.plan-measure { fill:#0a3550; font:800 8px Arial,sans-serif; letter-spacing:.08em; }
 .plan-item { cursor:grab; }
