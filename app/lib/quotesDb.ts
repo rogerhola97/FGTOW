@@ -28,6 +28,7 @@ export type QuoteRow = Record<string, unknown> & {
   version: number;
   vendor_email: string | null;
   vendor_edited: boolean;
+  source: string;
   status: string;
   created_at: string;
   updated_at: string | null;

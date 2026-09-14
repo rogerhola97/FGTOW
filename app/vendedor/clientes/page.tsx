@@ -20,6 +20,14 @@ const STATUS_LABEL: Record<string, string> = {
   lost: "Perdida",
 };
 
+// source = quién la originó: el cliente desde el sitio público ("website-2d") o un vendedor desde
+// /vendedor/cotizador o /vendedor/clientes ("vendor-panel") — ver app/api/quote/route.ts y
+// app/api/vendedor/quotes/route.ts.
+const SOURCE_LABEL: Record<string, string> = {
+  "website-2d": "En línea",
+  "vendor-panel": "En oficina",
+};
+
 export default async function VendedorClientesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const vendor = await requireVendor("/vendedor/clientes");
   const { q } = await searchParams;
@@ -49,7 +57,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
       {quotes && quotes.length > 0 && (
         <div className="vendor-quotes-table-wrap">
         <table className="vendor-quotes-table">
-          <thead><tr><th>Cliente</th><th>Contacto</th><th>Modelo</th><th>Total</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Contacto</th><th>Modelo</th><th>Total</th><th>Estado</th><th>Origen</th><th>Fecha</th><th>Acciones</th></tr></thead>
           <tbody>
             {quotes.map((quote) => (
               <tr key={quote.id}>
@@ -58,6 +66,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
                 <td>{MODEL_META[quote.model as keyof typeof MODEL_META]?.shortLabel ?? quote.model}</td>
                 <td>{moneyFormatter.format(Number(quote.total))}</td>
                 <td><span className={`vendor-quote-status status-${quote.status}`}>{STATUS_LABEL[quote.status] ?? quote.status}</span></td>
+                <td><span className={`vendor-quote-source source-${quote.source}`}>{SOURCE_LABEL[quote.source] ?? quote.source}</span></td>
                 <td>{dateFormatter.format(new Date(quote.created_at))}</td>
                 <td><DeleteQuoteButton id={quote.id} quoteNumber={quote.quote_number} /></td>
               </tr>

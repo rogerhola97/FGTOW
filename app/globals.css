@@ -497,6 +497,9 @@ footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; f
 .vendor-quote-status.status-email_pending { background:#fbeee0; color:#a5651f; }
 .vendor-quote-status.status-won { background:#e4f0fb; color:#1b5a91; }
 .vendor-quote-status.status-lost { background:#fbeaea; color:#a53b35; }
+.vendor-quote-source { display:inline-block; padding:4px 10px; border-radius:2px; background:#eef1f0; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+.vendor-quote-source.source-website-2d { background:#e4f0fb; color:#1b5a91; }
+.vendor-quote-source.source-vendor-panel { background:#f3edfa; color:#5a3d99; }
 
 .vendor-quote-detail-head { max-width:1050px; margin:0 auto; padding:44px 6vw 0; }
 .vendor-quote-detail-head h1 { margin:14px 0 6px; font-size:clamp(28px,3.6vw,40px); letter-spacing:-.03em; text-transform:uppercase; }
