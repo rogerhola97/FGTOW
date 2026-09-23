@@ -6,6 +6,14 @@ html { scroll-behavior:smooth; }
 body { margin:0; background:var(--paper); color:var(--deep); font-family:Arial, Helvetica, sans-serif; }
 a { color:inherit; text-decoration:none; }
 img { display:block; max-width:100%; }
+.topbar { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:9px 5vw; background:var(--deep); color:#cdd8dc; font-size:11px; font-weight:600; letter-spacing:.02em; }
+.topbar-location { display:inline-flex; align-items:center; gap:7px; color:#cdd8dc; opacity:.92; }
+.topbar-location:hover { color:var(--gold); opacity:1; }
+.topbar-social { display:flex; align-items:center; gap:16px; }
+.topbar-social a { display:inline-flex; color:#cdd8dc; opacity:.92; }
+.topbar-social a:hover { color:var(--gold); opacity:1; }
+.topbar-icon { width:14px; height:14px; flex-shrink:0; }
+.inline-icon { width:15px; height:15px; flex-shrink:0; vertical-align:-3px; margin-right:6px; }
 .nav-shell { height:88px; display:flex; align-items:center; justify-content:space-between; padding:0 5vw; background:rgba(255,255,255,.94); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:30; backdrop-filter:blur(14px); }
 .brand img { width:190px; height:58px; object-fit:contain; }
 .nav-shell nav { display:flex; gap:34px; align-items:center; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
@@ -105,7 +113,7 @@ h1 em,h2 em { color:var(--gold); font-style:normal; }
 .quote-promise strong,.quote-promise span { display:block; }.quote-promise span { color:var(--muted); font-size:12px; margin-top:5px; }
 .quote-contact { margin-top:28px; padding-top:22px; border-top:1px solid #d4dcd9; }
 .quote-contact>span { display:block; margin-bottom:9px; color:var(--deep); font-size:10px; font-weight:900; letter-spacing:.11em; text-transform:uppercase; }
-.quote-contact>a { display:block; width:fit-content; max-width:440px; color:var(--blue); font-size:13px; font-weight:700; line-height:1.55; }
+.quote-contact>a { display:inline-flex; align-items:center; width:fit-content; max-width:440px; color:var(--blue); font-size:13px; font-weight:700; line-height:1.55; }
 .quote-contact>a:hover { text-decoration:underline; }
 .quote-contact .quote-whatsapp { margin-top:10px; color:var(--deep); font-size:12px; letter-spacing:.03em; }
 .lead-form { display:flex; flex-direction:column; gap:19px; padding:38px; background:white; border:1px solid var(--line); box-shadow:0 18px 50px rgba(6,41,62,.07); }
@@ -125,13 +133,14 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .footer-brand img { width:170px; height:54px; object-fit:contain; }.footer-brand+p { margin:0; color:var(--muted); font-size:12px; }
 .footer-links,.footer-social,footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; font-weight:800; }
 .footer-social { padding-left:28px; border-left:1px solid var(--line); }
+.footer-social a { display:inline-flex; align-items:center; }
 .footer-links a:hover,.footer-social a:hover { color:var(--blue); }
 .footer-brand~small { grid-column:1/-1; padding-top:20px; border-top:1px solid var(--line); color:#8a9397; font-size:10px; }
 .vendor-link { color:#8a9397; text-transform:none; letter-spacing:0; }
 .vendor-link:hover { color:var(--blue); }
 
 @media (max-width:1050px) { .product-grid{grid-template-columns:1fr 1fr}.hero{background-position:62% center}.hero-copy{width:min(720px,72%)}.quote-section{gap:4vw}.nav-shell nav{display:none}.home-footer{grid-template-columns:220px 1fr auto}.home-footer .footer-social{grid-column:2/-1;padding-left:0;border-left:0}.footer-brand~small{grid-column:1/-1} }
-@media (max-width:720px) { .nav-shell{height:74px;padding:0 20px}.brand img{width:145px}.button-small{padding:0 13px;font-size:9px}.hero{min-height:650px;background-image:linear-gradient(rgba(255,255,255,.8),rgba(255,255,255,.68)),url("/fg-tow-hero.jpeg");background-position:center,68% center}.hero-copy{width:100%;min-height:650px;padding:70px 24px 48px}.hero h1{font-size:51px}.hero-copy>p{font-size:16px}.hero-actions{align-items:flex-start;flex-direction:column;gap:14px}.trust-row{margin-top:auto;padding-top:35px}.statement{align-items:flex-start;flex-direction:column}.section,.dark-section{padding:80px 24px}.section-head{align-items:flex-start;flex-direction:column;gap:22px}.product-grid{grid-template-columns:1fr}.process-grid{grid-template-columns:1fr 1fr}.process-grid article{min-height:210px}.split-section,.quote-section{grid-template-columns:1fr;padding:75px 24px}.form-row{grid-template-columns:1fr}.lead-form{padding:25px 20px}footer{grid-template-columns:1fr;text-align:left}.footer-links,.footer-social{grid-column:1;justify-content:flex-start;flex-wrap:wrap}.footer-brand~small{grid-column:1} }
+@media (max-width:720px) { .topbar{padding:8px 20px;gap:12px}.topbar-location{max-width:56vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topbar-social{gap:12px;flex-shrink:0}.nav-shell{height:74px;padding:0 20px}.brand img{width:145px}.button-small{padding:0 13px;font-size:9px}.hero{min-height:650px;background-image:linear-gradient(rgba(255,255,255,.8),rgba(255,255,255,.68)),url("/fg-tow-hero.jpeg");background-position:center,68% center}.hero-copy{width:100%;min-height:650px;padding:70px 24px 48px}.hero h1{font-size:51px}.hero-copy>p{font-size:16px}.hero-actions{align-items:flex-start;flex-direction:column;gap:14px}.trust-row{margin-top:auto;padding-top:35px}.statement{align-items:flex-start;flex-direction:column}.section,.dark-section{padding:80px 24px}.section-head{align-items:flex-start;flex-direction:column;gap:22px}.product-grid{grid-template-columns:1fr}.process-grid{grid-template-columns:1fr 1fr}.process-grid article{min-height:210px}.split-section,.quote-section{grid-template-columns:1fr;padding:75px 24px}.form-row{grid-template-columns:1fr}.lead-form{padding:25px 20px}footer{grid-template-columns:1fr;text-align:left}.footer-links,.footer-social{grid-column:1;justify-content:flex-start;flex-wrap:wrap}.footer-brand~small{grid-column:1} }
 @media (max-width:430px) { .process-grid{grid-template-columns:1fr}.process-grid article,.process-grid article+article{padding-left:0;border-right:0}.nav-shell .button-small{display:none}.hero h1{font-size:43px}.section-head h2,.split-title h2,.quote-copy h2{font-size:39px}.section-head h2.hero-title{font-size:43px} }
 @media (prefers-reduced-motion:reduce) { html{scroll-behavior:auto}*{transition:none!important} }
 
