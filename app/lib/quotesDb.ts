@@ -7,6 +7,11 @@
 //   llaman desde rutas ya protegidas por sesión de vendedor, o desde el propio servidor después
 //   de haber hecho el insert público.
 import { readEnv } from "./vendorAuth";
+import { PipelineStage } from "./pipelineStages";
+
+export type { PipelineStage };
+export type DiscountType = "percent" | "amount";
+export type QuoteFile = { path: string; name: string; uploadedAt: string };
 
 export type QuoteRow = Record<string, unknown> & {
   id: number;
@@ -32,6 +37,14 @@ export type QuoteRow = Record<string, unknown> & {
   status: string;
   created_at: string;
   updated_at: string | null;
+  pipeline_stage: PipelineStage;
+  pipeline_updated_at: string | null;
+  discount_type: DiscountType | null;
+  discount_value: number | null;
+  discount_reason: string | null;
+  reference_image_files: QuoteFile[];
+  invoice_files: QuoteFile[];
+  delivery_photo_files: QuoteFile[];
 };
 
 function requireSupabaseUrl() {
@@ -140,12 +153,13 @@ function sanitizeSearchTerm(term: string) {
   return term.replace(/[,()*]/g, "").trim().slice(0, 120);
 }
 
-export async function searchQuotes(term: string, limit = 40): Promise<QuoteRow[]> {
+export async function searchQuotes(term: string, limit = 40, stage?: PipelineStage): Promise<QuoteRow[]> {
   const safeTerm = sanitizeSearchTerm(term);
   const filter = safeTerm
     ? `&or=(name.ilike.*${encodeURIComponent(safeTerm)}*,email.ilike.*${encodeURIComponent(safeTerm)}*,phone.ilike.*${encodeURIComponent(safeTerm)}*)`
     : "";
-  const response = await serviceRoleFetch(`/rest/v1/quotes?select=*&order=created_at.desc&limit=${limit}${filter}`);
+  const stageFilter = stage ? `&pipeline_stage=eq.${encodeURIComponent(stage)}` : "";
+  const response = await serviceRoleFetch(`/rest/v1/quotes?select=*&order=created_at.desc&limit=${limit}${filter}${stageFilter}`);
   if (!response.ok) throw new Error(`Supabase rechazó la búsqueda de cotizaciones (status ${response.status}).`);
   return (await response.json()) as QuoteRow[];
 }
@@ -154,4 +168,17 @@ export async function getSiblingQuotes(email: string, excludeId: number): Promis
   const response = await serviceRoleFetch(`/rest/v1/quotes?select=*&email=eq.${encodeURIComponent(email)}&id=neq.${excludeId}&order=created_at.desc`);
   if (!response.ok) throw new Error(`Supabase rechazó la consulta de cotizaciones relacionadas (status ${response.status}).`);
   return (await response.json()) as QuoteRow[];
+}
+
+// Alimenta el tablero del CRM (/vendedor/crm): las cotizaciones más recientes de cada una de las 5
+// etapas del pipeline, agrupadas del lado del cliente (la tabla nunca crece tanto como para que
+// paginar por etapa valga la complejidad extra).
+export async function listQuotesForBoard(limit = 300): Promise<QuoteRow[]> {
+  const response = await serviceRoleFetch(`/rest/v1/quotes?select=*&order=pipeline_updated_at.desc.nullslast,created_at.desc&limit=${limit}`);
+  if (!response.ok) throw new Error(`Supabase rechazó la consulta del tablero (status ${response.status}).`);
+  return (await response.json()) as QuoteRow[];
+}
+
+export async function updateQuoteStage(id: number, stage: PipelineStage): Promise<{ ok: true; row: QuoteRow } | { ok: false; error: string }> {
+  return patchQuoteById(id, { pipeline_stage: stage, pipeline_updated_at: new Date().toISOString() });
 }

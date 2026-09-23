@@ -324,7 +324,8 @@ export function getSizingMode(modelId: ModelId): "preset" | "custom" {
   return modelId === "rzr" ? "preset" : "custom";
 }
 
-type CustomModelId = "food" | "cargo";
+export type CustomModelId = "food" | "cargo";
+export type CustomPriceCoefficients = { priceBase: number; priceFloor: number; priceWall: number; priceAxle: number };
 
 export const CUSTOM_WIDTH_OPTIONS_CM = [180, 200, 220] as const;
 export const CUSTOM_LENGTH_MIN_CM = 200;
@@ -385,7 +386,7 @@ export function buildCustomPresetId(model: CustomModelId, widthCm: number, lengt
   return `custom-${model}-${widthCm}-${lengthCm}-${heightCm}-${axles}`;
 }
 
-function parseCustomPresetId(id: string): { model: CustomModelId; widthCm: number; lengthCm: number; heightCm: number; axles: number } | null {
+export function parseCustomPresetId(id: string): { model: CustomModelId; widthCm: number; lengthCm: number; heightCm: number; axles: number } | null {
   const match = /^custom-(food|cargo)-(\d+)-(\d+)-(\d+)-(\d+)$/.exec(id);
   if (!match) return null;
   const [, model, widthCm, lengthCm, heightCm, axles] = match;
@@ -415,19 +416,22 @@ function sanitizeCustomDims(lengthCmRaw: number, widthCmRaw: number, heightCmRaw
 
 // Calibrated against the historical fixed-preset prices/weights: a fixed base cost plus a rate per
 // m² of floor and per m² of "wall" (perimeter × height), plus a flat cost per axle beyond the first.
-const CUSTOM_PRICE_COEFFICIENTS: Record<CustomModelId, { priceBase: number; priceFloor: number; priceWall: number; priceAxle: number; weightBase: number; weightFloor: number; weightWall: number; weightAxle: number }> = {
+export const CUSTOM_PRICE_COEFFICIENTS: Record<CustomModelId, { priceBase: number; priceFloor: number; priceWall: number; priceAxle: number; weightBase: number; weightFloor: number; weightWall: number; weightAxle: number }> = {
   food: { priceBase: 32000, priceFloor: 3600, priceWall: 900, priceAxle: 7500, weightBase: 545, weightFloor: 14.3, weightWall: 3.6, weightAxle: 150 },
   cargo: { priceBase: 16000, priceFloor: 5600, priceWall: 220, priceAxle: 9500, weightBase: 247, weightFloor: 26.8, weightWall: 1.1, weightAxle: 124 },
 };
 
 const CUSTOM_CAPACITY_FACTOR: Record<1 | 2 | 3, number> = { 1: 2.2, 2: 3.2, 3: 4.0 };
 
-export function buildCustomPreset(model: CustomModelId, widthCmRaw: number, lengthCmRaw: number, heightCmRaw: number, axlesRaw: number): TrailerPreset {
+// coeffOverride solo lo usa el panel de vendedor (ver app/lib/vendorPricing.ts) para aplicar la
+// lista de precios estándar editable — el cotizador público siempre llama esta función sin ese
+// argumento, así que su cálculo nunca cambia.
+export function buildCustomPreset(model: CustomModelId, widthCmRaw: number, lengthCmRaw: number, heightCmRaw: number, axlesRaw: number, coeffOverride?: Partial<CustomPriceCoefficients>): TrailerPreset {
   const { widthCm, lengthCm, heightCm, axles } = sanitizeCustomDims(lengthCmRaw, widthCmRaw, heightCmRaw, axlesRaw);
   const floorAreaM2 = (widthCm / 100) * (lengthCm / 100);
   const wallAreaM2 = 2 * (widthCm / 100 + lengthCm / 100) * (heightCm / 100);
   const extraAxles = axles - 1;
-  const coeff = CUSTOM_PRICE_COEFFICIENTS[model];
+  const coeff = { ...CUSTOM_PRICE_COEFFICIENTS[model], ...coeffOverride };
   const basePrice = Math.round(coeff.priceBase + coeff.priceFloor * floorAreaM2 + coeff.priceWall * wallAreaM2 + coeff.priceAxle * extraAxles);
   const estimatedWeightKg = Math.round(coeff.weightBase + coeff.weightFloor * floorAreaM2 + coeff.weightWall * wallAreaM2 + coeff.weightAxle * extraAxles);
   const estimatedCapacityKg = Math.round(estimatedWeightKg * CUSTOM_CAPACITY_FACTOR[axles]);

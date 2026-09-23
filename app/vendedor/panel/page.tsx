@@ -25,9 +25,17 @@ export default async function VendedorPanelPage() {
       <h1>Configuradores<br /><em>completos.</em></h1>
       <p>Los tres modelos con el plano interactivo.</p>
       <div className="vendor-panel-grid">
+        <Link href="/vendedor/crm" className="vendor-panel-card vendor-panel-card-clients">
+          <strong>CRM · Seguimiento</strong>
+          <span>Tablero de las 5 etapas: cotización, producción, anticipo, pagada y entregada.</span>
+        </Link>
         <Link href="/vendedor/clientes" className="vendor-panel-card vendor-panel-card-clients">
           <strong>Clientes y cotizaciones</strong>
           <span>Busca, revisa y edita las cotizaciones que los clientes mandan desde el sitio.</span>
+        </Link>
+        <Link href="/vendedor/precios" className="vendor-panel-card vendor-panel-card-clients">
+          <strong>Precios y descuentos</strong>
+          <span>Ajusta el precio de remolques y aditamentos para tus propias cotizaciones.</span>
         </Link>
         {configurators.map((item) => (
           <Link key={item.id} href={`/vendedor/cotizador/${item.id}`} className="vendor-panel-card">

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { DeleteQuoteButton } from "../../components/DeleteQuoteButton";
 import { VendorLogoutButton } from "../../components/VendorLogoutButton";
 import { MODEL_META } from "../../lib/quoteCatalog";
+import { PipelineStage, STAGE_LABEL, STAGE_ORDER } from "../../lib/pipelineStages";
 import { requireVendor } from "../../lib/vendorAuth";
 import { searchQuotes } from "../../lib/quotesDb";
 
@@ -28,11 +29,12 @@ const SOURCE_LABEL: Record<string, string> = {
   "vendor-panel": "En oficina",
 };
 
-export default async function VendedorClientesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function VendedorClientesPage({ searchParams }: { searchParams: Promise<{ q?: string; stage?: string }> }) {
   const vendor = await requireVendor("/vendedor/clientes");
-  const { q } = await searchParams;
+  const { q, stage: stageParam } = await searchParams;
   const query = (q ?? "").trim();
-  const quotes = await searchQuotes(query).catch(() => null);
+  const stage = STAGE_ORDER.includes(stageParam as PipelineStage) ? (stageParam as PipelineStage) : undefined;
+  const quotes = await searchQuotes(query, 40, stage).catch(() => null);
 
   return <main className="vendor-panel">
     <header className="nav-shell no-print">
@@ -47,8 +49,12 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
 
       <form className="vendor-search-form" method="get">
         <input type="search" name="q" defaultValue={query} placeholder="Nombre, correo o teléfono…" autoFocus />
+        <select name="stage" defaultValue={stage ?? ""}>
+          <option value="">Todas las etapas</option>
+          {STAGE_ORDER.map((value) => <option key={value} value={value}>{STAGE_LABEL[value]}</option>)}
+        </select>
         <button type="submit" className="button">Buscar</button>
-        {query && <Link href="/vendedor/clientes" className="vendor-search-clear">Quitar búsqueda</Link>}
+        {(query || stage) && <Link href="/vendedor/clientes" className="vendor-search-clear">Quitar filtros</Link>}
       </form>
 
       {quotes === null && <p className="vendor-search-empty">No fue posible cargar las cotizaciones. Intenta de nuevo.</p>}
@@ -57,7 +63,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
       {quotes && quotes.length > 0 && (
         <div className="vendor-quotes-table-wrap">
         <table className="vendor-quotes-table">
-          <thead><tr><th>Cliente</th><th>Contacto</th><th>Modelo</th><th>Total</th><th>Estado</th><th>Origen</th><th>Fecha</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Contacto</th><th>Modelo</th><th>Total</th><th>Etapa</th><th>Estado</th><th>Origen</th><th>Fecha</th><th>Acciones</th></tr></thead>
           <tbody>
             {quotes.map((quote) => (
               <tr key={quote.id}>
@@ -65,6 +71,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
                 <td><span>{quote.email}</span><small>{quote.phone}</small></td>
                 <td>{MODEL_META[quote.model as keyof typeof MODEL_META]?.shortLabel ?? quote.model}</td>
                 <td>{moneyFormatter.format(Number(quote.total))}</td>
+                <td><span className={`pipeline-stage-badge stage-${quote.pipeline_stage ?? "cotizacion"}`}>{STAGE_LABEL[quote.pipeline_stage ?? "cotizacion"]}</span></td>
                 <td><span className={`vendor-quote-status status-${quote.status}`}>{STATUS_LABEL[quote.status] ?? quote.status}</span></td>
                 <td><span className={`vendor-quote-source source-${quote.source}`}>{SOURCE_LABEL[quote.source] ?? quote.source}</span></td>
                 <td>{dateFormatter.format(new Date(quote.created_at))}</td>

@@ -1,7 +1,10 @@
-import { calculateQuote, isValidPresetId, validateLayout } from "../../../../lib/quoteCatalog";
+import { isValidPresetId, validateLayout } from "../../../../lib/quoteCatalog";
 import { clean, emailPattern, parseDoor, parseItems, parseSpecialItems, parseWindows } from "../../../../lib/quoteSubmission";
 import { deleteQuoteById, getQuoteById, patchQuoteById } from "../../../../lib/quotesDb";
 import { getVendor } from "../../../../lib/vendorAuth";
+import { getPricingSettings } from "../../../../lib/pricingSettingsDb";
+import { calculateVendorQuote } from "../../../../lib/vendorPricing";
+import { parseDiscount } from "../../../../lib/quoteSubmissionVendor";
 
 // "Guardar cambios" en el editor de vendedor: actualiza la MISMA cotización (mismo folio y
 // versión) en vez de crear una nueva — el folio/versión nueva es responsabilidad de
@@ -37,7 +40,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     if (!emailPattern.test(email)) return Response.json({ error: "El correo electrónico no es válido." }, { status: 400 });
 
-    const quote = calculateQuote(presetId, items, specialItems, includeIva);
+    const discount = parseDiscount(payload.discount);
+    const pricingSettings = await getPricingSettings();
+    const quote = calculateVendorQuote(presetId, items, specialItems, includeIva, pricingSettings, discount);
     const door = parseDoor(payload.door, quote.preset.widthCm, quote.preset.lengthCm);
     const layoutErrors = validateLayout(quote.preset, items, door);
     if (layoutErrors.length) return Response.json({ error: `El plano requiere ajustes: ${layoutErrors[0]}` }, { status: 400 });
@@ -65,6 +70,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       include_iva: includeIva,
       vendor_email: vendor.email,
       vendor_edited: true,
+      discount_type: discount?.type ?? null,
+      discount_value: discount?.value ?? null,
+      discount_reason: discount?.reason ?? null,
       updated_at: new Date().toISOString(),
     });
     if (!result.ok) throw new Error("No fue posible guardar los cambios.");

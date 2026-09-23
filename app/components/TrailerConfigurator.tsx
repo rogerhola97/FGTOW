@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { FormEvent, PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_STATE, MEXICAN_STATES } from "../lib/mexicanStates";
-import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL } from "../lib/company";
+import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL, WHATSAPP_NUMBER, WHATSAPP_URL } from "../lib/company";
+import { WhatsAppIcon } from "./SocialIcons";
+import { DEFAULT_PRICING_SETTINGS, PricingSettings } from "../lib/pricingSettingsShape";
+import { calculateVendorQuote, VendorDiscount } from "../lib/vendorPricing";
 import {
   CUSTOM_WIDTH_OPTIONS_CM,
   DOOR_CLEARANCE_CM,
@@ -61,6 +64,7 @@ type CustomerInfo = { name: string; phone: string; email: string; city: string; 
 type InitialSpecialItem = { name: string; widthCm: number; depthCm: number; price: number };
 // Datos de una cotización ya guardada que el panel de vendedor precarga en el configurador para
 // editarla o partir de ella hacia una versión nueva — ver app/vendedor/clientes/[id]/page.tsx.
+export type InitialQuoteFile = { path: string; name: string; uploadedAt: string; url: string | null };
 export type InitialQuoteData = {
   id: number;
   quoteNumber: string;
@@ -72,6 +76,10 @@ export type InitialQuoteData = {
   specialItems: InitialSpecialItem[];
   customer: CustomerInfo;
   includeIva: boolean;
+  discountType: "percent" | "amount" | null;
+  discountValue: number | null;
+  discountReason: string | null;
+  referenceImages: InitialQuoteFile[];
 };
 type DragState = { kind: "item"; instanceId: string; pointerId: number; originWall: Wall; originOffsetCm: number } | { kind: "door"; pointerId: number } | { kind: "window"; id: string; pointerId: number; originWall: Wall; originOffsetCm: number } | null;
 
@@ -381,7 +389,7 @@ function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerW
 
 const WALL_ORDER: Wall[] = ["front", "right", "back", "left"];
 
-export function TrailerConfigurator({ modelId, plano = true, initialQuote, turnstileSiteKey }: { modelId: ModelId; plano?: boolean; initialQuote?: InitialQuoteData; turnstileSiteKey?: string }) {
+export function TrailerConfigurator({ modelId, plano = true, initialQuote, turnstileSiteKey, isVendor = false }: { modelId: ModelId; plano?: boolean; initialQuote?: InitialQuoteData; turnstileSiteKey?: string; isVendor?: boolean }) {
   const meta = MODEL_META[modelId];
   const sizingMode = getSizingMode(modelId);
   const presets = useMemo(() => getPresetsForModel(modelId), [modelId]);
@@ -432,6 +440,15 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [sendMessage, setSendMessage] = useState("");
   const [quoteNumber, setQuoteNumber] = useState(initialQuote?.quoteNumber ?? "BORRADOR");
   const [customer, setCustomer] = useState<CustomerInfo>(initialQuote?.customer ?? { name: "", phone: "", email: "", city: "Monterrey, N.L.", state: DEFAULT_STATE, notes: "" });
+  // Solo aplica dentro del panel de vendedor (isVendor): lista de precios estándar editable en
+  // /vendedor/precios y descuento por cotización. El cotizador público nunca las toca.
+  const [pricingSettings, setPricingSettings] = useState<PricingSettings>(DEFAULT_PRICING_SETTINGS);
+  const [discountType, setDiscountType] = useState<"none" | "percent" | "amount">(initialQuote?.discountType ?? "none");
+  const [discountValue, setDiscountValue] = useState(initialQuote?.discountValue != null ? String(initialQuote.discountValue) : "");
+  const [discountReason, setDiscountReason] = useState(initialQuote?.discountReason ?? "");
+  const [referenceImages, setReferenceImages] = useState<InitialQuoteFile[]>(initialQuote?.referenceImages ?? []);
+  const [referenceUploading, setReferenceUploading] = useState(false);
+  const [referenceError, setReferenceError] = useState("");
   const router = useRouter();
   const svgRef = useRef<SVGSVGElement>(null);
   const sentBannerRef = useRef<HTMLDivElement>(null);
@@ -454,7 +471,37 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
   useEffect(() => { setAlongDraft(null); setDepthDraft(null); }, [selectedId]);
 
-  const quote = useMemo(() => calculateQuote(presetId, items, specialItems, includeIva), [presetId, items, specialItems, includeIva]);
+  useEffect(() => {
+    if (!isVendor) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/vendedor/pricing");
+        const result = await response.json() as { settings?: PricingSettings };
+        if (!cancelled && result.settings) setPricingSettings(result.settings);
+      } catch {
+        // Sin conexión o sin precios guardados todavía: se sigue mostrando la tarifa plana por
+        // defecto (DEFAULT_PRICING_SETTINGS), nunca se bloquea el cotizador del vendedor por esto.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isVendor]);
+
+  const discount: VendorDiscount = useMemo(() => {
+    if (!isVendor || discountType === "none") return null;
+    const value = Number(discountValue);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return { type: discountType, value, reason: discountReason.trim() || null };
+  }, [isVendor, discountType, discountValue, discountReason]);
+
+  // Ambas ramas regresan exactamente las mismas llaves (discountAmount/preDiscountSubtotal
+  // incluidas, en 0 para el público) para que el resto del componente no necesite distinguir cuál
+  // función se usó.
+  const quote = useMemo(() => {
+    if (isVendor) return calculateVendorQuote(presetId, items, specialItems, includeIva, pricingSettings, discount);
+    const base = calculateQuote(presetId, items, specialItems, includeIva);
+    return { ...base, preDiscountSubtotal: base.subtotal, discountAmount: 0 };
+  }, [isVendor, presetId, items, specialItems, includeIva, pricingSettings, discount]);
   const combinedSubtotal = quote.subtotal;
   const combinedIva = quote.iva;
   const combinedTotal = quote.total;
@@ -965,7 +1012,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
 
   function vendorQuotePayload() {
-    return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems };
+    return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems, discount };
   }
 
   // "Guardar cambios": actualiza la MISMA cotización que se precargó (mismo folio y versión).
@@ -1006,6 +1053,47 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       if (result.id) router.push(`/vendedor/clientes/${result.id}`);
     } catch (error) {
       setSendState("error"); setSendMessage(error instanceof Error ? error.message : "No fue posible guardar la cotización.");
+    }
+  }
+
+  // Imagen o foto de referencia de lo que el cliente quiere — solo disponible una vez que la
+  // cotización ya tiene id (o sea, dentro de /vendedor/clientes/[id]; una cotización recién
+  // iniciada en /vendedor/cotizador/* se guarda primero y redirige ahí).
+  async function uploadReferenceImage(file: File) {
+    if (!initialQuote) return;
+    setReferenceUploading(true); setReferenceError("");
+    try {
+      const form = new FormData();
+      form.set("kind", "reference");
+      form.set("file", file);
+      const response = await fetch(`/api/vendedor/quotes/${initialQuote.id}/files`, { method: "POST", body: form });
+      const result = await response.json() as { error?: string; file?: InitialQuoteFile };
+      if (!response.ok || !result.file) throw new Error(result.error || "No fue posible subir la imagen.");
+      setReferenceImages((current) => [...current, { ...result.file!, url: null }]);
+      router.refresh();
+    } catch (error) {
+      setReferenceError(error instanceof Error ? error.message : "No fue posible subir la imagen.");
+    } finally {
+      setReferenceUploading(false);
+    }
+  }
+
+  async function removeReferenceImage(path: string) {
+    if (!initialQuote) return;
+    setReferenceUploading(true); setReferenceError("");
+    try {
+      const response = await fetch(`/api/vendedor/quotes/${initialQuote.id}/files`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "reference", path }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "No fue posible borrar la imagen.");
+      setReferenceImages((current) => current.filter((entry) => entry.path !== path));
+    } catch (error) {
+      setReferenceError(error instanceof Error ? error.message : "No fue posible borrar la imagen.");
+    } finally {
+      setReferenceUploading(false);
     }
   }
 
@@ -1391,8 +1479,38 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
           <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}</ol>
           {!items.length && !specialItems.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
+          {isVendor && (
+            <div className="vendor-discount-box">
+              <span className="vendor-discount-label">Descuento (solo interno)</span>
+              <div className="vendor-discount-row">
+                <select value={discountType} onChange={(event) => setDiscountType(event.target.value as typeof discountType)}>
+                  <option value="none">Sin descuento</option>
+                  <option value="percent">%</option>
+                  <option value="amount">$</option>
+                </select>
+                <input type="number" min={0} step="any" placeholder="0" disabled={discountType === "none"} value={discountValue} onChange={(event) => setDiscountValue(event.target.value)} />
+              </div>
+              {discountType !== "none" && <input type="text" className="vendor-discount-reason" placeholder="Motivo (opcional, no lo ve el cliente)" value={discountReason} onChange={(event) => setDiscountReason(event.target.value)} />}
+              {quote.discountAmount > 0 && <span className="vendor-discount-applied">-{money(quote.discountAmount)} aplicado sobre {money(quote.preDiscountSubtotal)}</span>}
+            </div>
+          )}
           <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(combinedIva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
           <p className="estimate-note">Estimación comercial basada en medidas y equipamiento. Requiere validación de ingeniería, capacidad, instalaciones, acabados y disponibilidad.</p>
+          {isVendor && initialQuote && (
+            <div className="vendor-reference-box">
+              <span className="vendor-discount-label">Imagen de referencia del cliente</span>
+              <div className="vendor-reference-list">
+                {referenceImages.map((file) => (
+                  <div key={file.path} className="vendor-reference-item">
+                    {file.url ? <a href={file.url} target="_blank" rel="noreferrer">{file.name}</a> : <span>{file.name}</span>}
+                    <button type="button" className="button-small button-danger" disabled={referenceUploading} onClick={() => removeReferenceImage(file.path)}>Quitar</button>
+                  </div>
+                ))}
+              </div>
+              <input type="file" accept="image/*" disabled={referenceUploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadReferenceImage(file); event.target.value = ""; }} />
+              {referenceError && <p className="form-status error">{referenceError}</p>}
+            </div>
+          )}
           <a className="button config-continue" href="#enviar-cotizacion">Continuar con mis datos →</a>
           </div>
         </aside>
@@ -1409,6 +1527,11 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           <div className="quote-customer-form quote-sent-confirm">
             <p className="form-status sent" role="status"><strong>✓ Cotización enviada</strong><br />{sendMessage}</p>
             <button type="button" className="button" onClick={startNewQuote}>Enviar otra cotización</button>
+            <div className="quote-alt-contact">
+              <strong>¿Tenías algo distinto en mente?</strong>
+              <p>Esta es solo una primera referencia. Si tu proyecto es diferente, tu presupuesto no cuadra con esta propuesta o simplemente quieres platicarlo con alguien del equipo, escríbenos: adaptamos diseño, medidas y forma de pago a lo que necesitas y te mandamos una alternativa a tu medida.</p>
+              <a className="button quote-alt-whatsapp" href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />Hablar por WhatsApp · {WHATSAPP_NUMBER}</a>
+            </div>
           </div>
         ) : (
         <form className="quote-customer-form" onSubmit={initialQuote ? (event) => { event.preventDefault(); saveVendorChanges(); } : plano ? (event) => { event.preventDefault(); saveAsNewVersion(); } : submitQuote}>
