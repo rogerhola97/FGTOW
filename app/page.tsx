@@ -1,6 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
 import { LeadForm } from "./components/LeadForm";
+import {
+  FABRICATION_ADDRESS,
+  FABRICATION_MAPS_URL,
+  FACEBOOK_URL,
+  INSTAGRAM_URL,
+  WHATSAPP_NUMBER,
+  WHATSAPP_URL,
+} from "./lib/company";
 
 const products = [
   {
@@ -102,11 +110,11 @@ export default function Home() {
       </section>
 
       <section className="quote-section" id="cotizar">
-        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food trailer, cargo o RZR sport— y configura tus accesorios para armar tu cotización al instante.</p><a className="button quote-config-button" href="#modelos">Elegir modelo y configurar →</a><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div></div>
+        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food trailer, cargo o RZR sport— y configura tus accesorios para armar tu cotización al instante.</p><a className="button quote-config-button" href="#modelos">Elegir modelo y configurar →</a><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div><div className="quote-contact"><span>Planta de fabricación</span><a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer">{FABRICATION_ADDRESS}</a><a className="quote-whatsapp" href={WHATSAPP_URL} target="_blank" rel="noreferrer">WhatsApp · {WHATSAPP_NUMBER}</a></div></div>
         <LeadForm />
       </section>
 
-      <footer><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><a href="#modelos">Modelos</a><a href="#cotizar">Cotizar</a></div><small>© 2026 FG TOW · De FG INV · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
+      <footer className="home-footer"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div className="footer-links"><a href="#modelos">Modelos</a><a href="#cotizar">Cotizar</a></div><div className="footer-social" aria-label="Redes sociales de FG TOW"><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">Instagram</a><a href={FACEBOOK_URL} target="_blank" rel="noreferrer">Facebook</a><a href={WHATSAPP_URL} target="_blank" rel="noreferrer">WhatsApp</a></div><small>© 2026 FG TOW · De FG INV · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
     </main>
   );
 }

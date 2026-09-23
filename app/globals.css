@@ -103,6 +103,11 @@ h1 em,h2 em { color:var(--gold); font-style:normal; }
 .quote-promise { margin-top:40px; padding-left:20px; border-left:3px solid var(--gold); }
 .quote-config-button { margin-top:18px; }
 .quote-promise strong,.quote-promise span { display:block; }.quote-promise span { color:var(--muted); font-size:12px; margin-top:5px; }
+.quote-contact { margin-top:28px; padding-top:22px; border-top:1px solid #d4dcd9; }
+.quote-contact>span { display:block; margin-bottom:9px; color:var(--deep); font-size:10px; font-weight:900; letter-spacing:.11em; text-transform:uppercase; }
+.quote-contact>a { display:block; width:fit-content; max-width:440px; color:var(--blue); font-size:13px; font-weight:700; line-height:1.55; }
+.quote-contact>a:hover { text-decoration:underline; }
+.quote-contact .quote-whatsapp { margin-top:10px; color:var(--deep); font-size:12px; letter-spacing:.03em; }
 .lead-form { display:flex; flex-direction:column; gap:19px; padding:38px; background:white; border:1px solid var(--line); box-shadow:0 18px 50px rgba(6,41,62,.07); }
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
 .form-row-3 { grid-template-columns:1fr 1fr 1fr; }
@@ -116,13 +121,17 @@ h1 em,h2 em { color:var(--gold); font-style:normal; }
 .submit { width:100%; }
 .form-status { margin:0; text-align:center; font-size:11px; color:var(--muted); }.form-status.sent { color:#277548; font-weight:700; }.form-status.error { color:#a53b35; font-weight:700; }
 footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr auto; align-items:center; gap:30px; border-top:1px solid var(--line); background:white; }
+.home-footer { grid-template-columns:220px 1fr auto auto; }
 .footer-brand img { width:170px; height:54px; object-fit:contain; }.footer-brand+p { margin:0; color:var(--muted); font-size:12px; }
-footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; font-weight:800; }.footer-brand~small { grid-column:1/-1; padding-top:20px; border-top:1px solid var(--line); color:#8a9397; font-size:10px; }
+.footer-links,.footer-social,footer>div { display:flex; gap:24px; font-size:11px; text-transform:uppercase; font-weight:800; }
+.footer-social { padding-left:28px; border-left:1px solid var(--line); }
+.footer-links a:hover,.footer-social a:hover { color:var(--blue); }
+.footer-brand~small { grid-column:1/-1; padding-top:20px; border-top:1px solid var(--line); color:#8a9397; font-size:10px; }
 .vendor-link { color:#8a9397; text-transform:none; letter-spacing:0; }
 .vendor-link:hover { color:var(--blue); }
 
-@media (max-width:1050px) { .product-grid{grid-template-columns:1fr 1fr}.hero{background-position:62% center}.hero-copy{width:min(720px,72%)}.quote-section{gap:4vw}.nav-shell nav{display:none} }
-@media (max-width:720px) { .nav-shell{height:74px;padding:0 20px}.brand img{width:145px}.button-small{padding:0 13px;font-size:9px}.hero{min-height:650px;background-image:linear-gradient(rgba(255,255,255,.8),rgba(255,255,255,.68)),url("/fg-tow-hero.jpeg");background-position:center,68% center}.hero-copy{width:100%;min-height:650px;padding:70px 24px 48px}.hero h1{font-size:51px}.hero-copy>p{font-size:16px}.hero-actions{align-items:flex-start;flex-direction:column;gap:14px}.trust-row{margin-top:auto;padding-top:35px}.statement{align-items:flex-start;flex-direction:column}.section,.dark-section{padding:80px 24px}.section-head{align-items:flex-start;flex-direction:column;gap:22px}.product-grid{grid-template-columns:1fr}.process-grid{grid-template-columns:1fr 1fr}.process-grid article{min-height:210px}.split-section,.quote-section{grid-template-columns:1fr;padding:75px 24px}.form-row{grid-template-columns:1fr}.lead-form{padding:25px 20px}footer{grid-template-columns:1fr;text-align:left}footer>div{justify-content:flex-start}.footer-brand~small{grid-column:1} }
+@media (max-width:1050px) { .product-grid{grid-template-columns:1fr 1fr}.hero{background-position:62% center}.hero-copy{width:min(720px,72%)}.quote-section{gap:4vw}.nav-shell nav{display:none}.home-footer{grid-template-columns:220px 1fr auto}.home-footer .footer-social{grid-column:2/-1;padding-left:0;border-left:0}.footer-brand~small{grid-column:1/-1} }
+@media (max-width:720px) { .nav-shell{height:74px;padding:0 20px}.brand img{width:145px}.button-small{padding:0 13px;font-size:9px}.hero{min-height:650px;background-image:linear-gradient(rgba(255,255,255,.8),rgba(255,255,255,.68)),url("/fg-tow-hero.jpeg");background-position:center,68% center}.hero-copy{width:100%;min-height:650px;padding:70px 24px 48px}.hero h1{font-size:51px}.hero-copy>p{font-size:16px}.hero-actions{align-items:flex-start;flex-direction:column;gap:14px}.trust-row{margin-top:auto;padding-top:35px}.statement{align-items:flex-start;flex-direction:column}.section,.dark-section{padding:80px 24px}.section-head{align-items:flex-start;flex-direction:column;gap:22px}.product-grid{grid-template-columns:1fr}.process-grid{grid-template-columns:1fr 1fr}.process-grid article{min-height:210px}.split-section,.quote-section{grid-template-columns:1fr;padding:75px 24px}.form-row{grid-template-columns:1fr}.lead-form{padding:25px 20px}footer{grid-template-columns:1fr;text-align:left}.footer-links,.footer-social{grid-column:1;justify-content:flex-start;flex-wrap:wrap}.footer-brand~small{grid-column:1} }
 @media (max-width:430px) { .process-grid{grid-template-columns:1fr}.process-grid article,.process-grid article+article{padding-left:0;border-right:0}.nav-shell .button-small{display:none}.hero h1{font-size:43px}.section-head h2,.split-title h2,.quote-copy h2{font-size:39px}.section-head h2.hero-title{font-size:43px} }
 @media (prefers-reduced-motion:reduce) { html{scroll-behavior:auto}*{transition:none!important} }
 

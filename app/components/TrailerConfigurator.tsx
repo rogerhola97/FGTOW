@@ -1341,20 +1341,22 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         <div className="addons-workspace">
           <div className="addons-equipment-picker">
             {equipmentPicker}
-            <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
-              <div className={`special-item-box advanced-mode-box ${advancedIntroOpen ? "is-open" : ""}`}>
-                <button type="button" className="special-item-toggle" onClick={() => setAdvancedIntroOpen((current) => !current)} aria-expanded={advancedIntroOpen}>
-                  <span><strong>Configuración avanzada</strong><small>Solo si ya sabes exactamente cómo quieres acomodar tu equipo dentro del remolque.</small></span>
-                  <i className="special-item-chevron" aria-hidden="true">⌄</i>
-                </button>
-                {advancedIntroOpen && (
-                  <div className="special-item-content">
-                    <p className="advanced-mode-copy">Diseña tu propio plano 2D, igual al que usa nuestro equipo, en vez de la lista de arriba. Ahí acomodas cada aditamento en la pared exacta donde lo quieres, ajustas su tamaño y evitas cruces con la puerta o las ventanas.</p>
-                    <button type="button" className="qty-add" onClick={() => setAdvancedOpen(true)}>Diseñar mi plano 2D →</button>
-                  </div>
-                )}
+            {modelId === "food" && (
+              <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
+                <div className={`special-item-box advanced-mode-box ${advancedIntroOpen ? "is-open" : ""}`}>
+                  <button type="button" className="special-item-toggle" onClick={() => setAdvancedIntroOpen((current) => !current)} aria-expanded={advancedIntroOpen}>
+                    <span><strong>Configuración avanzada</strong><small>Solo si ya sabes exactamente cómo quieres acomodar tu equipo dentro del remolque.</small></span>
+                    <i className="special-item-chevron" aria-hidden="true">⌄</i>
+                  </button>
+                  {advancedIntroOpen && (
+                    <div className="special-item-content">
+                      <p className="advanced-mode-copy">Diseña tu propio plano 2D, igual al que usa nuestro equipo, en vez de la lista de arriba. Ahí acomodas cada aditamento en la pared exacta donde lo quieres, ajustas su tamaño y evitas cruces con la puerta o las ventanas.</p>
+                      <button type="button" className="qty-add" onClick={() => setAdvancedOpen(true)}>Diseñar mi plano 2D →</button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
           <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
           <div className="workspace-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{preset.label}</strong></div></div>

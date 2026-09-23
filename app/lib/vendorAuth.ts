@@ -13,7 +13,7 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 // with process.env kept only as the fallback for local dev / the standalone create-vendor.mjs path.
 // .trim() guards against a stray trailing space/newline from pasting the value into the dashboard.
 export function readEnv(name: string): string | undefined {
-  const bound = (workerEnv as Record<string, unknown> | undefined)?.[name];
+  const bound = (workerEnv as unknown as Record<string, unknown> | undefined)?.[name];
   if (typeof bound === "string" && bound.trim()) return bound.trim();
   const fromProcess = process.env[name];
   return typeof fromProcess === "string" && fromProcess.trim() ? fromProcess.trim() : undefined;
@@ -30,7 +30,7 @@ export function debugEnvState() {
   const workerEnvKeyCount = workerEnvAvailable ? Object.keys(workerEnv as object).length : 0;
   const sources: Record<string, "workerEnv" | "processEnv" | "missing"> = {};
   for (const name of DEBUG_ENV_NAMES) {
-    const fromWorker = (workerEnv as Record<string, unknown> | undefined)?.[name];
+    const fromWorker = (workerEnv as unknown as Record<string, unknown> | undefined)?.[name];
     if (typeof fromWorker === "string" && fromWorker.trim()) { sources[name] = "workerEnv"; continue; }
     const fromProcess = process.env[name];
     sources[name] = typeof fromProcess === "string" && fromProcess.trim() ? "processEnv" : "missing";

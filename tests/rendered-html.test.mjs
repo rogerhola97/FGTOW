@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("contains the complete FG TOW commercial experience", async () => {
-  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates] = await Promise.all([
+  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/LeadForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/contact/route.ts", import.meta.url), "utf8"),
@@ -19,12 +19,19 @@ test("contains the complete FG TOW commercial experience", async () => {
     readFile(new URL("../supabase/quotes.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/quotes-vendor-panel.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/mexicanStates.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/company.ts", import.meta.url), "utf8"),
   ]);
   assert.match(home, /Tu proyecto/);
   assert.match(home, /name: "RZR Sport"/);
   assert.match(home, /name: "Food Trailer"/);
   assert.match(home, /name: "Cargo"/);
   assert.match(home, /id="modelos"/);
+  assert.match(home, /quote-contact/);
+  assert.match(home, /footer-social/);
+  assert.match(company, /Miguel Barragán 103/);
+  assert.match(company, /instagram\.com\/fg_tow/);
+  assert.match(company, /facebook\.com\/profile\.php/);
+  assert.match(company, /wa\.me\/528184660403/);
   assert.doesNotMatch(home, /\/catalogo/);
   assert.match(form, /Solicitar cotización/);
   assert.match(form, /name="state"/);
