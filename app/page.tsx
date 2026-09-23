@@ -61,14 +61,6 @@ export default function Home() {
             <span>Hecho en México</span><span>Proyecto a medida</span><span>Atención directa</span>
           </div>
         </div>
-        <div className="hero-visual" aria-label="Ilustración de remolque FG TOW">
-          <div className="trailer trailer-hero">
-            <div className="trailer-body"><b>FG</b></div>
-            <div className="trailer-frame" />
-            <div className="wheel wheel-a" /><div className="wheel wheel-b" />
-            <div className="hitch"><i className="hitch-leg" /></div>
-          </div>
-        </div>
       </section>
 
       <section className="statement">
