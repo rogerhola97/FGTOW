@@ -4,3 +4,4 @@ export const INSTAGRAM_URL = "https://www.instagram.com/fg_tow/";
 export const FACEBOOK_URL = "https://www.facebook.com/profile.php?id=61593682995717";
 export const WHATSAPP_NUMBER = "81 8466 0403";
 export const WHATSAPP_URL = "https://wa.me/528184660403";
+export const SALES_EMAIL = "ventas@fgtow.com";

@@ -1,12 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
-import { LeadForm } from "./components/LeadForm";
-import { FacebookIcon, InstagramIcon, LocationIcon, WhatsAppIcon } from "./components/SocialIcons";
+import { FacebookIcon, InstagramIcon, LocationIcon, MailIcon, WhatsAppIcon } from "./components/SocialIcons";
 import {
   FABRICATION_ADDRESS,
   FABRICATION_MAPS_URL,
   FACEBOOK_URL,
   INSTAGRAM_URL,
+  SALES_EMAIL,
   WHATSAPP_NUMBER,
   WHATSAPP_URL,
 } from "./lib/company";
@@ -120,8 +120,20 @@ export default function Home() {
       </section>
 
       <section className="quote-section" id="cotizar">
-        <div className="quote-copy"><span className="eyebrow">Cotización personalizada</span><h2>Cuéntanos qué<br />quieres mover.</h2><p>Elige tu modelo base —food trailer, cargo o RZR sport— y configura tus accesorios para armar tu cotización al instante.</p><a className="button quote-config-button" href="#modelos">Elegir modelo y configurar →</a><div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div><div className="quote-contact"><span>Planta de fabricación</span><a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer"><LocationIcon className="inline-icon" />{FABRICATION_ADDRESS}</a><a className="quote-whatsapp" href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />WhatsApp · {WHATSAPP_NUMBER}</a></div></div>
-        <LeadForm />
+        <div className="quote-copy">
+          <span className="eyebrow">Cotización personalizada</span>
+          <h2>Cuéntanos qué<br />quieres mover.</h2>
+          <p>Elige tu modelo base —food trailer, cargo o RZR sport— y configura tus accesorios para armar tu cotización al instante.</p>
+          <a className="button quote-config-button" href="#modelos">Elegir modelo y configurar →</a>
+          <div className="quote-promise"><strong>Estimación + revisión humana</strong><span>El sistema calcula una referencia y nuestro equipo valida ingeniería, capacidad y precio final.</span></div>
+          <div className="quote-contact">
+            <span>Planta de fabricación</span>
+            <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer"><LocationIcon className="inline-icon" />{FABRICATION_ADDRESS}</a>
+            <a className="quote-whatsapp" href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />WhatsApp · {WHATSAPP_NUMBER}</a>
+            <a className="quote-whatsapp" href={`mailto:${SALES_EMAIL}`}><MailIcon className="inline-icon" />{SALES_EMAIL}</a>
+          </div>
+          <p className="quote-cta-note">Entra a nuestro cotizador y compártenos tu idea — ahí armas tu configuración y nos dejas tus datos para darle seguimiento.</p>
+        </div>
       </section>
 
       <footer className="home-footer"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div className="footer-links"><a href="#modelos">Modelos</a><a href="#cotizar">Cotizar</a></div><div className="footer-social" aria-label="Redes sociales de FG TOW"><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer"><InstagramIcon className="inline-icon" />Instagram</a><a href={FACEBOOK_URL} target="_blank" rel="noreferrer"><FacebookIcon className="inline-icon" />Facebook</a><a href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />WhatsApp</a></div><small>© 2026 FG TOW · De FG INV · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
