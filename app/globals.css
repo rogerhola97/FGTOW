@@ -633,7 +633,10 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 
 @media print {
   @page { size:A4; margin:8mm; }
-  html,body { min-width:0!important; background:#fff!important; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+  html,body,.configurator-page { min-width:0!important; min-height:0!important; height:auto!important; overflow:visible!important; background:#fff!important; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+  /* visibility:hidden still occupies paper and creates blank pages. Remove every non-printable
+     section from layout so pagination is based only on the quote document. */
+  .no-print { display:none!important; }
   body * { visibility:hidden!important; }
   .quote-document,.quote-document * { visibility:visible!important; }
   /* A4 is narrower than the mobile breakpoint. Restore the desktop composition explicitly so
