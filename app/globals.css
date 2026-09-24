@@ -633,30 +633,41 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 
 @media print {
   @page { size:A4; margin:8mm; }
-  body { background:#fff!important; }
+  html,body { min-width:0!important; background:#fff!important; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
   body * { visibility:hidden!important; }
   .quote-document,.quote-document * { visibility:visible!important; }
-  .quote-document { position:absolute; inset:0 auto auto 0; width:100%; max-width:none; margin:0; padding:8mm; border-top:4px solid #d6a229; box-shadow:none; zoom:.8; }
-  .document-head { padding-bottom:14px; }
+  /* A4 is narrower than the mobile breakpoint. Restore the desktop composition explicitly so
+     printing never stacks the quote into the phone layout. */
+  .quote-document { position:absolute; inset:0 auto auto 0; width:100%; max-width:none; margin:0; padding:8mm; overflow:visible; background:#fff!important; color:#06293e!important; border-top:4px solid #d6a229; box-shadow:none; zoom:.94; forced-color-adjust:none; }
+  .document-banner { background:#214c62!important; forced-color-adjust:none; }
+  .document-banner>div { background:#06293e!important; color:#fff!important; forced-color-adjust:none; }
+  .document-banner small { color:#d6a229!important; }
+  .document-plan-wrap,.document-terms { background:#f5f7f6!important; forced-color-adjust:none; }
+  .quote-document th { background:#edf1f0!important; color:#06293e!important; forced-color-adjust:none; }
+  .document-total>div:last-child { border-top-color:#d6a229!important; }
+  .document-terms { border-left-color:#d6a229!important; }
+  .document-head { flex-direction:row; align-items:flex-start; padding-bottom:14px; break-inside:avoid; page-break-inside:avoid; }
+  .document-head>div { text-align:right; }
   .document-head img { width:170px; height:auto; }
   .document-head strong { font-size:11px; }
   .document-head span { margin-top:3px; font-size:9px; }
-  .document-summary { margin:14px 0; gap:14px; padding-bottom:14px; }
+  .document-summary { grid-template-columns:1fr 1fr; margin:14px 0; gap:14px; padding-bottom:14px; break-inside:avoid; page-break-inside:avoid; }
+  .document-banner { grid-template-columns:1fr 1fr 1fr; }
   .document-banner>div { padding:8px 10px; }
   .document-banner strong { margin-top:3px; font-size:12px; }
-  .document-customer { gap:8px 14px; }
-  .document-plan-wrap { min-height:0; margin:16px 0; padding:14px; gap:20px; }
+  .document-customer { grid-template-columns:1fr 1fr; gap:8px 14px; }
+  .document-plan-wrap { grid-template-columns:1fr 310px; min-height:0; margin:16px 0; padding:14px; gap:20px; break-inside:avoid; page-break-inside:avoid; }
   .document-plan { max-height:220px; }
-  .document-grid { margin:16px 0; gap:30px; }
+  .document-grid { grid-template-columns:1fr 1fr; margin:16px 0; gap:30px; break-inside:avoid; page-break-inside:avoid; }
   .document-grid dl div { padding:4px 0; }
   .quote-document table { page-break-inside:auto; font-size:9px; }
   .quote-document th,.quote-document td { padding:5px 8px; }
   .quote-document tr { page-break-inside:avoid; }
-  .document-total { margin:14px 0 14px auto; }
+  .document-total { width:310px; margin:14px 0 14px auto; break-inside:avoid; page-break-inside:avoid; }
   .document-total>div { padding:4px 0; }
   .document-total>div:last-child { margin-top:5px; padding-top:8px; }
-  .document-terms { padding:10px 12px; }
+  .document-terms { padding:10px 12px; break-inside:avoid; page-break-inside:avoid; }
   .document-terms p { font-size:8px; }
-  .document-notes { margin-top:8px; padding:10px 12px; }
-  .document-footer { margin-top:12px; padding-top:8px; }
+  .document-notes { margin-top:8px; padding:10px 12px; break-inside:avoid; page-break-inside:avoid; }
+  .document-footer { flex-direction:row; margin-top:12px; padding-top:8px; break-inside:avoid; page-break-inside:avoid; }
 }
