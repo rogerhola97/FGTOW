@@ -6,9 +6,12 @@ import { PipelineStageControl } from "../../../components/PipelineStageControl";
 import { QuoteFileManager } from "../../../components/QuoteFileManager";
 import { InitialQuoteData, TrailerConfigurator } from "../../../components/TrailerConfigurator";
 import { DoorConfig, ModelId, PlacedEquipment, WindowConfig } from "../../../lib/quoteCatalog";
+import { getPricingSettings } from "../../../lib/pricingSettingsDb";
+import { DEFAULT_PRICING_SETTINGS } from "../../../lib/pricingSettingsShape";
 import { signQuoteFileUrls } from "../../../lib/quoteFilesDb";
 import { getQuoteById, getSiblingQuotes } from "../../../lib/quotesDb";
 import { requireVendor } from "../../../lib/vendorAuth";
+import { calculateStoredQuoteTotal } from "../../../lib/vendorPricing";
 
 export const metadata = { title: "Editar cotización", robots: { index: false, follow: false } };
 
@@ -26,7 +29,10 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
   const quote = await getQuoteById(id);
   if (!quote) notFound();
 
-  const siblings = await getSiblingQuotes(quote.email, quote.id).catch(() => []);
+  const [siblings, pricingSettings] = await Promise.all([
+    getSiblingQuotes(quote.email, quote.id).catch(() => []),
+    getPricingSettings().catch(() => DEFAULT_PRICING_SETTINGS),
+  ]);
   const configuration = (quote.configuration ?? {}) as StoredConfiguration;
 
   const [referenceImages, invoiceFiles, deliveryPhotos] = await Promise.all([
@@ -87,7 +93,7 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
             {siblings.map((sibling) => (
               <li key={sibling.id}>
                 <Link href={`/vendedor/clientes/${sibling.id}`}>{sibling.quote_number} · v{sibling.version}</Link>
-                <span>{moneyFormatter.format(Number(sibling.total))} · {dateFormatter.format(new Date(sibling.created_at))}</span>
+                <span>{moneyFormatter.format(calculateStoredQuoteTotal(sibling, pricingSettings))} · {dateFormatter.format(new Date(sibling.created_at))}</span>
               </li>
             ))}
           </ul>

@@ -4,7 +4,10 @@ import { DeleteQuoteButton } from "../../components/DeleteQuoteButton";
 import { VendorLogoutButton } from "../../components/VendorLogoutButton";
 import { MODEL_META } from "../../lib/quoteCatalog";
 import { PipelineStage, STAGE_LABEL, STAGE_ORDER } from "../../lib/pipelineStages";
+import { DEFAULT_PRICING_SETTINGS } from "../../lib/pricingSettingsShape";
+import { getPricingSettings } from "../../lib/pricingSettingsDb";
 import { requireVendor } from "../../lib/vendorAuth";
+import { calculateStoredQuoteTotal } from "../../lib/vendorPricing";
 import { searchQuotes } from "../../lib/quotesDb";
 
 export const metadata = { title: "Clientes y cotizaciones", robots: { index: false, follow: false } };
@@ -34,7 +37,10 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
   const { q, stage: stageParam } = await searchParams;
   const query = (q ?? "").trim();
   const stage = STAGE_ORDER.includes(stageParam as PipelineStage) ? (stageParam as PipelineStage) : undefined;
-  const quotes = await searchQuotes(query, 40, stage).catch(() => null);
+  const [quotes, pricingSettings] = await Promise.all([
+    searchQuotes(query, 40, stage).catch(() => null),
+    getPricingSettings().catch(() => DEFAULT_PRICING_SETTINGS),
+  ]);
 
   return <main className="vendor-panel">
     <header className="nav-shell no-print">
@@ -70,7 +76,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
                 <td><Link href={`/vendedor/clientes/${quote.id}`}>{quote.name}</Link>{quote.version > 1 && <span className="vendor-quote-version"> · v{quote.version}</span>}</td>
                 <td><span>{quote.email}</span><small>{quote.phone}</small></td>
                 <td>{MODEL_META[quote.model as keyof typeof MODEL_META]?.shortLabel ?? quote.model}</td>
-                <td>{moneyFormatter.format(Number(quote.total))}</td>
+                <td>{moneyFormatter.format(calculateStoredQuoteTotal(quote, pricingSettings))}</td>
                 <td><span className={`pipeline-stage-badge stage-${quote.pipeline_stage ?? "cotizacion"}`}>{STAGE_LABEL[quote.pipeline_stage ?? "cotizacion"]}</span></td>
                 <td><span className={`vendor-quote-status status-${quote.status}`}>{STATUS_LABEL[quote.status] ?? quote.status}</span></td>
                 <td><span className={`vendor-quote-source source-${quote.source}`}>{SOURCE_LABEL[quote.source] ?? quote.source}</span></td>

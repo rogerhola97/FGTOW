@@ -6,7 +6,7 @@ export type PricingSettings = {
   extra_equipment_price: number;
   equipment_price_overrides: Record<string, number>;
   trailer_base_price_overrides: Record<string, number>;
-  custom_coefficient_overrides: Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number; priceAxle?: number }>;
+  custom_coefficient_overrides: Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number }>;
   updated_at: string;
   updated_by: string | null;
 };

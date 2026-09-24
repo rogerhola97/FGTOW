@@ -39,6 +39,7 @@ import {
   getAllowedWidths,
   getCustomHeightOptions,
   getCustomLengthOptions,
+  getLengthPricingRule,
   getEquipment,
   getEquipmentForModel,
   getPreset,
@@ -1238,7 +1239,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   {CUSTOM_WIDTH_OPTIONS_CM.map((w) => <option key={w} value={w}>{(w / 100).toFixed(2)} m</option>)}
                 </select>
               </div>
-              <label className="config-select dim-field">Largo<select value={preset.lengthCm} onChange={(event) => updateCustomDim("length", Number(event.target.value))}>{lengthOptions.map((l) => <option key={l} value={l} disabled={!getAllowedWidths(l).includes(preset.widthCm)}>{(l / 100).toFixed(2)} m</option>)}</select></label>
+              <label className="config-select dim-field">Largo<select value={preset.lengthCm} onChange={(event) => updateCustomDim("length", Number(event.target.value))}>{lengthOptions.map((l) => { const rule = getLengthPricingRule(l); return <option key={l} value={l} disabled={!getAllowedWidths(l).includes(preset.widthCm)}>{(l / 100).toFixed(2)} m{rule?.additionalLengthCm ? ` · +${rule.additionalLengthCm} cm` : " · estándar"}</option>; })}</select></label>
               <label className="config-select dim-field">Altura<select value={preset.heightCm} onChange={(event) => updateCustomDim("height", Number(event.target.value))}>{heightOptions.map((h) => <option key={h} value={h}>{(h / 100).toFixed(2)} m</option>)}</select></label>
               <div className="dim-field config-axle-box">
                 <small>Ejes</small>
@@ -1251,7 +1252,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   {[1, 2, 3].map((a) => <option key={a} value={a} disabled={!allowedAxles.includes(a as 1 | 2 | 3)}>{a} {a > 1 ? "ejes" : "eje"}</option>)}
                 </select>
               </div>
-              <div className="dim-price-hint">Precio base estimado <strong>{money(preset.basePrice)}</strong></div>
+              <div className="dim-price-hint">Precio sugerido <strong>{money(quote.preset.basePrice)}</strong>{getLengthPricingRule(preset.lengthCm)?.additionalLengthCm ? <span>Incluye $4,500 por largo adicional.</span> : null}{preset.axles === 2 ? <span>Incluye $7,000 por el segundo eje.</span> : null}{preset.axles === 3 ? <span>Incluye $14,000 por dos ejes adicionales.</span> : null}</div>
               </>
               )}
             </div>

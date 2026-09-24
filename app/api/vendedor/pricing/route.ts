@@ -32,14 +32,14 @@ function cleanNumberMap(value: unknown, allowedKeys: Set<string>): Record<string
   return result;
 }
 
-function cleanCoefficients(value: unknown): Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number; priceAxle?: number }> {
+function cleanCoefficients(value: unknown): Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number }> {
   if (!value || typeof value !== "object") return {};
-  const result: Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number; priceAxle?: number }> = {};
-  for (const model of ["food", "cargo"]) {
+  const result: Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number }> = {};
+  for (const model of ["cargo"]) {
     const raw = (value as Record<string, unknown>)[model];
     if (!raw || typeof raw !== "object") continue;
-    const entry: { priceBase?: number; priceFloor?: number; priceWall?: number; priceAxle?: number } = {};
-    for (const field of ["priceBase", "priceFloor", "priceWall", "priceAxle"] as const) {
+    const entry: { priceBase?: number; priceFloor?: number; priceWall?: number } = {};
+    for (const field of ["priceBase", "priceFloor", "priceWall"] as const) {
       const num = Number((raw as Record<string, unknown>)[field]);
       if (Number.isFinite(num) && num >= 0) entry[field] = num;
     }

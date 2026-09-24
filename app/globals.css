@@ -184,6 +184,7 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .config-axle-box { padding:12px; border:1px solid var(--line); background:#f9faf9; }
 .dim-price-hint { padding:11px; border:1px solid var(--line); font-size:11px; color:var(--muted); }
 .dim-price-hint strong { margin-left:6px; color:var(--deep); font-size:13px; }
+.dim-price-hint span { display:block; margin-top:5px; color:var(--muted); font-size:9px; line-height:1.4; }
 .preset-facts { display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--line); }
 .preset-facts div { padding:11px; min-width:0; border-bottom:1px solid var(--line); }
 .preset-facts div:nth-child(odd) { border-right:1px solid var(--line); }

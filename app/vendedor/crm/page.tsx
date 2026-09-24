@@ -2,14 +2,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { PipelineBoard } from "../../components/PipelineBoard";
 import { VendorLogoutButton } from "../../components/VendorLogoutButton";
+import { getPricingSettings } from "../../lib/pricingSettingsDb";
+import { DEFAULT_PRICING_SETTINGS } from "../../lib/pricingSettingsShape";
 import { listQuotesForBoard } from "../../lib/quotesDb";
 import { requireVendor } from "../../lib/vendorAuth";
+import { calculateStoredQuoteTotal } from "../../lib/vendorPricing";
 
 export const metadata = { title: "CRM de cotizaciones", robots: { index: false, follow: false } };
 
 export default async function VendedorCrmPage() {
   const vendor = await requireVendor("/vendedor/crm");
-  const quotes = await listQuotesForBoard().catch(() => []);
+  const [quotes, pricingSettings] = await Promise.all([
+    listQuotesForBoard().catch(() => []),
+    getPricingSettings().catch(() => DEFAULT_PRICING_SETTINGS),
+  ]);
 
   return <main className="vendor-panel">
     <header className="nav-shell no-print">
@@ -26,7 +32,7 @@ export default async function VendedorCrmPage() {
         quote_number: quote.quote_number,
         name: quote.name,
         model: quote.model,
-        total: Number(quote.total),
+        total: calculateStoredQuoteTotal(quote, pricingSettings),
         pipeline_stage: quote.pipeline_stage ?? "cotizacion",
         version: quote.version,
       }))} />
