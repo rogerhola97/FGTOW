@@ -5,12 +5,6 @@ import { requireVendor } from "../../lib/vendorAuth";
 
 export const metadata = { title: "Panel de vendedor", robots: { index: false, follow: false } };
 
-const configurators = [
-  { id: "food", label: "FG Food Trailer", description: "Plano completo de distribución de cocina." },
-  { id: "cargo", label: "FG Cargo", description: "Plano completo de aditamentos de carga." },
-  { id: "rzr", label: "FG RZR Sport", description: "Plano completo de aditamentos para UTV." },
-];
-
 export default async function VendedorPanelPage() {
   const vendor = await requireVendor("/vendedor/panel");
 
@@ -37,12 +31,10 @@ export default async function VendedorPanelPage() {
           <strong>Precios y descuentos</strong>
           <span>Ajusta el precio de remolques y aditamentos para tus propias cotizaciones.</span>
         </Link>
-        {configurators.map((item) => (
-          <Link key={item.id} href={`/vendedor/cotizador/${item.id}`} className="vendor-panel-card">
-            <strong>{item.label}</strong>
-            <span>{item.description}</span>
-          </Link>
-        ))}
+        <Link href="/vendedor/cotizador" className="vendor-panel-card">
+          <strong>Cotizadores</strong>
+          <span>Food Trailer, Cargo y RZR Sport — empieza una cotización nueva con el plano interactivo.</span>
+        </Link>
       </div>
     </section>
   </main>;

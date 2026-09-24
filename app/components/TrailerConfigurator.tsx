@@ -434,6 +434,17 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  // Confirmación visual de "se agregó": el botón de esa fila cambia a "✓ Agregado" un momento. Sin
+  // esto no había ninguna señal de que el aditamento se sumó al plano, sobre todo en la lista
+  // simple (Paso 2) donde el plano ni siquiera está a la vista.
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const justAddedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (justAddedTimeoutRef.current) clearTimeout(justAddedTimeoutRef.current); }, []);
+  function flashAdded(id: string) {
+    setJustAddedId(id);
+    if (justAddedTimeoutRef.current) clearTimeout(justAddedTimeoutRef.current);
+    justAddedTimeoutRef.current = setTimeout(() => setJustAddedId(null), 1400);
+  }
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const toggleStep = (step: 1 | 2 | 3) => setActiveStep((current) => (current === step ? 0 : step));
   const [includeIva, setIncludeIva] = useState(initialQuote?.includeIva ?? false);
@@ -586,6 +597,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setItems(working);
     if (lastId) { setSelectedId(lastId); setDoorSelected(false); }
     setSendState("idle"); setQuoteNumber("BORRADOR");
+    flashAdded(typeId);
   }
 
   // Un accesorio fuera del catálogo estándar, con nombre y medida propios (cliente o vendedor).
@@ -601,6 +613,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setSpecialItems((current) => [...current, { id: uid(), name, widthCm, depthCm, price: 0 }]);
     setSpecialForm({ name: "", widthCm: "", depthCm: "" });
     setSendState("idle"); setQuoteNumber("BORRADOR");
+    flashAdded("special");
   }
 
   function removeSpecialItem(id: string) {
@@ -1123,8 +1136,9 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         <div className="equipment-library-wrap">
         <div className="equipment-library">{equipmentList.map((equipment) => {
           const qty = quantities[equipment.id] ?? 1;
+          const justAdded = justAddedId === equipment.id;
           return (
-            <div className="equipment-row" key={equipment.id}>
+            <div className={`equipment-row ${justAdded ? "equipment-row-added" : ""}`} key={equipment.id}>
               <i style={{ background: equipment.color }} />
               <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm</small></span>
               <div className="qty-stepper">
@@ -1132,7 +1146,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 <span>{qty}</span>
                 <button type="button" aria-label="Agregar uno más" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.min(12, (current[equipment.id] ?? 1) + 1) }))}>+</button>
               </div>
-              <button type="button" className="qty-add" onClick={() => addEquipment(equipment.id, qty)}>Agregar {qty > 1 ? `×${qty}` : ""}</button>
+              <button type="button" className={`qty-add ${justAdded ? "qty-add-success" : ""}`} onClick={() => addEquipment(equipment.id, qty)}>{justAdded ? "✓ Agregado" : `Agregar ${qty > 1 ? `×${qty}` : ""}`}</button>
             </div>
           );
         })}</div>
@@ -1151,7 +1165,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
                 <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
                 <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
-                <button type="button" className="qty-add" onClick={addSpecialItem}>Agregar especial</button>
+                <button type="button" className={`qty-add ${justAddedId === "special" ? "qty-add-success" : ""}`} onClick={addSpecialItem}>{justAddedId === "special" ? "✓ Agregado" : "Agregar especial"}</button>
               </div>
               {specialItems.length > 0 && (
                 <ul className="special-item-list">

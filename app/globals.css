@@ -232,8 +232,13 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .qty-stepper button { width:20px; height:20px; padding:0; border:1px solid #c8d1cf; background:#fff; color:var(--deep); font-weight:900; line-height:1; cursor:pointer; }
 .qty-stepper button:hover { background:var(--deep); color:#fff; }
 .qty-stepper span { min-width:14px; text-align:center; font-size:11px; font-weight:800; }
-.qty-add { border:none; padding:8px 10px; background:var(--blue); color:#fff; font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; cursor:pointer; }
+.qty-add { border:none; padding:8px 10px; background:var(--blue); color:#fff; font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; cursor:pointer; transition:background .15s,transform .15s; }
 .qty-add:hover { background:var(--deep); }
+.qty-add-success { background:#1f6b41!important; animation:qty-add-pop .32s ease; }
+.equipment-row-added { animation:equipment-row-flash 1.4s ease; }
+@keyframes qty-add-pop { 0% { transform:scale(1); } 35% { transform:scale(1.12); } 100% { transform:scale(1); } }
+@keyframes equipment-row-flash { 0% { background:#dcf0e2; border-color:#8fcaa3; } 100% { background:#f7f9f8; border-color:transparent; } }
+@media (prefers-reduced-motion:reduce) { .qty-add-success,.equipment-row-added { animation:none; } }
 
 .plan-workspace,.addons-workspace { min-width:0; }
 .addons-list { display:flex; flex-direction:column; gap:6px; padding:18px 20px; }
@@ -416,7 +421,7 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
   .price-base { padding:0 20px; border:0; border-left:1px solid var(--line); border-right:1px solid var(--line); }
   .price-lines { grid-column:1/3; }
   .price-totals { grid-column:3; grid-row:1/3; }
-  .price-panel .estimate-note,.price-panel .config-continue { grid-column:1/-1; }
+  .price-panel .estimate-note,.price-panel .config-continue,.price-panel .vendor-discount-box,.price-panel .vendor-reference-box { grid-column:1/-1; }
 }
 @media (max-width:780px) {
   .configurator-intro { padding:65px 24px 50px; }
@@ -594,9 +599,11 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .vendor-discount-box,.vendor-reference-box { margin-top:16px; padding:16px; background:#f5f7f6; border:1px solid var(--line); display:flex; flex-direction:column; gap:9px; }
 .vendor-discount-label { font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; color:var(--deep); }
 .vendor-discount-row { display:flex; gap:8px; }
-.vendor-discount-row select,.vendor-discount-row input,.vendor-discount-reason { padding:10px; border:1px solid #cbd3d1; background:#fff; font:500 13px Arial; }
-.vendor-discount-row select { flex:0 0 90px; }
-.vendor-discount-row input { flex:1; }
+.vendor-discount-row select,.vendor-discount-row input,.vendor-discount-reason { box-sizing:border-box; height:40px; padding:0 11px; border:1px solid #cbd3d1; border-radius:0; background:#fff; color:var(--deep); font:500 13px Arial; }
+.vendor-discount-row select { flex:0 0 116px; min-width:0; }
+.vendor-discount-row input { flex:1 1 0%; min-width:0; }
+.vendor-discount-row select:focus,.vendor-discount-row input:focus,.vendor-discount-reason:focus { border-color:var(--blue); outline:none; box-shadow:0 0 0 3px rgba(7,82,116,.08); }
+.vendor-discount-reason { width:100%; }
 .vendor-discount-applied { font-size:11px; color:#1f6b41; font-weight:700; }
 .vendor-reference-list { display:flex; flex-direction:column; gap:6px; }
 .vendor-reference-item { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12px; }
