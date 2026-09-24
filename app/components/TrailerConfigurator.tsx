@@ -1439,6 +1439,25 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           ) : (
             <div className="item-editor empty"><span>Selecciona un elemento, la puerta o una ventana en el plano para ajustar su medida o cambiarlo de pared. Todo se desliza pegado a la orilla del remolque.</span></div>
           )}
+
+          {items.length > 0 && (
+            <div className="plan-added-list-wrap">
+              <div className="workspace-head plan-added-list-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{items.length} en el plano</strong></div></div>
+              <ul className="addons-list plan-added-list">
+                {items.map((item, index) => {
+                  const definition = getEquipment(item.typeId);
+                  if (!definition) return null;
+                  return (
+                    <li key={item.instanceId} className={`addons-row ${selectedId === item.instanceId ? "is-selected" : ""}`} onClick={() => { setSelectedId(item.instanceId); setDoorSelected(false); setWindowSelectedId(null); }}>
+                      <i style={{ background: definition.color }} />
+                      <span><strong>{index + 1}. {definition.name}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm · {WALL_LABEL[item.wall]}</small></span>
+                      <button type="button" className="danger-button" onClick={(event) => { event.stopPropagation(); removeItem(item.instanceId); }}>Quitar</button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
         ) : (
         <div className="addons-workspace">

@@ -39,7 +39,7 @@ export default async function VendedorCrmPage({ searchParams }: { searchParams: 
       <p>Busca por nombre, correo o teléfono (o filtra por etapa) para ver dónde va una cotización y moverla a la siguiente etapa.</p>
 
       <form className="vendor-search-form" method="get">
-        <input type="search" name="q" defaultValue={query} placeholder="Nombre, correo o teléfono…" autoFocus />
+        <input type="search" name="q" defaultValue={query} placeholder="Nombre, correo o teléfono…" autoFocus autoComplete="off" />
         <select name="stage" defaultValue={stage ?? ""}>
           <option value="">Todas las etapas</option>
           {STAGE_ORDER.map((value) => <option key={value} value={value}>{STAGE_LABEL[value]}</option>)}

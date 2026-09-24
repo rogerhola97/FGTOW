@@ -54,7 +54,7 @@ export default async function VendedorClientesPage({ searchParams }: { searchPar
       <p>Busca por nombre, correo o teléfono para ver, editar o continuar una cotización que ya se guardó.</p>
 
       <form className="vendor-search-form" method="get">
-        <input type="search" name="q" defaultValue={query} placeholder="Nombre, correo o teléfono…" autoFocus />
+        <input type="search" name="q" defaultValue={query} placeholder="Nombre, correo o teléfono…" autoFocus autoComplete="off" />
         <select name="stage" defaultValue={stage ?? ""}>
           <option value="">Todas las etapas</option>
           {STAGE_ORDER.map((value) => <option key={value} value={value}>{STAGE_LABEL[value]}</option>)}
