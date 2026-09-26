@@ -220,8 +220,11 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .special-item-list li { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border:1px solid var(--line); background:#f7f9f8; }
 .special-item-list strong { display:block; font-size:11px; }
 .special-item-list small { display:block; margin-top:3px; color:var(--muted); font-size:9px; }
-.plan-launch-card { display:grid; grid-template-columns:minmax(0,1fr) 92px; align-items:center; gap:16px; margin:18px 0 14px; padding:17px; border:1px solid #b7c9ce; background:#f3f8f9; }
+.plan-launch-card { display:grid; grid-template-columns:minmax(0,1fr) 92px; align-items:center; gap:16px; margin:18px 20px 14px; padding:17px; border:1px solid #b7c9ce; background:#f3f8f9; }
 .plan-launch-card.is-ready { border-color:#9bc5aa; background:#f0f8f3; }
+.plan-launch-card.is-disabled { border-color:var(--line); background:#f7f8f7; }
+.plan-launch-card.is-disabled .plan-launch-preview { opacity:.42; }
+.plan-launch-card .qty-add:disabled { background:#a9b2b3; cursor:not-allowed; transform:none; }
 .plan-launch-copy>strong,.plan-launch-copy>small { display:block; }
 .plan-launch-status { display:inline-flex; margin-bottom:8px; padding:4px 7px; background:var(--deep); color:var(--gold); font:800 8px monospace; letter-spacing:.08em; text-transform:uppercase; }
 .plan-launch-card.is-ready .plan-launch-status { background:#276844; color:#fff; }

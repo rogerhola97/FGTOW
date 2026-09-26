@@ -1505,27 +1505,6 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         <div className="addons-workspace">
           <div className="addons-equipment-picker">
             {equipmentPicker}
-            {modelId === "food" && (
-              <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
-                <div className={`plan-launch-card ${planReviewed ? "is-ready" : ""}`}>
-                  <div className="plan-launch-copy">
-                    <span className="plan-launch-status">{planReviewed ? "Plano configurado" : "Distribución opcional"}</span>
-                    <strong>{planReviewed ? "Tu distribución quedó guardada" : "¿Quieres elegir la posición exacta?"}</strong>
-                    <small>{planReviewed ? `${items.length} elemento${items.length === 1 ? "" : "s"} en el plano. Puedes volver a editarlo cuando quieras.` : "Abre el diseñador en pantalla completa para acomodar cada accesorio sin complicar esta cotización."}</small>
-                    <button type="button" className="qty-add" onClick={openPlanDesigner}>{planReviewed ? "Editar plano 2D →" : "Diseñar mi plano 2D →"}</button>
-                  </div>
-                  <svg className="plan-launch-preview" viewBox={`${-20} ${-42} ${preset.widthCm + 40} ${preset.lengthCm + 62}`} aria-label="Vista previa de la distribución actual">
-                    <path d={`M ${preset.widthCm / 2 - 30} 0 L ${preset.widthCm / 2} -36 L ${preset.widthCm / 2 + 30} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
-                    <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />
-                    {items.map((item) => {
-                      const definition = getEquipment(item.typeId);
-                      return definition ? <rect key={item.instanceId} x={item.xCm} y={item.yCm} width={item.widthCm} height={item.depthCm} fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /> : null;
-                    })}
-                    <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" />
-                  </svg>
-                </div>
-              </div>
-            )}
           </div>
           <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
           <div className="workspace-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{preset.label}</strong></div></div>
@@ -1545,6 +1524,25 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
             </ul>
           ) : (
             <div className="item-editor empty"><span>Agrega aditamentos desde la lista de arriba para armar tu configuración.</span></div>
+          )}
+          {modelId === "food" && (
+            <div className={`plan-launch-card ${planReviewed ? "is-ready" : ""} ${items.length ? "" : "is-disabled"}`}>
+              <div className="plan-launch-copy">
+                <span className="plan-launch-status">{planReviewed ? "Plano configurado" : items.length ? "Distribución opcional" : "Plano pendiente"}</span>
+                <strong>{planReviewed ? "Tu distribución quedó guardada" : items.length ? "¿Quieres elegir la posición exacta?" : "Agrega accesorios para diseñar el plano"}</strong>
+                <small>{planReviewed ? `${items.length} elemento${items.length === 1 ? "" : "s"} en el plano. Puedes volver a editarlo cuando quieras.` : items.length ? "Abre el diseñador en pantalla completa para acomodar cada accesorio antes de revisar tu cotización." : "El diseñador estará disponible cuando agregues al menos un aditamento."}</small>
+                <button type="button" className="qty-add" onClick={openPlanDesigner} disabled={!items.length}>{planReviewed ? "Editar plano 2D →" : "Diseñar mi plano 2D →"}</button>
+              </div>
+              <svg className="plan-launch-preview" viewBox={`${-20} ${-42} ${preset.widthCm + 40} ${preset.lengthCm + 62}`} aria-label="Vista previa de la distribución actual">
+                <path d={`M ${preset.widthCm / 2 - 30} 0 L ${preset.widthCm / 2} -36 L ${preset.widthCm / 2 + 30} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
+                <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />
+                {items.map((item) => {
+                  const definition = getEquipment(item.typeId);
+                  return definition ? <rect key={item.instanceId} x={item.xCm} y={item.yCm} width={item.widthCm} height={item.depthCm} fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /> : null;
+                })}
+                <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" />
+              </svg>
+            </div>
           )}
           {layoutErrors.length > 0 && (
             <div className="layout-status has-errors"><strong>Ajuste pendiente</strong><span>No caben todos los aditamentos con esta medida, quita alguno.</span></div>
