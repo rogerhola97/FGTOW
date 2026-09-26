@@ -415,7 +415,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   // entonces ve la lista simple de Paso 2 con acomodo automático. El vendedor (plano=true) ya
   // parte siempre del plano, así que estos dos nunca aplican en su flujo.
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [advancedIntroOpen, setAdvancedIntroOpen] = useState(false);
+  const [planReviewed, setPlanReviewed] = useState(false);
+  const planDialogCloseRef = useRef<HTMLButtonElement | null>(null);
   const showPlanEditor = plano || advancedOpen;
   const [items, setItems] = useState<PlacedItem[]>(() => initialQuote
     ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
@@ -449,6 +450,34 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const toggleStep = (step: 1 | 2 | 3) => setActiveStep((current) => (current === step ? 0 : step));
+  function openPlanDesigner() {
+    if (modelId !== "food") return;
+    setActiveStep(2);
+    setAdvancedOpen(true);
+  }
+  function closePlanDesigner() {
+    setAdvancedOpen(false);
+    setPlanReviewed(true);
+  }
+  useEffect(() => {
+    if (plano || !advancedOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAdvancedOpen(false);
+        setPlanReviewed(true);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    requestAnimationFrame(() => planDialogCloseRef.current?.focus());
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleEscape);
+      previousFocus?.focus();
+    };
+  }, [advancedOpen, plano]);
   const [includeIva, setIncludeIva] = useState(initialQuote?.includeIva ?? false);
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
@@ -1213,7 +1242,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
       <p className="configurator-steps-lead no-print">Sigue los pasos para configurar tu remolque.</p>
 
-      <section className={`configurator-shell no-print ${showPlanEditor ? "" : "configurator-shell--simple"}`}>
+      <section className={`configurator-shell no-print ${plano ? "" : "configurator-shell--simple"} ${!plano && advancedOpen ? "plan-designer-open" : ""}`}>
         <aside className="config-sidebar">
           {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", quickModels ? "Elige un modelo o personaliza tus medidas" : "Ancho, largo, altura y ejes")}
           <div className={`step-panel ${activeStep === 1 ? "is-open" : ""}`}>
@@ -1280,13 +1309,23 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         </aside>
 
         {showPlanEditor ? (
-        <div className="plan-workspace">
-          <div className="addons-equipment-picker">{equipmentPicker}</div>
+        <div
+          className={`plan-workspace ${!plano ? "plan-workspace--modal" : ""}`}
+          role={!plano ? "dialog" : undefined}
+          aria-modal={!plano ? true : undefined}
+          aria-labelledby={!plano ? "plan-designer-title" : undefined}
+        >
           {!plano && (
-            <div className="advanced-mode-back">
-              <button type="button" onClick={() => setAdvancedOpen(false)}>← Volver a la configuración simple</button>
+            <div className="plan-designer-head">
+              <div>
+                <span>DISEÑADOR DE DISTRIBUCIÓN</span>
+                <strong id="plan-designer-title">Acomoda tu equipo en el plano</strong>
+                <small>Arrastra cada elemento, revisa las medidas y vuelve cuando la distribución esté lista.</small>
+              </div>
+              <button ref={planDialogCloseRef} type="button" className="button" onClick={closePlanDesigner}>Listo, guardar distribución</button>
             </div>
           )}
+          <div className="addons-equipment-picker">{equipmentPicker}</div>
           <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
 
           {plano && (
@@ -1468,17 +1507,22 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
             {equipmentPicker}
             {modelId === "food" && (
               <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
-                <div className={`special-item-box advanced-mode-box ${advancedIntroOpen ? "is-open" : ""}`}>
-                  <button type="button" className="special-item-toggle" onClick={() => setAdvancedIntroOpen((current) => !current)} aria-expanded={advancedIntroOpen}>
-                    <span><strong>Configuración avanzada</strong><small>Solo si ya sabes exactamente cómo quieres acomodar tu equipo dentro del remolque.</small></span>
-                    <i className="special-item-chevron" aria-hidden="true">⌄</i>
-                  </button>
-                  {advancedIntroOpen && (
-                    <div className="special-item-content">
-                      <p className="advanced-mode-copy">Diseña tu propio plano 2D, igual al que usa nuestro equipo, en vez de la lista de arriba. Ahí acomodas cada aditamento en la pared exacta donde lo quieres, ajustas su tamaño y evitas cruces con la puerta o las ventanas.</p>
-                      <button type="button" className="qty-add" onClick={() => setAdvancedOpen(true)}>Diseñar mi plano 2D →</button>
-                    </div>
-                  )}
+                <div className={`plan-launch-card ${planReviewed ? "is-ready" : ""}`}>
+                  <div className="plan-launch-copy">
+                    <span className="plan-launch-status">{planReviewed ? "Plano configurado" : "Distribución opcional"}</span>
+                    <strong>{planReviewed ? "Tu distribución quedó guardada" : "¿Quieres elegir la posición exacta?"}</strong>
+                    <small>{planReviewed ? `${items.length} elemento${items.length === 1 ? "" : "s"} en el plano. Puedes volver a editarlo cuando quieras.` : "Abre el diseñador en pantalla completa para acomodar cada accesorio sin complicar esta cotización."}</small>
+                    <button type="button" className="qty-add" onClick={openPlanDesigner}>{planReviewed ? "Editar plano 2D →" : "Diseñar mi plano 2D →"}</button>
+                  </div>
+                  <svg className="plan-launch-preview" viewBox={`${-20} ${-42} ${preset.widthCm + 40} ${preset.lengthCm + 62}`} aria-label="Vista previa de la distribución actual">
+                    <path d={`M ${preset.widthCm / 2 - 30} 0 L ${preset.widthCm / 2} -36 L ${preset.widthCm / 2 + 30} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
+                    <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />
+                    {items.map((item) => {
+                      const definition = getEquipment(item.typeId);
+                      return definition ? <rect key={item.instanceId} x={item.xCm} y={item.yCm} width={item.widthCm} height={item.depthCm} fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /> : null;
+                    })}
+                    <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" />
+                  </svg>
                 </div>
               </div>
             )}
