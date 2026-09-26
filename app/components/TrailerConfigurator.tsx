@@ -583,13 +583,20 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       const rect = placeOnWall(current.wall, current.offsetCm, current.widthCm, 1, next.widthCm, next.lengthCm);
       return { wall: current.wall, offsetCm: rect.offset, widthCm: current.widthCm };
     });
-    setWindows((current) => current.map((w) => {
-      const span = wallLengthCm(w.wall, next.widthCm, next.lengthCm);
-      const widthCm = Math.min(w.widthCm, span);
-      const clamped = clamp(w.offsetCm, 0, Math.max(0, span - widthCm));
-      const blockers = door.wall === w.wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
-      return { ...w, widthCm, offsetCm: findFreeOffsetOnWall(clamped, widthCm, span, blockers) };
-    }));
+    if (!plano && modelId === "food") {
+      // En el cotizador público las ventanas son fijas para el cliente, pero no deben conservar
+      // medidas absolutas de otro modelo. Se regeneran con la proporción de la nueva caja y quedan
+      // centradas en cada pared; el cotizador de vendedores conserva sus ajustes manuales.
+      setWindows(defaultWindows(door.wall, next.widthCm, next.lengthCm, next.heightCm));
+    } else {
+      setWindows((current) => current.map((w) => {
+        const span = wallLengthCm(w.wall, next.widthCm, next.lengthCm);
+        const widthCm = Math.min(w.widthCm, span);
+        const clamped = clamp(w.offsetCm, 0, Math.max(0, span - widthCm));
+        const blockers = door.wall === w.wall ? [{ offsetCm: door.offsetCm, widthCm: door.widthCm }] : [];
+        return { ...w, widthCm, offsetCm: findFreeOffsetOnWall(clamped, widthCm, span, blockers) };
+      }));
+    }
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -1338,6 +1345,19 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
               )}
             </div>
           )}
+          {plano && windowsEditMode && windowSelectedId && (() => {
+            const win = windows.find((w) => w.id === windowSelectedId);
+            if (!win) return null;
+            return (
+              <div className="item-editor door-editor window-editor-top">
+                <div><span>VENTANA SELECCIONADA</span><strong>{WALL_LABEL[win.wall]}</strong><small>Ajusta sus medidas o cambia la pared antes de continuar con el plano.</small></div>
+                <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={windowWidthDraft ?? win.widthCm} onChange={(event) => { const raw = event.target.value; setWindowWidthDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "width", parsed); }} onBlur={() => setWindowWidthDraft(null)} /><b>cm</b></label>
+                <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={windowHeightDraft ?? win.heightCm} onChange={(event) => { const raw = event.target.value; setWindowHeightDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "height", parsed); }} onBlur={() => setWindowHeightDraft(null)} /><b>cm</b></label>
+                <button type="button" onClick={() => cycleWindowWall(win.id)}>Cambiar de pared ↻</button>
+                <button type="button" className="danger-button" onClick={() => removeWindow(win.id)}>Quitar ventana</button>
+              </div>
+            );
+          })()}
           <div className="plan-scroll">
             <div className="plan-row">
               <div className="ruler-strip-col">
@@ -1356,7 +1376,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 <svg className="trailer-plan-margin" viewBox={`${-30} ${-PLAN_TOP_MARGIN_CM} ${preset.widthCm + 60} ${PLAN_TOP_MARGIN_CM}`} preserveAspectRatio="none" style={planTopMarginPx ? { height: planTopMarginPx } : undefined} aria-hidden="true">
                   <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
                   <circle cx={preset.widthCm / 2} cy="-66" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" />
-                  <text x={preset.widthCm / 2} y="-17" textAnchor="middle" className="plan-label">FRENTE / TIRÓN</text>
+                  <text x={preset.widthCm / 2} y="-29" textAnchor="middle" className="plan-label">
+                    <tspan x={preset.widthCm / 2}>FRENTE</tspan>
+                    <tspan x={preset.widthCm / 2} dy="12">TIRÓN</tspan>
+                  </text>
                   <g className="ruler ruler-top">
                     <line x1={0} y1={-80} x2={preset.widthCm} y2={-80} className="ruler-line" />
                     {ticksFor(preset.widthCm, 10).map((v) => <line key={`tw-${v}`} x1={v} y1={-80} x2={v} y2={-80 - (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
@@ -1465,19 +1488,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
               <button type="button" onClick={cycleDoorWall}>Cambiar de pared ↻</button>
             </div>
           ) : windowSelectedId ? (
-            (() => {
-              const win = windows.find((w) => w.id === windowSelectedId);
-              if (!win) return null;
-              return (
-                <div className="item-editor door-editor">
-                  <div><span>VENTANA</span><strong>{WALL_LABEL[win.wall]}</strong><small>Incluida sin costo, solo cambia el dibujo del plano. No puede sobreponerse a la puerta ni a otra ventana.</small></div>
-                  <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={windowWidthDraft ?? win.widthCm} onChange={(event) => { const raw = event.target.value; setWindowWidthDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "width", parsed); }} onBlur={() => setWindowWidthDraft(null)} /><b>cm</b></label>
-                  <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={windowHeightDraft ?? win.heightCm} onChange={(event) => { const raw = event.target.value; setWindowHeightDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "height", parsed); }} onBlur={() => setWindowHeightDraft(null)} /><b>cm</b></label>
-                  <button type="button" onClick={() => cycleWindowWall(win.id)}>Cambiar de pared ↻</button>
-                  <button type="button" className="danger-button" onClick={() => removeWindow(win.id)}>Quitar ventana</button>
-                </div>
-              );
-            })()
+            null
           ) : (
             <div className="item-editor empty"><span>Selecciona un elemento, la puerta o una ventana en el plano para ajustar su medida o cambiarlo de pared. Todo se desliza pegado a la orilla del remolque.</span></div>
           )}

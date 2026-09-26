@@ -293,6 +293,7 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .plan-legend i.door { width:11px; height:4px; border-radius:0; background:#d6a229; }
 .window-controls { display:flex; flex-wrap:wrap; gap:8px; padding:14px 20px 0; }
 .window-controls .qty-add.is-active { background:var(--deep); }
+.window-editor-top { margin:14px 20px 0; border:1px solid #b7cdd4; background:#f3f8f9; }
 .plan-scroll { min-height:620px; padding:20px; display:flex; align-items:flex-start; justify-content:center; overflow:auto; background:#f4f7f6; }
 .plan-row { display:flex; align-items:flex-start; justify-content:center; width:100%; max-width:820px; }
 .ruler-strip-col { display:flex; flex-direction:column; flex:0 0 26px; width:26px; }
@@ -341,6 +342,7 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .item-editor>button.danger-button:hover { background:#9a231c; color:#fff; }
 .item-editor.empty { display:block; min-height:75px; color:var(--muted); font-size:11px; line-height:1.5; }
 .item-editor.door-editor { grid-template-columns:minmax(180px,1fr) 95px auto; }
+.item-editor.window-editor-top { grid-template-columns:minmax(180px,1fr) 95px 95px auto auto; }
 
 .price-panel { position:sticky; top:106px; }
 .price-base { padding:20px 0; border-bottom:1px solid var(--line); }
@@ -445,6 +447,7 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
   .configurator-shell--simple { grid-template-columns:360px minmax(280px,440px) 295px; }
   .config-sidebar,.price-panel { padding:19px; }
   .item-editor { grid-template-columns:1fr 85px 85px; }
+  .item-editor.window-editor-top { grid-template-columns:1fr 85px 85px; }
   .item-editor>button { grid-row:2; }
 }
 @media (max-width:1080px) {
@@ -496,6 +499,7 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
   .ruler-strip-col { flex-basis:22px; width:22px; }
   .workspace-head { align-items:flex-start; flex-direction:column; gap:10px; }
   .item-editor { grid-template-columns:1fr 1fr; }
+  .item-editor.window-editor-top { grid-template-columns:1fr 1fr; }
   .item-editor>div { grid-column:1/-1; }
   .layout-status { align-items:flex-start; flex-direction:column; }
   .layout-status span { text-align:left; }

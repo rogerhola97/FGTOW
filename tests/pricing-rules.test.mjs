@@ -7,6 +7,7 @@ import {
   SECOND_AXLE_SURCHARGE,
   TRAILER_PRESETS,
   buildCustomPreset,
+  defaultWindows,
   getCustomLengthOptions,
   getReferenceTwoAxlePrice,
   getSuggestedOneAxlePrice,
@@ -77,4 +78,30 @@ test("links the matching RZR double axle preset to the one-axle base", () => {
   const oneAxle = TRAILER_PRESETS.find((preset) => preset.id === "rz-194-360");
   const twoAxles = TRAILER_PRESETS.find((preset) => preset.id === "rz-194-360-2e");
   assert.equal(twoAxles?.basePrice, (oneAxle?.basePrice ?? 0) + SECOND_AXLE_SURCHARGE);
+});
+
+test("sizes and centers public food-trailer windows proportionally", () => {
+  const compact = defaultWindows("back", 200, 300, 210);
+  const compactLeft = compact.find((window) => window.wall === "left");
+  const compactFront = compact.find((window) => window.wall === "front");
+  assert.deepEqual(
+    { widthCm: compactLeft?.widthCm, heightCm: compactLeft?.heightCm, offsetCm: compactLeft?.offsetCm },
+    { widthCm: 135, heightCm: 74, offsetCm: 82.5 },
+  );
+  assert.deepEqual(
+    { widthCm: compactFront?.widthCm, heightCm: compactFront?.heightCm, offsetCm: compactFront?.offsetCm },
+    { widthCm: 100, heightCm: 59, offsetCm: 50 },
+  );
+
+  const long = defaultWindows("back", 220, 600, 240);
+  const longLeft = long.find((window) => window.wall === "left");
+  const longFront = long.find((window) => window.wall === "front");
+  assert.deepEqual(
+    { widthCm: longLeft?.widthCm, heightCm: longLeft?.heightCm, offsetCm: longLeft?.offsetCm },
+    { widthCm: 270, heightCm: 84, offsetCm: 165 },
+  );
+  assert.deepEqual(
+    { widthCm: longFront?.widthCm, heightCm: longFront?.heightCm, offsetCm: longFront?.offsetCm },
+    { widthCm: 110, heightCm: 67, offsetCm: 55 },
+  );
 });
