@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { EquipmentDefinition, ModelId } from "../lib/quoteCatalog";
+import { EquipmentDefinition, MODEL_META, ModelId } from "../lib/quoteCatalog";
 import { PricingSettings } from "../lib/pricingSettingsShape";
 
 function numOrBlank(value: number | undefined) {
@@ -70,7 +70,7 @@ export function PricingSettingsForm({ initialSettings, equipment }: {
 
       {(["food", "cargo", "rzr"] as ModelId[]).map((model) => (
         <div className="pricing-settings-section" key={model}>
-          <h2>{modelMeta[model].shortLabel} · aditamentos</h2>
+          <h2>{MODEL_META[model].shortLabel} · aditamentos</h2>
           <div className="pricing-settings-equipment-grid">
             {equipmentByModel[model].map((item) => (
               <label key={item.id}>{item.name}<input type="number" min={0} placeholder="tarifa plana" value={equipmentPrices[item.id] ?? ""} onChange={(event) => setEquipmentPrices((current) => ({ ...current, [item.id]: event.target.value }))} /></label>

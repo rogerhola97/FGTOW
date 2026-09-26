@@ -363,7 +363,7 @@ function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLe
 
 function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
   if (modelId === "cargo" || modelId === "rzr") return [];
-  return buildStarterLayout(["plancha", "bano-maria", "freidora", "parrilla", "tarja"], trailerWidthCm, trailerLengthCm, door);
+  return buildStarterLayout(["plancha", "bano-maria"], trailerWidthCm, trailerLengthCm, door);
 }
 
 function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig) {
