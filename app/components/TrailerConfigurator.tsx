@@ -425,6 +425,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   // last committed number on every keystroke; null means "show the committed value as usual".
   const [alongDraft, setAlongDraft] = useState<string | null>(null);
   const [depthDraft, setDepthDraft] = useState<string | null>(null);
+  const [windowWidthDraft, setWindowWidthDraft] = useState<string | null>(null);
+  const [windowHeightDraft, setWindowHeightDraft] = useState<string | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
   // Las ventanas son fijas por default en los dos cotizadores (cliente y vendedor). Solo el
   // vendedor tiene el botón "Ajustar ventanas" para activar temporalmente el arrastre/redimensión;
@@ -482,6 +484,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }, [sendState]);
 
   useEffect(() => { setAlongDraft(null); setDepthDraft(null); }, [selectedId]);
+  useEffect(() => { setWindowWidthDraft(null); setWindowHeightDraft(null); }, [windowSelectedId]);
 
   useEffect(() => {
     if (!isVendor) return;
@@ -1429,8 +1432,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
               return (
                 <div className="item-editor door-editor">
                   <div><span>VENTANA</span><strong>{WALL_LABEL[win.wall]}</strong><small>Incluida sin costo, solo cambia el dibujo del plano. No puede sobreponerse a la puerta ni a otra ventana.</small></div>
-                  <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={win.widthCm} onChange={(event) => updateWindowSize(win.id, "width", Number(event.target.value))} /><b>cm</b></label>
-                  <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={win.heightCm} onChange={(event) => updateWindowSize(win.id, "height", Number(event.target.value))} /><b>cm</b></label>
+                  <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={windowWidthDraft ?? win.widthCm} onChange={(event) => { const raw = event.target.value; setWindowWidthDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "width", parsed); }} onBlur={() => setWindowWidthDraft(null)} /><b>cm</b></label>
+                  <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={windowHeightDraft ?? win.heightCm} onChange={(event) => { const raw = event.target.value; setWindowHeightDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "height", parsed); }} onBlur={() => setWindowHeightDraft(null)} /><b>cm</b></label>
                   <button type="button" onClick={() => cycleWindowWall(win.id)}>Cambiar de pared ↻</button>
                   <button type="button" className="danger-button" onClick={() => removeWindow(win.id)}>Quitar ventana</button>
                 </div>
