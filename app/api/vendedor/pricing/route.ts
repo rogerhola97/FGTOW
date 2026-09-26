@@ -1,10 +1,9 @@
-import { EQUIPMENT, TRAILER_PRESETS } from "../../../lib/quoteCatalog";
+import { EQUIPMENT } from "../../../lib/quoteCatalog";
 import { getPricingSettings, updatePricingSettings } from "../../../lib/pricingSettingsDb";
 import { getVendor } from "../../../lib/vendorAuth";
 
-// Lee/edita la fila única (id=1) de public.vendor_pricing_settings: la lista de precios estándar
-// que aplica a toda cotización creada o editada desde el panel de vendedor (nunca al cotizador
-// público, que sigue usando quoteCatalog.ts sin tocar).
+// Lee/edita la fila única (id=1) de public.vendor_pricing_settings. La matriz del remolque ya es
+// común para cliente y vendedor; esta ruta conserva solamente tarifas de aditamentos.
 export async function GET() {
   const vendor = await getVendor();
   if (!vendor) return Response.json({ error: "No autorizado." }, { status: 401 });
@@ -19,7 +18,6 @@ export async function GET() {
 }
 
 const validEquipmentIds = new Set(EQUIPMENT.map((item) => item.id));
-const validPresetIds = new Set(TRAILER_PRESETS.map((preset) => preset.id));
 
 function cleanNumberMap(value: unknown, allowedKeys: Set<string>): Record<string, number> {
   if (!value || typeof value !== "object") return {};
@@ -32,40 +30,20 @@ function cleanNumberMap(value: unknown, allowedKeys: Set<string>): Record<string
   return result;
 }
 
-function cleanCoefficients(value: unknown): Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number }> {
-  if (!value || typeof value !== "object") return {};
-  const result: Record<string, { priceBase?: number; priceFloor?: number; priceWall?: number }> = {};
-  for (const model of ["cargo"]) {
-    const raw = (value as Record<string, unknown>)[model];
-    if (!raw || typeof raw !== "object") continue;
-    const entry: { priceBase?: number; priceFloor?: number; priceWall?: number } = {};
-    for (const field of ["priceBase", "priceFloor", "priceWall"] as const) {
-      const num = Number((raw as Record<string, unknown>)[field]);
-      if (Number.isFinite(num) && num >= 0) entry[field] = num;
-    }
-    if (Object.keys(entry).length) result[model] = entry;
-  }
-  return result;
-}
-
 export async function PUT(request: Request) {
   const vendor = await getVendor();
   if (!vendor) return Response.json({ error: "No autorizado." }, { status: 401 });
 
   try {
     const payload = (await request.json()) as Record<string, unknown>;
-    const includedEquipmentCount = Number(payload.included_equipment_count);
     const extraEquipmentPrice = Number(payload.extra_equipment_price);
-    if (!Number.isFinite(includedEquipmentCount) || includedEquipmentCount < 0 || !Number.isFinite(extraEquipmentPrice) || extraEquipmentPrice < 0) {
-      return Response.json({ error: "La tarifa plana y el número de incluidos deben ser números válidos." }, { status: 400 });
+    if (!Number.isFinite(extraEquipmentPrice) || extraEquipmentPrice < 0) {
+      return Response.json({ error: "La tarifa de aditamentos debe ser un número válido." }, { status: 400 });
     }
 
     const result = await updatePricingSettings({
-      included_equipment_count: Math.round(includedEquipmentCount),
       extra_equipment_price: Math.round(extraEquipmentPrice),
       equipment_price_overrides: cleanNumberMap(payload.equipment_price_overrides, validEquipmentIds),
-      trailer_base_price_overrides: cleanNumberMap(payload.trailer_base_price_overrides, validPresetIds),
-      custom_coefficient_overrides: cleanCoefficients(payload.custom_coefficient_overrides),
     }, vendor.email);
     if (!result.ok) throw new Error("No fue posible guardar los precios.");
 

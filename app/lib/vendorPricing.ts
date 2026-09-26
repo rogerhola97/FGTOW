@@ -1,43 +1,22 @@
-// Cálculo de cotización con la lista de precios estándar editable del vendedor (ver
-// app/vendedor/precios) y el descuento de la cotización — usado ÚNICAMENTE por las rutas bajo
-// /api/vendedor/**. El cotizador público (app/api/quote/route.ts) sigue usando calculateQuote() de
-// quoteCatalog.ts sin tocar, así que sus precios nunca cambian por esto.
+// Cálculo de cotización para vendedores. El precio del remolque y la cantidad incluida vienen de
+// la misma matriz canónica del cotizador público; aquí sólo se aplican tarifas de aditamentos y el
+// descuento propio de la cotización.
 import {
-  EXTRA_EQUIPMENT_PRICE,
-  INCLUDED_EQUIPMENT_COUNT,
   PlacedEquipment,
-  SECOND_AXLE_SURCHARGE,
-  TRAILER_PRESETS,
   TrailerPreset,
-  buildCustomPreset,
   getEquipment,
-  parseCustomPresetId,
+  getPreset,
 } from "./quoteCatalog";
 import { PricingSettings } from "./pricingSettingsShape";
 
 export type VendorDiscount = { type: "percent" | "amount"; value: number; reason: string | null } | null;
 
 export function getPresetWithSettings(id: string, settings: PricingSettings): TrailerPreset {
-  const includedEquipment = Number.isFinite(settings.included_equipment_count) ? settings.included_equipment_count : INCLUDED_EQUIPMENT_COUNT;
-  const fixed = TRAILER_PRESETS.find((preset) => preset.id === id);
-  if (fixed) {
-    const matchingOneAxle = fixed.axles === 2
-      ? TRAILER_PRESETS.find((preset) => preset.model === fixed.model && preset.widthCm === fixed.widthCm && preset.lengthCm === fixed.lengthCm && preset.axles === 1)
-      : undefined;
-    if (matchingOneAxle) {
-      const oneAxleOverride = settings.trailer_base_price_overrides[matchingOneAxle.id];
-      const oneAxlePrice = typeof oneAxleOverride === "number" && Number.isFinite(oneAxleOverride) && oneAxleOverride >= 0
-        ? oneAxleOverride
-        : matchingOneAxle.basePrice;
-      return { ...fixed, basePrice: oneAxlePrice + SECOND_AXLE_SURCHARGE, includedEquipment };
-    }
-    const override = settings.trailer_base_price_overrides[id];
-    const basePrice = typeof override === "number" && Number.isFinite(override) && override >= 0 ? override : fixed.basePrice;
-    return { ...fixed, basePrice, includedEquipment };
-  }
-  const parsed = parseCustomPresetId(id);
-  if (parsed) return { ...buildCustomPreset(parsed.model, parsed.widthCm, parsed.lengthCm, parsed.heightCm, parsed.axles, parsed.model === "cargo" ? settings.custom_coefficient_overrides.cargo : undefined), includedEquipment };
-  return TRAILER_PRESETS[0];
+  void settings;
+  // El vendedor usa exactamente la misma matriz y las mismas restricciones que el cliente.
+  // Los ajustes persistidos antiguos se conservan en Supabase por compatibilidad, pero ya no
+  // pueden crear otra fuente de precio base ni otra cantidad global de aditamentos incluidos.
+  return getPreset(id);
 }
 
 function equipmentPrice(typeId: string, settings: PricingSettings) {
@@ -55,7 +34,7 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
   discount: VendorDiscount = null,
 ) {
   const preset = getPresetWithSettings(presetId, settings);
-  const includedCount = Number.isFinite(settings.included_equipment_count) ? settings.included_equipment_count : INCLUDED_EQUIPMENT_COUNT;
+  const includedCount = preset.includedEquipment;
   let includedUsed = 0;
   let extras = 0;
   const lines = items.flatMap((item) => {
@@ -70,7 +49,7 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
   const specialLines = specialItems.map((entry) => {
     const included = includedUsed < includedCount;
     if (included) includedUsed += 1;
-    const linePrice = included ? 0 : EXTRA_EQUIPMENT_PRICE;
+    const linePrice = included ? 0 : settings.extra_equipment_price;
     extras += linePrice;
     return { ...entry, linePrice, included };
   });
@@ -96,20 +75,11 @@ type StoredQuoteForPricing = {
   total: number;
 };
 
-// Las listas de cotizaciones guardadas muestran el importe con las reglas vigentes. El valor
-// histórico permanece intacto en la base hasta que el vendedor guarda esa cotización otra vez.
+// Las listas de cotizaciones guardadas muestran el importe histórico persistido. El editor puede
+// recalcular con la matriz vigente, pero el registro sólo cambia cuando el vendedor vuelve a guardar.
 export function calculateStoredQuoteTotal(quote: StoredQuoteForPricing, settings: PricingSettings) {
-  try {
-    const configuration = quote.configuration && typeof quote.configuration === "object"
-      ? quote.configuration as { items?: PlacedEquipment[]; specialItems?: { name: string; widthCm: number; depthCm: number }[] }
-      : {};
-    const items = Array.isArray(configuration.items) ? configuration.items : [];
-    const specialItems = Array.isArray(configuration.specialItems) ? configuration.specialItems : [];
-    const discount: VendorDiscount = quote.discount_type && Number(quote.discount_value) > 0
-      ? { type: quote.discount_type, value: Number(quote.discount_value), reason: quote.discount_reason ?? null }
-      : null;
-    return calculateVendorQuote(quote.trailer_preset, items, specialItems, Boolean(quote.include_iva), settings, discount).total;
-  } catch {
-    return Number(quote.total);
-  }
+  void settings;
+  // Una cotización guardada conserva el total que fue aceptado en ese momento. Al abrirla en el
+  // editor se vuelve a calcular con la matriz vigente y solo cambia al guardar nuevamente.
+  return Number(quote.total);
 }

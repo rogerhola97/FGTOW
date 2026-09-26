@@ -215,19 +215,19 @@ export function rectsOverlap(a: { xCm: number; yCm: number; widthCm: number; dep
   return a.xCm < b.xCm + b.widthCm && a.xCm + a.widthCm > b.xCm && a.yCm < b.yCm + b.depthCm && a.yCm + a.depthCm > b.yCm;
 }
 
-// Regla de precios de aditamentos, igual en los tres modelos y en todos los tamaños: los primeros
-// 5 que se agreguen al plano (o como aditamento especial) van sin costo; a partir del 6º, cada uno
-// cuesta este importe fijo sin importar de cuál se trate.
+// Tarifa de los aditamentos que exceden la cantidad incluida por el tamaño cotizado.
+// INCLUDED_EQUIPMENT_COUNT queda como fallback de compatibilidad; cada preset resuelto lleva su
+// cantidad real (2 para referencias menores de 3 m y 5 desde 3 m).
 export const INCLUDED_EQUIPMENT_COUNT = 5;
 export const EXTRA_EQUIPMENT_PRICE = 2500;
 
-// Reglas comerciales de la lista "PRECIOS SUGERIDOS DE REMOLQUES": el segundo eje y
-// cualquier extensión de 20, 30 o 40 cm sobre la medida estándar se cobran una sola vez.
-// Un incremento de 50 cm cae en la siguiente medida estándar y usa el precio propio de esa fila.
+// Valores de compatibilidad para filas que no fueron publicadas en el PDF. No se usan para mezclar
+// filas existentes de uno y dos ejes: cuando el PDF trae ambos precios, cada uno se conserva.
 export const SECOND_AXLE_SURCHARGE = 7000;
 export const ADDITIONAL_LENGTH_SURCHARGE = 4500;
-export const SUGGESTED_LONG_LENGTH_INCREMENT = 5000;
-export const SUGGESTED_WIDTH_INCREMENT = 4000;
+export const CUSTOM_NEXT_STANDARD_GAP = 1500;
+export const PRICE_ROUNDING_STEP = 500;
+export const PRICING_VERSION = 4;
 
 export type TrailerPriceSeries = "price" | "suggested";
 export type TrailerPriceReferenceRow = {
@@ -273,21 +273,23 @@ export function getReferenceOneAxlePrice(widthCm: number, lengthCm: number, seri
 }
 
 export function getReferenceTwoAxlePrice(widthCm: number, lengthCm: number, series: TrailerPriceSeries = "price") {
+  const row = PDF_TRAILER_PRICE_REFERENCE.find((candidate) => candidate.widthCm === widthCm && candidate.lengthCm === lengthCm);
+  const exact = series === "price" ? row?.twoAxlePriceInPdf : row?.twoAxleSuggestedPriceInPdf;
+  if (exact != null) return exact;
   const oneAxle = getReferenceOneAxlePrice(widthCm, lengthCm, series);
   return oneAxle == null ? null : oneAxle + SECOND_AXLE_SURCHARGE;
 }
 
-// Official Food Trailer list. Through 5.50 m it uses the PDF suggested values (or the one-axle
-// base derived from its two-axle row). From 6.00 m onward, where the PDF series is incomplete,
-// growth is stabilized at $5,000 per 50 cm and $4,000 for the additional 20 cm of width.
+// Serie completa de referencias de un eje aprobada para Food Trailer. Los valores que no aparecen
+// como un eje en el PDF se congelan aquí de forma explícita; ya no se extrapolan durante la venta.
+const FOOD_ONE_AXLE_STANDARD_PRICES: Record<number, Record<number, number>> = {
+  180: { 200: 50500, 250: 54500 },
+  200: { 200: 56000, 250: 61500, 300: 69500, 350: 74500, 400: 80500, 450: 84000, 500: 99000, 550: 104500, 600: 106500, 650: 111500, 700: 116500, 750: 121500, 800: 126500, 850: 131500, 900: 136500 },
+  220: { 200: 60500, 250: 65000, 300: 73000, 350: 77000, 400: 84000, 450: 89000, 500: 103500, 550: 108000, 600: 110500, 650: 115500, 700: 120500, 750: 125500, 800: 130500, 850: 135500, 900: 140500 },
+};
+
 export function getSuggestedOneAxlePrice(widthCm: number, standardLengthCm: number) {
-  const exact = getReferenceOneAxlePrice(widthCm, standardLengthCm, "suggested");
-  if (exact != null) return exact;
-  if (![200, 220].includes(widthCm) || standardLengthCm < 600 || standardLengthCm % CUSTOM_STANDARD_LENGTH_STEP_CM !== 0) return null;
-  const baseAtSixMeters = widthCm === 220
-    ? 117500 - SECOND_AXLE_SURCHARGE
-    : 117500 - SECOND_AXLE_SURCHARGE - SUGGESTED_WIDTH_INCREMENT;
-  return baseAtSixMeters + ((standardLengthCm - 600) / CUSTOM_STANDARD_LENGTH_STEP_CM) * SUGGESTED_LONG_LENGTH_INCREMENT;
+  return FOOD_ONE_AXLE_STANDARD_PRICES[widthCm]?.[standardLengthCm] ?? null;
 }
 
 export type TrailerPreset = {
@@ -334,10 +336,10 @@ export type PlacedEquipment = {
 };
 
 export const TRAILER_PRESETS: TrailerPreset[] = [
-  { id: "rz-150-305", model: "rzr", label: "1.50 × 3.05 m · 1 eje", widthCm: 150, lengthCm: 305, heightCm: 55, axles: 1, basePrice: 41900, includedEquipment: INCLUDED_EQUIPMENT_COUNT, estimatedWeightKg: 400, estimatedCapacityKg: 900 },
-  { id: "rz-194-360", model: "rzr", label: "1.94 × 3.60 m · 1 eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 1, basePrice: 49900, includedEquipment: INCLUDED_EQUIPMENT_COUNT, estimatedWeightKg: 480, estimatedCapacityKg: 1300 },
-  { id: "rz-194-360-2e", model: "rzr", label: "1.94 × 3.60 m · doble eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 2, basePrice: 56900, includedEquipment: INCLUDED_EQUIPMENT_COUNT, estimatedWeightKg: 560, estimatedCapacityKg: 1900 },
-  { id: "rz-207-420-2e", model: "rzr", label: "2.07 × 4.20 m · doble eje", widthCm: 207, lengthCm: 420, heightCm: 55, axles: 2, basePrice: 69900, includedEquipment: INCLUDED_EQUIPMENT_COUNT, estimatedWeightKg: 650, estimatedCapacityKg: 2600 },
+  { id: "rz-150-305", model: "rzr", label: "1.50 × 3.05 m · 1 eje", widthCm: 150, lengthCm: 305, heightCm: 55, axles: 1, basePrice: 42000, includedEquipment: 5, estimatedWeightKg: 400, estimatedCapacityKg: 900 },
+  { id: "rz-194-360", model: "rzr", label: "1.94 × 3.60 m · 1 eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 1, basePrice: 50000, includedEquipment: 5, estimatedWeightKg: 480, estimatedCapacityKg: 1300 },
+  { id: "rz-194-360-2e", model: "rzr", label: "1.94 × 3.60 m · doble eje", widthCm: 194, lengthCm: 360, heightCm: 55, axles: 2, basePrice: 57000, includedEquipment: 5, estimatedWeightKg: 560, estimatedCapacityKg: 1900 },
+  { id: "rz-207-420-2e", model: "rzr", label: "2.07 × 4.20 m · doble eje", widthCm: 207, lengthCm: 420, heightCm: 55, axles: 2, basePrice: 70000, includedEquipment: 5, estimatedWeightKg: 650, estimatedCapacityKg: 2600 },
 ];
 
 export const EQUIPMENT: EquipmentDefinition[] = [
@@ -457,11 +459,28 @@ export function getCustomLengthOptions(): number[] {
 }
 
 export function getLengthPricingRule(lengthCm: number) {
-  if (lengthCm % CUSTOM_STANDARD_LENGTH_STEP_CM === 0) return { standardLengthCm: lengthCm, additionalLengthCm: 0, surcharge: 0 };
-  const standardLengthCm = lengthCm - (lengthCm % CUSTOM_STANDARD_LENGTH_STEP_CM);
-  const additionalLengthCm = lengthCm - standardLengthCm;
+  if (lengthCm % CUSTOM_STANDARD_LENGTH_STEP_CM === 0) {
+    return {
+      standardLengthCm: lengthCm,
+      lowerStandardLengthCm: lengthCm,
+      upperStandardLengthCm: lengthCm,
+      pricedAsLengthCm: lengthCm,
+      additionalLengthCm: 0,
+      surcharge: 0,
+    };
+  }
+  const lowerStandardLengthCm = lengthCm - (lengthCm % CUSTOM_STANDARD_LENGTH_STEP_CM);
+  const upperStandardLengthCm = lowerStandardLengthCm + CUSTOM_STANDARD_LENGTH_STEP_CM;
+  const additionalLengthCm = lengthCm - lowerStandardLengthCm;
   if (!(CUSTOM_LENGTH_EXTENSION_OPTIONS_CM as readonly number[]).includes(additionalLengthCm)) return null;
-  return { standardLengthCm, additionalLengthCm, surcharge: ADDITIONAL_LENGTH_SURCHARGE };
+  return {
+    standardLengthCm: lowerStandardLengthCm,
+    lowerStandardLengthCm,
+    upperStandardLengthCm,
+    pricedAsLengthCm: additionalLengthCm >= 40 ? upperStandardLengthCm : lowerStandardLengthCm,
+    additionalLengthCm,
+    surcharge: additionalLengthCm >= 40 ? 0 : ADDITIONAL_LENGTH_SURCHARGE,
+  };
 }
 
 export function getCustomHeightOptions(lengthCm: number): number[] {
@@ -498,13 +517,15 @@ function pickNearestAllowed(value: number, allowed: number[]) {
 function sanitizeCustomDims(lengthCmRaw: number, widthCmRaw: number, heightCmRaw: number, axlesRaw: number) {
   const lengthCm = pickNearestAllowed(lengthCmRaw, getCustomLengthOptions());
   const widthCm = pickNearestAllowed(widthCmRaw, getAllowedWidths(lengthCm));
+  // Las restricciones técnicas siempre usan el largo real, no el largo empleado como referencia
+  // comercial. Así 4.90 m conserva los 2 ejes obligatorios y 6.90 m conserva los 3 ejes.
   const heightCm = clampToStep(heightCmRaw, CUSTOM_HEIGHT_MIN_CM, getMaxHeightCm(lengthCm), CUSTOM_HEIGHT_STEP_CM);
   const axles = pickNearestAllowed(axlesRaw, getAllowedAxles(lengthCm)) as 1 | 2 | 3;
   return { widthCm, lengthCm, heightCm, axles };
 }
 
-// Food usa la lista sugerida; estos coeficientes solo completan alturas no incluidas en el PDF y
-// calculan el peso. Cargo conserva su fórmula propia. Todo eje adicional cuesta siempre $7,000.
+// Estos coeficientes se conservan para peso/capacidad y para transformar la antigua fórmula de
+// altura en un modificador único. El precio estándar de Cargo ya no se calcula con ellos.
 export const CUSTOM_PRICE_COEFFICIENTS: Record<CustomModelId, { priceBase: number; priceFloor: number; priceWall: number; weightBase: number; weightFloor: number; weightWall: number; weightAxle: number }> = {
   food: { priceBase: 32000, priceFloor: 3600, priceWall: 900, weightBase: 545, weightFloor: 14.3, weightWall: 3.6, weightAxle: 150 },
   cargo: { priceBase: 16000, priceFloor: 5600, priceWall: 220, weightBase: 247, weightFloor: 26.8, weightWall: 1.1, weightAxle: 124 },
@@ -512,31 +533,197 @@ export const CUSTOM_PRICE_COEFFICIENTS: Record<CustomModelId, { priceBase: numbe
 
 const CUSTOM_CAPACITY_FACTOR: Record<1 | 2 | 3, number> = { 1: 2.2, 2: 3.2, 3: 4.0 };
 
-// coeffOverride solo ajusta la fórmula de Cargo desde el panel de vendedor. Food conserva la lista
-// sugerida como fuente canónica tanto en el cotizador público como en el de vendedores.
+// Precios de un eje de Cargo congelados a partir de la fórmula anterior y redondeados a $500.
+// A partir de esta versión son datos estándar, no resultados de una fórmula durante la cotización.
+const CARGO_ONE_AXLE_STANDARD_PRICES: Record<number, Record<number, number>> = {
+  180: { 200: 39500, 250: 45000 },
+  200: { 200: 42000, 250: 48000, 300: 54000, 350: 60500, 400: 66500, 450: 72500, 500: 78500, 550: 84500, 600: 90500, 650: 96500, 700: 102500, 750: 109000, 800: 115000, 850: 121000, 900: 127000 },
+  220: { 200: 44500, 250: 51000, 300: 58000, 350: 64500, 400: 71000, 450: 77500, 500: 84500, 550: 91000, 600: 97500, 650: 104000, 700: 110500, 750: 117500, 800: 124000, 850: 130500, 900: 137000 },
+};
+
+export type StandardTrailerPrice = {
+  model: ModelId;
+  widthCm: number;
+  lengthCm: number;
+  heightCm: number;
+  axles: 1 | 2 | 3;
+  standardPrice: number;
+  includedEquipment: number;
+  available: boolean;
+  source: "pdf-suggested" | "derived-approved" | "cargo-frozen" | "fixed";
+};
+
+export function roundPrice(value: number) {
+  return Math.round(value / PRICE_ROUNDING_STEP) * PRICE_ROUNDING_STEP;
+}
+
+export function getIncludedEquipmentCount(pricedAsLengthCm: number) {
+  return pricedAsLengthCm < 300 ? 2 : 5;
+}
+
+function hasPdfSuggestedPrice(widthCm: number, lengthCm: number, axles: number) {
+  const row = PDF_TRAILER_PRICE_REFERENCE.find((candidate) => candidate.widthCm === widthCm && candidate.lengthCm === lengthCm);
+  return axles === 1 ? row?.oneAxleSuggestedPrice != null : axles === 2 ? row?.twoAxleSuggestedPriceInPdf != null : false;
+}
+
+function standardPriceFor(model: CustomModelId, widthCm: number, lengthCm: number, axles: 1 | 2 | 3) {
+  const oneAxlePrice = (model === "food" ? FOOD_ONE_AXLE_STANDARD_PRICES : CARGO_ONE_AXLE_STANDARD_PRICES)[widthCm]?.[lengthCm];
+  if (oneAxlePrice == null) return null;
+  if (model === "food" && axles === 2) return getReferenceTwoAxlePrice(widthCm, lengthCm, "suggested") ?? oneAxlePrice + SECOND_AXLE_SURCHARGE;
+  return oneAxlePrice + (axles - 1) * SECOND_AXLE_SURCHARGE;
+}
+
+function buildStandardTrailerPrices(): StandardTrailerPrice[] {
+  const rows: StandardTrailerPrice[] = [];
+  for (const model of ["food", "cargo"] as const) {
+    const matrix = model === "food" ? FOOD_ONE_AXLE_STANDARD_PRICES : CARGO_ONE_AXLE_STANDARD_PRICES;
+    for (const [widthKey, lengths] of Object.entries(matrix)) {
+      const widthCm = Number(widthKey);
+      for (const lengthKey of Object.keys(lengths)) {
+        const lengthCm = Number(lengthKey);
+        for (const axles of [1, 2, 3] as const) {
+          const standardPrice = standardPriceFor(model, widthCm, lengthCm, axles);
+          if (standardPrice == null) continue;
+          rows.push({
+            model,
+            widthCm,
+            lengthCm,
+            heightCm: CUSTOM_HEIGHT_MIN_CM,
+            axles,
+            standardPrice,
+            includedEquipment: getIncludedEquipmentCount(lengthCm),
+            available: getAllowedWidths(lengthCm).includes(widthCm) && getAllowedAxles(lengthCm).includes(axles),
+            source: model === "cargo" ? "cargo-frozen" : hasPdfSuggestedPrice(widthCm, lengthCm, axles) ? "pdf-suggested" : "derived-approved",
+          });
+        }
+      }
+    }
+  }
+  for (const preset of TRAILER_PRESETS) {
+    rows.push({
+      model: preset.model,
+      widthCm: preset.widthCm,
+      lengthCm: preset.lengthCm,
+      heightCm: preset.heightCm,
+      axles: preset.axles,
+      standardPrice: preset.basePrice,
+      includedEquipment: preset.includedEquipment,
+      available: true,
+      source: "fixed",
+    });
+  }
+  return rows;
+}
+
+export const STANDARD_TRAILER_PRICES = buildStandardTrailerPrices();
+
+export function getStandardTrailerPrice(model: ModelId, widthCm: number, lengthCm: number, axles: 1 | 2 | 3) {
+  return STANDARD_TRAILER_PRICES.find((row) => row.model === model && row.widthCm === widthCm && row.lengthCm === lengthCm && row.axles === axles) ?? null;
+}
+
+function priceAtHeight(row: StandardTrailerPrice, heightCm: number) {
+  if (row.model === "rzr" || heightCm <= row.heightCm) return row.standardPrice;
+  const rate = CUSTOM_PRICE_COEFFICIENTS[row.model].priceWall;
+  const extraHeightM = (heightCm - row.heightCm) / 100;
+  const extraWallM2 = 2 * (row.widthCm / 100 + row.lengthCm / 100) * extraHeightM;
+  return row.standardPrice + roundPrice(extraWallM2 * rate);
+}
+
+export function resolveCustomTrailerPrice(model: CustomModelId, widthCm: number, lengthCm: number, heightCm: number, axles: 1 | 2 | 3) {
+  const rule = getLengthPricingRule(lengthCm);
+  if (!rule) return null;
+  const lower = getStandardTrailerPrice(model, widthCm, rule.lowerStandardLengthCm, axles);
+  const upper = getStandardTrailerPrice(model, widthCm, rule.upperStandardLengthCm, axles);
+  if (!lower || !upper) return null;
+  const lowerPrice = priceAtHeight(lower, heightCm);
+  const upperPrice = priceAtHeight(upper, heightCm);
+  let price = lowerPrice;
+  if (rule.additionalLengthCm >= 40) {
+    price = upperPrice;
+  } else if (rule.additionalLengthCm > 0) {
+    price = Math.max(lowerPrice, Math.min(lowerPrice + ADDITIONAL_LENGTH_SURCHARGE, upperPrice - CUSTOM_NEXT_STANDARD_GAP));
+  }
+  return {
+    price: roundPrice(price),
+    lowerPrice,
+    upperPrice,
+    pricedAsLengthCm: rule.pricedAsLengthCm,
+    includedEquipment: getIncludedEquipmentCount(rule.pricedAsLengthCm),
+    rule,
+  };
+}
+
+export function validateStandardTrailerPrices() {
+  const errors: string[] = [];
+  const keys = new Set<string>();
+  for (const row of STANDARD_TRAILER_PRICES) {
+    const key = `${row.model}-${row.widthCm}-${row.lengthCm}-${row.heightCm}-${row.axles}`;
+    if (keys.has(key)) errors.push(`Precio estándar duplicado: ${key}.`);
+    keys.add(key);
+    if (row.standardPrice % PRICE_ROUNDING_STEP !== 0) errors.push(`${key} no está redondeado a $${PRICE_ROUNDING_STEP}.`);
+    if (row.includedEquipment !== getIncludedEquipmentCount(row.lengthCm)) errors.push(`${key} tiene una cantidad incorrecta de aditamentos incluidos.`);
+    const oneAxle = getStandardTrailerPrice(row.model, row.widthCm, row.lengthCm, 1);
+    if (row.axles === 2 && oneAxle && row.standardPrice < oneAxle.standardPrice) errors.push(`${key} cuesta menos que un eje.`);
+  }
+  for (const model of ["food", "cargo"] as const) {
+    for (const widthCm of CUSTOM_WIDTH_OPTIONS_CM) {
+      for (const axles of [1, 2, 3] as const) {
+        const rows = STANDARD_TRAILER_PRICES.filter((row) => row.model === model && row.widthCm === widthCm && row.axles === axles).sort((a, b) => a.lengthCm - b.lengthCm);
+        for (let index = 1; index < rows.length; index += 1) {
+          if (rows[index].standardPrice < rows[index - 1].standardPrice) errors.push(`${model} ${widthCm} cm y ${axles} ejes baja de precio al aumentar el largo.`);
+        }
+      }
+    }
+    for (let lengthCm = CUSTOM_LENGTH_MIN_CM; lengthCm <= CUSTOM_LENGTH_MAX_CM; lengthCm += CUSTOM_STANDARD_LENGTH_STEP_CM) {
+      for (const axles of [1, 2, 3] as const) {
+        const rows = STANDARD_TRAILER_PRICES.filter((row) => row.model === model && row.lengthCm === lengthCm && row.axles === axles).sort((a, b) => a.widthCm - b.widthCm);
+        for (let index = 1; index < rows.length; index += 1) {
+          if (rows[index].standardPrice < rows[index - 1].standardPrice) errors.push(`${model} ${lengthCm} cm y ${axles} ejes baja de precio al aumentar el ancho.`);
+        }
+      }
+    }
+  }
+  for (const model of ["food", "cargo"] as const) {
+    const widths = [...new Set(STANDARD_TRAILER_PRICES.filter((row) => row.model === model).map((row) => row.widthCm))];
+    for (const widthCm of widths) {
+      const lengths = [...new Set(STANDARD_TRAILER_PRICES.filter((row) => row.model === model && row.widthCm === widthCm).map((row) => row.lengthCm))].sort((a, b) => a - b);
+      for (let index = 0; index < lengths.length - 1; index += 1) {
+        const lowerLengthCm = lengths[index];
+        const upperLengthCm = lengths[index + 1];
+        if (upperLengthCm - lowerLengthCm !== CUSTOM_STANDARD_LENGTH_STEP_CM) continue;
+        for (const axles of [1, 2, 3] as const) {
+          for (const extension of CUSTOM_LENGTH_EXTENSION_OPTIONS_CM) {
+            const result = resolveCustomTrailerPrice(model, widthCm, lowerLengthCm + extension, CUSTOM_HEIGHT_MIN_CM, axles);
+            const key = `${model}-${widthCm}-${lowerLengthCm}+${extension}-${axles}`;
+            if (!result) {
+              errors.push(`No se pudo resolver el precio personalizado ${key}.`);
+              continue;
+            }
+            if (result.price < result.lowerPrice) errors.push(`${key} quedó por debajo del estándar inferior.`);
+            if (result.price > result.upperPrice) errors.push(`${key} superó el estándar superior.`);
+            if (extension < 40 && result.price > result.upperPrice - CUSTOM_NEXT_STANDARD_GAP) errors.push(`${key} no conserva $${CUSTOM_NEXT_STANDARD_GAP} antes del siguiente estándar.`);
+            if (extension >= 40 && result.price !== result.upperPrice) errors.push(`${key} no usa el siguiente estándar.`);
+            if (result.price % PRICE_ROUNDING_STEP !== 0) errors.push(`${key} no está redondeado a $${PRICE_ROUNDING_STEP}.`);
+          }
+        }
+      }
+    }
+  }
+  return [...new Set(errors)];
+}
+
+const STANDARD_PRICE_ERRORS = validateStandardTrailerPrices();
+if (STANDARD_PRICE_ERRORS.length) throw new Error(`Matriz de precios inválida: ${STANDARD_PRICE_ERRORS.join(" ")}`);
+
 export function buildCustomPreset(model: CustomModelId, widthCmRaw: number, lengthCmRaw: number, heightCmRaw: number, axlesRaw: number, coeffOverride?: Partial<CustomPriceCoefficients>): TrailerPreset {
+  void coeffOverride;
   const { widthCm, lengthCm, heightCm, axles } = sanitizeCustomDims(lengthCmRaw, widthCmRaw, heightCmRaw, axlesRaw);
-  const lengthRule = getLengthPricingRule(lengthCm)!;
-  const pricingLengthCm = lengthRule.standardLengthCm;
-  const pricingFloorAreaM2 = (widthCm / 100) * (pricingLengthCm / 100);
-  const pricingWallAreaM2 = 2 * (widthCm / 100 + pricingLengthCm / 100) * (heightCm / 100);
+  const pricing = resolveCustomTrailerPrice(model, widthCm, lengthCm, heightCm, axles);
+  if (!pricing) throw new Error(`No existe una referencia estándar para ${model} ${widthCm} × ${lengthCm} cm con ${axles} ejes.`);
   const actualFloorAreaM2 = (widthCm / 100) * (lengthCm / 100);
   const actualWallAreaM2 = 2 * (widthCm / 100 + lengthCm / 100) * (heightCm / 100);
   const extraAxles = axles - 1;
-  const coeff = model === "food"
-    ? CUSTOM_PRICE_COEFFICIENTS.food
-    : { ...CUSTOM_PRICE_COEFFICIENTS.cargo, ...coeffOverride };
-  const referenceBase = model === "food"
-    ? getSuggestedOneAxlePrice(widthCm, pricingLengthCm)
-    : null;
-  const referenceHeightSurcharge = referenceBase == null
-    ? 0
-    : Math.round(2 * (widthCm / 100 + pricingLengthCm / 100) * Math.max(0, (heightCm - 210) / 100) * coeff.priceWall);
-  const oneAxleBase = referenceBase == null
-    ? Math.round(coeff.priceBase + coeff.priceFloor * pricingFloorAreaM2 + coeff.priceWall * pricingWallAreaM2)
-    : referenceBase + referenceHeightSurcharge;
-  const axleSurcharge = extraAxles * SECOND_AXLE_SURCHARGE;
-  const basePrice = oneAxleBase + lengthRule.surcharge + axleSurcharge;
+  const coeff = CUSTOM_PRICE_COEFFICIENTS[model];
   const estimatedWeightKg = Math.round(coeff.weightBase + coeff.weightFloor * actualFloorAreaM2 + coeff.weightWall * actualWallAreaM2 + coeff.weightAxle * extraAxles);
   const estimatedCapacityKg = Math.round(estimatedWeightKg * CUSTOM_CAPACITY_FACTOR[axles]);
   return {
@@ -547,8 +734,8 @@ export function buildCustomPreset(model: CustomModelId, widthCmRaw: number, leng
     lengthCm,
     heightCm,
     axles,
-    basePrice,
-    includedEquipment: INCLUDED_EQUIPMENT_COUNT,
+    basePrice: pricing.price,
+    includedEquipment: pricing.includedEquipment,
     estimatedWeightKg,
     estimatedCapacityKg,
   };
@@ -571,15 +758,11 @@ export function isValidPresetId(id: string) {
   const sane = sanitizeCustomDims(parsed.lengthCm, parsed.widthCm, parsed.heightCm, parsed.axles);
   const exactCombination = sane.widthCm === parsed.widthCm && sane.lengthCm === parsed.lengthCm && sane.heightCm === parsed.heightCm && sane.axles === parsed.axles;
   if (!exactCombination) return false;
-  if (parsed.model === "food") {
-    const lengthRule = getLengthPricingRule(parsed.lengthCm);
-    if (!lengthRule || getSuggestedOneAxlePrice(parsed.widthCm, lengthRule.standardLengthCm) == null) return false;
-  }
-  return true;
+  return resolveCustomTrailerPrice(parsed.model, parsed.widthCm, parsed.lengthCm, parsed.heightCm, parsed.axles as 1 | 2 | 3) != null;
 }
 
-// Los primeros INCLUDED_EQUIPMENT_COUNT aditamentos van sin costo y el resto cuesta el flat
-// EXTRA_EQUIPMENT_PRICE, sin importar el tipo de equipo. Los aditamentos especiales entran en el
+// Los primeros preset.includedEquipment aditamentos van sin costo y el resto cuesta el flat
+// EXTRA_EQUIPMENT_PRICE. Los aditamentos especiales entran en el
 // mismo conteo y en la misma tarifa plana, en el orden en que se agregaron: primero los del plano
 // (items) y luego los especiales (specialItems).
 export function calculateQuote<T extends { name: string; widthCm: number; depthCm: number }>(presetId: string, items: PlacedEquipment[], specialItems: T[], includeIva: boolean) {
@@ -589,14 +772,14 @@ export function calculateQuote<T extends { name: string; widthCm: number; depthC
   const lines = items.flatMap((item) => {
     const definition = getEquipment(item.typeId);
     if (!definition) return [];
-    const included = includedUsed < INCLUDED_EQUIPMENT_COUNT;
+    const included = includedUsed < preset.includedEquipment;
     if (included) includedUsed += 1;
     const linePrice = included ? 0 : EXTRA_EQUIPMENT_PRICE;
     extras += linePrice;
     return [{ item, definition, linePrice, included }];
   });
   const specialLines = specialItems.map((entry) => {
-    const included = includedUsed < INCLUDED_EQUIPMENT_COUNT;
+    const included = includedUsed < preset.includedEquipment;
     if (included) includedUsed += 1;
     const linePrice = included ? 0 : EXTRA_EQUIPMENT_PRICE;
     extras += linePrice;

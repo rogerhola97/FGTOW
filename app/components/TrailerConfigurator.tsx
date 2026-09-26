@@ -641,8 +641,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
   // Un accesorio fuera del catálogo estándar, con nombre y medida propios (cliente o vendedor).
   // Listado en la cotización pero no colocado en el plano 2D. Su precio ya no lo escribe quien lo
-  // agrega: cuenta igual que un equipo del catálogo en la regla de "primeros 5 gratis, resto a
-  // $2,500 fijo" (ver calculateQuote) — el campo price se conserva en 0 solo por compatibilidad
+  // agrega: cuenta igual que un equipo del catálogo dentro de la cantidad incluida por el tamaño;
+  // el campo price se conserva en 0 solo por compatibilidad
   // con cotizaciones ya guardadas que sí tenían un precio propio.
   function addSpecialItem() {
     const name = specialForm.name.trim();
@@ -1170,7 +1170,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
   const equipmentPicker = (
     <>
-      {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — cada adicional cuesta ${money(EXTRA_EQUIPMENT_PRICE)}`, "equipment-heading")}
+      {stepHeader(2, "Paso 2 · Elige tus accesorios", `Incluye hasta ${preset.includedEquipment} sin costo — ${isVendor ? "cada adicional usa la tarifa vigente" : `cada adicional cuesta ${money(EXTRA_EQUIPMENT_PRICE)}`}`, "equipment-heading")}
       <div className={`step-panel ${activeStep === 2 ? "is-open" : ""}`}>
         <div className="equipment-library-wrap">
         <div className="equipment-library">{equipmentList.map((equipment) => {
@@ -1194,7 +1194,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
         <div className={`special-item-box ${specialOpen ? "is-open" : ""}`}>
           <button type="button" className="special-item-toggle" onClick={() => setSpecialOpen((current) => !current)} aria-expanded={specialOpen}>
-            <span><strong>Aditamento especial</strong><small>{plano ? "Algo fuera del catálogo, con su propio nombre y medida — cuenta igual que un equipo del catálogo para los 5 gratis y el precio fijo del resto." : "¿Necesitas algo que no está en la lista? Dinos su nombre, ancho y fondo. El precio de este aditamento puede variar según fabricación y costo — nuestro equipo te lo confirmará al revisar tu proyecto."}</small></span>
+            <span><strong>Aditamento especial</strong><small>{plano ? `Algo fuera del catálogo, con su propio nombre y medida — cuenta igual que un equipo del catálogo dentro de los ${preset.includedEquipment} incluidos y la tarifa del resto.` : "¿Necesitas algo que no está en la lista? Dinos su nombre, ancho y fondo. El precio de este aditamento puede variar según fabricación y costo — nuestro equipo te lo confirmará al revisar tu proyecto."}</small></span>
             {specialItems.length > 0 && <em className="special-item-count">{specialItems.length}</em>}
             <i className="special-item-chevron" aria-hidden="true">⌄</i>
           </button>
@@ -1323,7 +1323,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   {[1, 2, 3].map((a) => <option key={a} value={a} disabled={!allowedAxles.includes(a as 1 | 2 | 3)}>{a} {a > 1 ? "ejes" : "eje"}</option>)}
                 </select>
               </div>
-              <div className="dim-price-hint">Precio sugerido <strong>{money(quote.preset.basePrice)}</strong>{getLengthPricingRule(preset.lengthCm)?.additionalLengthCm ? <span>Incluye $4,500 por largo adicional.</span> : null}{preset.axles === 2 ? <span>Incluye $7,000 por el segundo eje.</span> : null}{preset.axles === 3 ? <span>Incluye $14,000 por dos ejes adicionales.</span> : null}</div>
+              <div className="dim-price-hint">Precio sugerido <strong>{money(quote.preset.basePrice)}</strong>{(() => { const rule = getLengthPricingRule(preset.lengthCm); if (!rule?.additionalLengthCm) return null; return <span>{rule.additionalLengthCm >= 40 ? "Usa el precio del siguiente tamaño estándar." : "Calculado entre el tamaño estándar anterior y el siguiente."}</span>; })()}<span>{preset.axles === 1 ? "Precio estándar de 1 eje." : preset.axles === 2 ? "Precio estándar de 2 ejes." : "Precio estándar de 3 ejes."}</span></div>
               </>
               )}
             </div>
@@ -1674,7 +1674,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         </div>
         {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
-        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{specialItems.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial)</td><td>{entry.widthCm} × {entry.depthCm} cm</td><td>{money(entry.price)}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial)</td><td>{entry.widthCm} × {entry.depthCm} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(combinedSubtotal)}</strong></div><div><span>IVA</span><strong>{money(combinedIva)}</strong></div><div><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
         {customer.notes && <div className="document-notes"><strong>Notas del proyecto</strong><p>{customer.notes}</p></div>}

@@ -2,11 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { PricingSettingsForm } from "../../components/PricingSettingsForm";
 import { VendorLogoutButton } from "../../components/VendorLogoutButton";
-import { EQUIPMENT, MODEL_META, TRAILER_PRESETS } from "../../lib/quoteCatalog";
+import { EQUIPMENT } from "../../lib/quoteCatalog";
 import { getPricingSettings } from "../../lib/pricingSettingsDb";
 import { requireVendor } from "../../lib/vendorAuth";
 
-export const metadata = { title: "Precios y descuentos", robots: { index: false, follow: false } };
+export const metadata = { title: "Tarifas de aditamentos", robots: { index: false, follow: false } };
 
 export default async function VendedorPreciosPage() {
   const vendor = await requireVendor("/vendedor/precios");
@@ -20,9 +20,9 @@ export default async function VendedorPreciosPage() {
     </header>
     <section className="vendor-panel-shell">
       <span className="eyebrow">Hola, {vendor.name}</span>
-      <h1>Precios<br /><em>a tu gusto.</em></h1>
-      <p>Estos precios solo aplican a las cotizaciones que se crean o editan desde el panel de vendedor — el cotizador público de fgtow.com nunca cambia.</p>
-      <PricingSettingsForm initialSettings={settings} equipment={EQUIPMENT} presets={TRAILER_PRESETS} modelMeta={MODEL_META} />
+      <h1>Tarifas de<br /><em>aditamentos.</em></h1>
+      <p>La matriz de remolques, los ejes obligatorios, las alturas permitidas y los accesorios incluidos son comunes para todos los cotizadores. Aquí puedes ajustar solamente los aditamentos adicionales del panel de vendedor.</p>
+      <PricingSettingsForm initialSettings={settings} equipment={EQUIPMENT} />
     </section>
   </main>;
 }

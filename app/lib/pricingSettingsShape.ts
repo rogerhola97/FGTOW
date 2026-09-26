@@ -2,6 +2,8 @@
 // next/headers, etc.) — este archivo lo puede importar tanto código de servidor (pricingSettingsDb.ts,
 // vendorPricing.ts) como un componente "use client" (TrailerConfigurator.tsx).
 export type PricingSettings = {
+  // Campos heredados: se leen para que las instalaciones existentes sigan siendo compatibles,
+  // pero ya no alteran la matriz canónica del remolque ni la cantidad incluida por tamaño.
   included_equipment_count: number;
   extra_equipment_price: number;
   equipment_price_overrides: Record<string, number>;

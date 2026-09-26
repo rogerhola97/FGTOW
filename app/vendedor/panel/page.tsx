@@ -28,8 +28,8 @@ export default async function VendedorPanelPage() {
           <span>Busca, revisa y edita las cotizaciones que los clientes mandan desde el sitio.</span>
         </Link>
         <Link href="/vendedor/precios" className="vendor-panel-card vendor-panel-card-clients">
-          <strong>Precios y descuentos</strong>
-          <span>Ajusta el precio de remolques y aditamentos para tus propias cotizaciones.</span>
+          <strong>Tarifas de aditamentos</strong>
+          <span>Ajusta los aditamentos adicionales; el precio base del remolque es común para todos.</span>
         </Link>
         <Link href="/vendedor/cotizador" className="vendor-panel-card">
           <strong>Cotizadores</strong>

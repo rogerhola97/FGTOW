@@ -1,4 +1,4 @@
-import { calculateQuote, isValidPresetId, validateLayout } from "../../lib/quoteCatalog";
+import { PRICING_VERSION, calculateQuote, isValidPresetId, validateLayout } from "../../lib/quoteCatalog";
 import { clean, emailPattern, parseDoor, parseItems, parseSpecialItems, parseWindows, quoteFolio, sendQuoteEmail, verifyTurnstile } from "../../lib/quoteSubmission";
 import { insertQuotePublic, patchQuoteEmailStatus } from "../../lib/quotesDb";
 import { getVendor, readEnv } from "../../lib/vendorAuth";
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       trailer_width_cm: quote.preset.widthCm,
       trailer_length_cm: quote.preset.lengthCm,
       axles: quote.preset.axles,
-      configuration: { version: 3, items, door, windows, specialItems },
+      configuration: { version: 3, pricingVersion: PRICING_VERSION, items, door, windows, specialItems },
       subtotal: combinedSubtotal,
       iva: combinedIva,
       total: combinedTotal,
