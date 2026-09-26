@@ -361,9 +361,13 @@ function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLe
   return working;
 }
 
-function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
+// Coloca de entrada tantos aditamentos como el tamaño elegido incluya sin costo (2 o 5, ver
+// getIncludedEquipmentCount) — así el remolque nunca arranca ya "usando" un incluido de más ni de
+// menos. La lista base son los primeros 5 típicos; con solo 2 incluidos se recorta a los 2 primeros.
+function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig, includedCount: number): PlacedItem[] {
   if (modelId === "cargo" || modelId === "rzr") return [];
-  return buildStarterLayout(["plancha", "bano-maria"], trailerWidthCm, trailerLengthCm, door);
+  const typeIds = ["plancha", "bano-maria", "freidora", "parrilla", "tarja"].slice(0, Math.max(0, includedCount));
+  return buildStarterLayout(typeIds, trailerWidthCm, trailerLengthCm, door);
 }
 
 function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig) {
@@ -420,7 +424,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const showPlanEditor = plano || advancedOpen;
   const [items, setItems] = useState<PlacedItem[]>(() => initialQuote
     ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
-    : starterLayout(modelId, preset.widthCm, preset.lengthCm, door));
+    : starterLayout(modelId, preset.widthCm, preset.lengthCm, door, preset.includedEquipment));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Lets the Ancho/Fondo fields be cleared to blank while retyping instead of snapping back to the
   // last committed number on every keystroke; null means "show the committed value as usual".
@@ -1058,7 +1062,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setSpecialItems([]);
     setDoor(freshDoor);
     setWindows(modelId === "food" ? defaultWindows(freshDoor.wall, preset.widthCm, preset.lengthCm, preset.heightCm) : []);
-    setItems(starterLayout(modelId, preset.widthCm, preset.lengthCm, freshDoor));
+    setItems(starterLayout(modelId, preset.widthCm, preset.lengthCm, freshDoor, preset.includedEquipment));
     setSendState("idle");
     setSendMessage("");
     setQuoteNumber("BORRADOR");
