@@ -93,31 +93,36 @@ export function defaultDoor(trailerWidthCm: number): DoorConfig {
 export const PERIMETER_TABLE_DEPTH_CM = 55;
 
 // widthCm/heightCm are each window's own current size — windows are resizable per-instance
-// (drawing only, no cost impact); WINDOW_SPECS below is just the starting size for a new window.
+// (drawing only, no cost impact); windowWidthCm()/windowHeightCm() below only compute the
+// starting size for a new window, proportional to that trailer's own dimensions.
 export type WindowConfig = { id: string; wall: Wall; offsetCm: number; widthCm: number; heightCm: number };
 
 type WindowWallType = "lateral" | "frontal";
-
-export const WINDOW_SPECS: Record<WindowWallType, { widthCm: number; heightCm: number }> = {
-  lateral: { widthCm: 220, heightCm: 75 },
-  frontal: { widthCm: 50, heightCm: 60 },
-};
 
 export const WINDOW_WIDTH_MIN_CM = 40;
 export const WINDOW_WIDTH_MAX_CM = 300;
 export const WINDOW_HEIGHT_MIN_CM = 35;
 export const WINDOW_HEIGHT_MAX_CM = 120;
 
+// Ventanas laterales (a lo largo del remolque) y frontales (a lo ancho) escalan como una fracción
+// de la pared y de la altura donde van, en vez de un tamaño fijo — así siempre quedan proporcionadas
+// y jamás más anchas que la propia pared, sin importar el tamaño del remolque.
+const WINDOW_RATIO: Record<WindowWallType, { width: number; height: number }> = {
+  lateral: { width: 0.45, height: 0.35 },
+  frontal: { width: 0.5, height: 0.28 },
+};
+
 export function windowWallType(wall: Wall): WindowWallType {
   return wall === "left" || wall === "right" ? "lateral" : "frontal";
 }
 
-export function windowWidthCm(wall: Wall) {
-  return WINDOW_SPECS[windowWallType(wall)].widthCm;
+export function windowWidthCm(wall: Wall, trailerWidthCm: number, trailerLengthCm: number) {
+  const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
+  return clampWindowWidthCm(Math.round(span * WINDOW_RATIO[windowWallType(wall)].width));
 }
 
-export function windowHeightCm(wall: Wall) {
-  return WINDOW_SPECS[windowWallType(wall)].heightCm;
+export function windowHeightCm(wall: Wall, trailerHeightCm: number) {
+  return clampWindowHeightCm(Math.round(trailerHeightCm * WINDOW_RATIO[windowWallType(wall)].height));
 }
 
 export function clampWindowWidthCm(value: number) {
@@ -130,17 +135,18 @@ export function clampWindowHeightCm(value: number) {
 
 // One window per wall, max: left, right, and whichever front/back wall isn't holding the door —
 // 3 total. Centered on each wall so it's always valid regardless of trailer size.
-export function defaultWindows(doorWall: Wall, trailerWidthCm: number, trailerLengthCm: number): WindowConfig[] {
+export function defaultWindows(doorWall: Wall, trailerWidthCm: number, trailerLengthCm: number, trailerHeightCm: number): WindowConfig[] {
   const oppositeFrontBack: Wall = doorWall === "front" ? "back" : "front";
   const frontalWall: Wall = doorWall === "left" || doorWall === "right" ? "front" : oppositeFrontBack;
-  const lateralWidth = windowWidthCm("left");
+  const lateralWidth = windowWidthCm("left", trailerWidthCm, trailerLengthCm);
   const lateralOffset = Math.max(0, (trailerLengthCm - lateralWidth) / 2);
   const frontalSpan = wallLengthCm(frontalWall, trailerWidthCm, trailerLengthCm);
-  const frontalOffset = Math.max(0, (frontalSpan - windowWidthCm(frontalWall)) / 2);
+  const frontalWidth = windowWidthCm(frontalWall, trailerWidthCm, trailerLengthCm);
+  const frontalOffset = Math.max(0, (frontalSpan - frontalWidth) / 2);
   return [
-    { id: "win-left", wall: "left", offsetCm: lateralOffset, widthCm: windowWidthCm("left"), heightCm: windowHeightCm("left") },
-    { id: "win-right", wall: "right", offsetCm: lateralOffset, widthCm: windowWidthCm("right"), heightCm: windowHeightCm("right") },
-    { id: "win-frontal", wall: frontalWall, offsetCm: frontalOffset, widthCm: windowWidthCm(frontalWall), heightCm: windowHeightCm(frontalWall) },
+    { id: "win-left", wall: "left", offsetCm: lateralOffset, widthCm: lateralWidth, heightCm: windowHeightCm("left", trailerHeightCm) },
+    { id: "win-right", wall: "right", offsetCm: lateralOffset, widthCm: lateralWidth, heightCm: windowHeightCm("right", trailerHeightCm) },
+    { id: "win-frontal", wall: frontalWall, offsetCm: frontalOffset, widthCm: frontalWidth, heightCm: windowHeightCm(frontalWall, trailerHeightCm) },
   ];
 }
 

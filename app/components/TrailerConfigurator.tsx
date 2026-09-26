@@ -406,7 +406,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const heightOptions = useMemo(() => getCustomHeightOptions(preset.lengthCm), [preset.lengthCm]);
   const allowedAxles = useMemo(() => getAllowedAxles(preset.lengthCm), [preset.lengthCm]);
   const [door, setDoor] = useState<DoorConfig>(() => initialQuote?.door ?? defaultDoor(preset.widthCm));
-  const [windows, setWindows] = useState<WindowConfig[]>(() => initialQuote?.windows ?? (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm) : []));
+  const [windows, setWindows] = useState<WindowConfig[]>(() => initialQuote?.windows ?? (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm, preset.heightCm) : []));
   const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
   const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ id: uid(), ...entry })));
   const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "" });
@@ -889,7 +889,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     const span = wallLengthCm(door.wall, preset.widthCm, preset.lengthCm);
     const before = door.offsetCm;
     const after = span - (door.offsetCm + door.widthCm);
-    const widthCm = Math.min(windowWidthCm(door.wall), Math.max(before, after));
+    const widthCm = Math.min(windowWidthCm(door.wall, preset.widthCm, preset.lengthCm), Math.max(before, after));
     if (widthCm < WINDOW_WIDTH_MIN_CM) return null;
     const offsetCm = before >= after ? Math.max(0, before - widthCm) : door.offsetCm + door.widthCm;
     return { offsetCm, widthCm };
@@ -903,7 +903,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       if (current.some((w) => w.wall === door.wall)) return current;
       const spot = freeSpaceNextToDoor();
       if (!spot) return current;
-      return [...current, { id: uid(), wall: door.wall, offsetCm: spot.offsetCm, widthCm: spot.widthCm, heightCm: windowHeightCm(door.wall) }];
+      return [...current, { id: uid(), wall: door.wall, offsetCm: spot.offsetCm, widthCm: spot.widthCm, heightCm: windowHeightCm(door.wall, preset.heightCm) }];
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
@@ -1018,7 +1018,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setCustomer({ name: "", phone: "", email: "", city: "Monterrey, N.L.", state: DEFAULT_STATE, notes: "" });
     setSpecialItems([]);
     setDoor(freshDoor);
-    setWindows(modelId === "food" ? defaultWindows(freshDoor.wall, preset.widthCm, preset.lengthCm) : []);
+    setWindows(modelId === "food" ? defaultWindows(freshDoor.wall, preset.widthCm, preset.lengthCm, preset.heightCm) : []);
     setItems(starterLayout(modelId, preset.widthCm, preset.lengthCm, freshDoor));
     setSendState("idle");
     setSendMessage("");
