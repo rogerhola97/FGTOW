@@ -18,7 +18,7 @@ export const metadata = { title: "Editar cotización", robots: { index: false, f
 const dateFormatter = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 const moneyFormatter = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
-type StoredConfiguration = { items?: PlacedEquipment[]; door?: DoorConfig; windows?: WindowConfig[]; specialItems?: { name: string; widthCm: number; depthCm: number; price: number }[] };
+type StoredConfiguration = { items?: PlacedEquipment[]; door?: DoorConfig; windows?: WindowConfig[]; specialItems?: InitialQuoteData["specialItems"] };
 
 export default async function VendedorClienteDetallePage({ params }: { params: Promise<{ id: string }> }) {
   await requireVendor("/vendedor/clientes");
@@ -30,7 +30,7 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
   if (!quote) notFound();
 
   const [siblings, pricingSettings] = await Promise.all([
-    getSiblingQuotes(quote.email, quote.id).catch(() => []),
+    getSiblingQuotes({ email: quote.email, phone: quote.phone }, quote.id).catch(() => []),
     getPricingSettings().catch(() => DEFAULT_PRICING_SETTINGS),
   ]);
   const configuration = (quote.configuration ?? {}) as StoredConfiguration;
@@ -76,7 +76,7 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
           <DeleteQuoteButton id={quote.id} quoteNumber={quote.quote_number} redirectTo="/vendedor/clientes" />
         </div>
       </div>
-      <p>{quote.email} · {quote.phone} · {quote.city}, {quote.state}</p>
+      <p>{[quote.email, quote.phone, `${quote.city}, ${quote.state}`].filter(Boolean).join(" · ")}</p>
       <p className="vendor-quote-meta">Guardada el {dateFormatter.format(new Date(quote.created_at))}{quote.updated_at ? ` · última edición ${dateFormatter.format(new Date(quote.updated_at))}` : ""}{quote.vendor_email ? ` por ${quote.vendor_email}` : ""}</p>
 
       <div className="quote-file-managers">

@@ -220,6 +220,12 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .special-item-list li { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border:1px solid var(--line); background:#f7f9f8; }
 .special-item-list strong { display:block; font-size:11px; }
 .special-item-list small { display:block; margin-top:3px; color:var(--muted); font-size:9px; }
+.special-item-form select,.special-item-vendor-fields select,.special-item-vendor-fields input,.special-item-vendor-fields textarea { display:block; width:100%; margin-top:6px; padding:9px 8px; border:1px solid #c7d0ce; background:#f9faf9; color:var(--deep); font:500 12px Arial; }
+.special-item-list li.special-item-vendor { flex-wrap:wrap; }
+.special-item-vendor-fields { flex-basis:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.special-item-vendor-fields label { color:var(--deep); font-size:9px; font-weight:900; letter-spacing:.06em; text-transform:uppercase; }
+.special-item-vendor-fields .special-item-comment { grid-column:1/-1; }
+.special-item-vendor-fields textarea { resize:vertical; background:#fff; }
 .plan-launch-card { display:grid; grid-template-columns:minmax(0,1fr) 92px; align-items:center; gap:16px; margin:18px 20px 14px; padding:17px; border:1px solid #b7c9ce; background:#f3f8f9; }
 .plan-launch-card.is-ready { border-color:#9bc5aa; background:#f0f8f3; }
 .plan-launch-card.is-disabled { border-color:var(--line); background:#f7f8f7; }
@@ -239,6 +245,18 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .plan-designer-head small { margin-top:4px; color:rgba(255,255,255,.68); font-size:10px; line-height:1.4; }
 .plan-designer-head .button { flex:0 0 auto; min-height:46px; background:var(--gold); color:var(--deep); }
 .plan-designer-head .button:hover { background:#fff; }
+.plan-designer-head-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:12px; }
+.plan-export-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.plan-export-actions button { min-height:34px; padding:0 12px; border:1px solid currentColor; background:transparent; font:800 10px Arial,sans-serif; letter-spacing:.04em; cursor:pointer; }
+.plan-export-actions button:disabled { opacity:.55; cursor:progress; }
+.plan-export-actions small { flex-basis:100%; color:#e8a29d; font-size:10px; }
+.plan-export-actions--dark button { color:#fff; border-color:rgba(255,255,255,.45); }
+.plan-export-actions--dark button:hover:not(:disabled) { border-color:var(--gold); color:var(--gold); }
+.plan-export-actions--light { margin-top:10px; }
+.plan-export-actions--light button { min-height:28px; padding:0 9px; color:var(--deep); border-color:#b7c9ce; background:#fff; font-size:9px; }
+.plan-export-actions--light button:hover:not(:disabled) { border-color:var(--deep); }
+.plan-export-actions--light small { color:#b3261e; }
+.plan-exterior-label { fill:#8a9aa0; font:800 7px monospace; letter-spacing:.12em; }
 .plan-workspace--modal>.addons-equipment-picker { position:sticky; top:88px; grid-column:1; grid-row:2/span 20; align-self:start; max-height:calc(100dvh - 112px); overflow-y:auto; margin:22px 0 40px; border:1px solid var(--line); border-right:0; background:#fff; }
 .plan-workspace--modal>:not(.plan-designer-head):not(.addons-equipment-picker) { grid-column:2; background:#fff; }
 .plan-workspace--modal>.workspace-head { margin-top:22px; border:1px solid var(--line); border-bottom:0; }
@@ -425,6 +443,7 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .quote-document table { width:100%; border-collapse:collapse; font-size:10px; }
 .quote-document th { padding:10px; background:#edf1f0; text-align:left; font-size:8px; letter-spacing:.08em; text-transform:uppercase; }
 .quote-document td { padding:9px 10px; border-bottom:1px solid var(--line); }
+.document-line-note { display:block; margin-top:3px; color:var(--muted); font-size:9px; font-weight:400; }
 .quote-document td:last-child,.quote-document th:last-child { text-align:right; font-weight:800; }
 .document-total { width:310px; margin:25px 0 25px auto; }
 .document-total>div { display:flex; justify-content:space-between; gap:20px; padding:6px 0; font-size:11px; }
@@ -491,6 +510,8 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
   .plan-designer-head { margin:0 -14px 14px; padding:14px; align-items:stretch; flex-direction:column; gap:12px; }
   .plan-designer-head strong { font-size:17px; }
   .plan-designer-head .button { width:100%; }
+  .plan-designer-head-actions { flex-direction:column; align-items:stretch; }
+  .plan-export-actions--dark button { flex:1 1 0; padding:0 6px; }
   .plan-workspace--modal>.addons-equipment-picker { position:static; max-height:none; margin:0; overflow:visible; border:1px solid var(--line); }
   .plan-workspace--modal>.workspace-head { margin-top:14px; }
   .plan-workspace--modal>.plan-scroll { min-height:0; }

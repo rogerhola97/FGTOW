@@ -26,13 +26,13 @@ export async function POST(request: Request) {
     const includeIva = payload.includeIva === true;
     const rawItems = Array.isArray(payload.items) ? payload.items : [];
     const items = parseItems(rawItems);
-    const specialItems = parseSpecialItems(payload.specialItems);
+    const specialItems = parseSpecialItems(payload.specialItems, { vendor: true });
     const windows = parseWindows(payload.windows);
 
-    if (!name || !phone || !email || !city || !state || !isValidPresetId(presetId) || rawItems.length !== items.length || items.length === 0) {
+    if (!name || (!phone && !email) || !city || !state || !isValidPresetId(presetId) || rawItems.length !== items.length || items.length === 0) {
       return Response.json({ error: "Completa los datos y agrega al menos un equipo válido." }, { status: 400 });
     }
-    if (!emailPattern.test(email)) return Response.json({ error: "El correo electrónico no es válido." }, { status: 400 });
+    if (email && !emailPattern.test(email)) return Response.json({ error: "El correo electrónico no es válido." }, { status: 400 });
 
     const discount = parseDiscount(payload.discount);
     const pricingSettings = await getPricingSettings();

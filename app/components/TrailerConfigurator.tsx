@@ -58,11 +58,12 @@ import {
   windowHeightCm,
   windowWidthCm,
 } from "../lib/quoteCatalog";
+import { buildPlanSvg, downloadPlanPdf, downloadPlanPng, printPlan } from "../lib/planExport";
 
 type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
 type CustomerInfo = { name: string; phone: string; email: string; city: string; state: string; notes: string };
-type InitialSpecialItem = { name: string; widthCm: number; depthCm: number; price: number };
+type InitialSpecialItem = { name: string; widthCm: number; depthCm: number; price: number; comment?: string; mount?: "inside" | "outside"; customPrice?: number | null };
 // Datos de una cotización ya guardada que el panel de vendedor precarga en el configurador para
 // editarla o partir de ella hacia una versión nueva — ver app/vendedor/clientes/[id]/page.tsx.
 export type InitialQuoteFile = { path: string; name: string; uploadedAt: string; url: string | null };
@@ -191,8 +192,12 @@ const CENTER_SNAP_THRESHOLD_CM = 15;
 // rectángulo, así que touch-action:none ahí bloqueaba el scroll táctil también en esas franjas. Ahora
 // son <svg> aparte (touch-action:auto) para que el scroll funcione justo arriba y abajo del dibujo
 // sin tocar el arrastre de aditamentos dentro del rectángulo.
-const PLAN_TOP_MARGIN_CM = 120;
+const PLAN_TOP_MARGIN_CM = 60;
 const PLAN_BOTTOM_MARGIN_CM = 70;
+// Franja alrededor del remolque, dentro del <svg> editable, donde viven los aditamentos montados por
+// fuera (tarja exterior, base de gas, barra abatible — hasta 60 cm de fondo). Sin ella quedaban
+// recortados o tapados por las reglas. El tirón también se dibuja aquí, detrás de los elementos.
+const PLAN_EXTERIOR_CM = 70;
 
 // Magnetic snap: dropping the door or a window within a small distance of dead-center on its wall
 // aligns it exactly to center, instead of leaving it at whatever offset the pointer landed on.
@@ -366,7 +371,8 @@ function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLe
 // menos. La lista base son los primeros 5 típicos; con solo 2 incluidos se recorta a los 2 primeros.
 function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig, includedCount: number): PlacedItem[] {
   if (modelId === "cargo" || modelId === "rzr") return [];
-  const typeIds = ["plancha", "bano-maria", "freidora", "parrilla", "tarja"].slice(0, Math.max(0, includedCount));
+  // La base para gas va siempre por fuera y sin costo (alwaysFree), aparte de los incluidos.
+  const typeIds = [...["plancha", "bano-maria", "freidora", "parrilla", "tarja"].slice(0, Math.max(0, includedCount)), "base-gas"];
   return buildStarterLayout(typeIds, trailerWidthCm, trailerLengthCm, door);
 }
 
@@ -412,16 +418,17 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [door, setDoor] = useState<DoorConfig>(() => initialQuote?.door ?? defaultDoor(preset.widthCm));
   const [windows, setWindows] = useState<WindowConfig[]>(() => initialQuote?.windows ?? (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm, preset.heightCm) : []));
   const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
-  const [specialItems, setSpecialItems] = useState<{ id: string; name: string; widthCm: number; depthCm: number; price: number }[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ id: uid(), ...entry })));
-  const [specialForm, setSpecialForm] = useState({ name: "", widthCm: "", depthCm: "" });
+  const [specialItems, setSpecialItems] = useState<(InitialSpecialItem & { id: string })[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ id: uid(), ...entry })));
+  const [specialForm, setSpecialForm] = useState<{ name: string; widthCm: string; depthCm: string; mount: "inside" | "outside" }>({ name: "", widthCm: "", depthCm: "", mount: "inside" });
   const [specialOpen, setSpecialOpen] = useState(false);
-  // Público (!plano) únicamente: el cliente entra al plano 2D completo por su cuenta — hasta
-  // entonces ve la lista simple de Paso 2 con acomodo automático. El vendedor (plano=true) ya
-  // parte siempre del plano, así que estos dos nunca aplican en su flujo.
+  // Cliente y vendedor ven primero la lista simple de Paso 2 con acomodo automático y entran al
+  // plano 2D completo en una ventana a pantalla completa. En el público solo Food tiene plano; el
+  // vendedor (plano=true) lo puede abrir en los tres modelos.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [planReviewed, setPlanReviewed] = useState(false);
   const planDialogCloseRef = useRef<HTMLButtonElement | null>(null);
-  const showPlanEditor = plano || advancedOpen;
+  const showPlanEditor = advancedOpen;
+  const planAvailable = plano || modelId === "food";
   const [items, setItems] = useState<PlacedItem[]>(() => initialQuote
     ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
     : starterLayout(modelId, preset.widthCm, preset.lengthCm, door, preset.includedEquipment));
@@ -455,7 +462,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const toggleStep = (step: 1 | 2 | 3) => setActiveStep((current) => (current === step ? 0 : step));
   function openPlanDesigner() {
-    if (modelId !== "food") return;
+    if (!planAvailable) return;
     setActiveStep(2);
     setAdvancedOpen(true);
   }
@@ -464,7 +471,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setPlanReviewed(true);
   }
   useEffect(() => {
-    if (plano || !advancedOpen) return;
+    if (!advancedOpen) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -481,7 +488,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       document.removeEventListener("keydown", handleEscape);
       previousFocus?.focus();
     };
-  }, [advancedOpen, plano]);
+  }, [advancedOpen]);
   const [includeIva, setIncludeIva] = useState(initialQuote?.includeIva ?? false);
   const [sendState, setSendState] = useState<SendState>("idle");
   const [sendMessage, setSendMessage] = useState("");
@@ -500,6 +507,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const svgRef = useRef<SVGSVGElement>(null);
   const sentBannerRef = useRef<HTMLDivElement>(null);
   const [rulerHeightPx, setRulerHeightPx] = useState<number | null>(null);
+  const [planExporting, setPlanExporting] = useState<"print" | "pdf" | "png" | null>(null);
+  const [planExportError, setPlanExportError] = useState("");
 
   useEffect(() => {
     const node = svgRef.current;
@@ -653,10 +662,16 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     const widthCm = Number(specialForm.widthCm);
     const depthCm = Number(specialForm.depthCm);
     if (!name || !Number.isFinite(widthCm) || widthCm <= 0 || !Number.isFinite(depthCm) || depthCm <= 0) return;
-    setSpecialItems((current) => [...current, { id: uid(), name, widthCm, depthCm, price: 0 }]);
-    setSpecialForm({ name: "", widthCm: "", depthCm: "" });
+    setSpecialItems((current) => [...current, isVendor ? { id: uid(), name, widthCm, depthCm, price: 0, comment: "", mount: specialForm.mount, customPrice: null } : { id: uid(), name, widthCm, depthCm, price: 0 }]);
+    setSpecialForm({ name: "", widthCm: "", depthCm: "", mount: "inside" });
     setSendState("idle"); setQuoteNumber("BORRADOR");
     flashAdded("special");
+  }
+
+  // Solo vendedor: comentario, interior/exterior y precio propio del aditamento especial.
+  function updateSpecialItem(id: string, patch: Partial<Pick<InitialSpecialItem, "comment" | "mount" | "customPrice">>) {
+    setSpecialItems((current) => current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
+    setSendState("idle");
   }
 
   function removeSpecialItem(id: string) {
@@ -1068,6 +1083,13 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setQuoteNumber("BORRADOR");
   }
 
+  // En el panel de vendedor basta con uno de los dos datos de contacto.
+  function vendorContactMissing() {
+    if (customer.phone.trim() || customer.email.trim()) return false;
+    setSendState("error"); setSendMessage("Agrega el teléfono o el correo del cliente (al menos uno).");
+    return true;
+  }
+
   function vendorQuotePayload() {
     return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems, discount };
   }
@@ -1076,6 +1098,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   async function saveVendorChanges() {
     if (!initialQuote || sendState === "sending") return;
     if (layoutErrors.length) { setSendState("error"); setSendMessage("Corrige los cruces o elementos fuera del plano antes de guardar."); return; }
+    if (vendorContactMissing()) return;
     setSendState("sending"); setSendMessage("Guardando cambios…");
     try {
       const response = await fetch(`/api/vendedor/quotes/${initialQuote.id}`, {
@@ -1097,6 +1120,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   async function saveAsNewVersion() {
     if (sendState === "sending") return;
     if (layoutErrors.length) { setSendState("error"); setSendMessage("Corrige los cruces o elementos fuera del plano antes de guardar."); return; }
+    if (vendorContactMissing()) return;
     setSendState("sending"); setSendMessage("Guardando nueva cotización…");
     try {
       const response = await fetch("/api/vendedor/quotes", {
@@ -1183,7 +1207,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           return (
             <div className={`equipment-row ${justAdded ? "equipment-row-added" : ""}`} key={equipment.id}>
               <i style={{ background: equipment.color }} />
-              <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm</small></span>
+              <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm{equipment.alwaysFree ? " · sin costo" : ""}</small></span>
               <div className="qty-stepper">
                 <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
                 <span>{qty}</span>
@@ -1208,6 +1232,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
                 <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
                 <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
+                {isVendor && <label>Montaje<select value={specialForm.mount} onChange={(event) => setSpecialForm((current) => ({ ...current, mount: event.target.value === "outside" ? "outside" : "inside" }))}><option value="inside">Interior</option><option value="outside">Exterior</option></select></label>}
                 <button type="button" className={`qty-add ${justAddedId === "special" ? "qty-add-success" : ""}`} onClick={addSpecialItem}>{justAddedId === "special" ? "✓ Agregado" : "Agregar especial"}</button>
               </div>
               {specialItems.length > 0 && (
@@ -1215,9 +1240,16 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   {specialItems.map((entry, index) => {
                     const line = quote.specialLines[index];
                     return (
-                      <li key={entry.id}>
-                        <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm · {line?.included ? "Incluido" : money(line?.linePrice ?? EXTRA_EQUIPMENT_PRICE)}</small></span>
+                      <li key={entry.id} className={isVendor ? "special-item-vendor" : undefined}>
+                        <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm{isVendor ? ` · ${entry.mount === "outside" ? "Exterior" : "Interior"}` : ""} · {line?.included ? "Incluido" : money(line?.linePrice ?? EXTRA_EQUIPMENT_PRICE)}</small></span>
                         <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
+                        {isVendor && (
+                          <div className="special-item-vendor-fields">
+                            <label>Montaje<select value={entry.mount ?? "inside"} onChange={(event) => updateSpecialItem(entry.id, { mount: event.target.value === "outside" ? "outside" : "inside" })}><option value="inside">Interior</option><option value="outside">Exterior</option></select></label>
+                            <label>Precio<input type="number" min={0} step="any" placeholder={line?.included && entry.customPrice == null ? "Incluido" : "Tarifa vigente"} value={entry.customPrice ?? ""} onChange={(event) => { const raw = event.target.value; const parsed = Number(raw); updateSpecialItem(entry.id, { customPrice: raw === "" || !Number.isFinite(parsed) || parsed < 0 ? null : parsed }); }} /></label>
+                            <label className="special-item-comment">Comentarios<textarea rows={2} maxLength={500} placeholder="Material, acabado, detalles de fabricación…" value={entry.comment ?? ""} onChange={(event) => updateSpecialItem(entry.id, { comment: event.target.value })} /></label>
+                          </div>
+                        )}
                       </li>
                     );
                   })}
@@ -1240,8 +1272,72 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   // Escala px-por-cm real del svg del rectángulo (rulerHeightPx la mide con ResizeObserver) — de ahí
   // se derivan las alturas en px de las franjas decorativas, para que las tres franjas y las reglas
   // laterales queden a la misma escala sin medir cada una por separado.
-  const planTopMarginPx = rulerHeightPx ? (rulerHeightPx * PLAN_TOP_MARGIN_CM) / preset.lengthCm : undefined;
-  const planBottomMarginPx = rulerHeightPx ? (rulerHeightPx * PLAN_BOTTOM_MARGIN_CM) / preset.lengthCm : undefined;
+  const planPxPerCm = rulerHeightPx ? rulerHeightPx / (preset.lengthCm + PLAN_EXTERIOR_CM * 2) : undefined;
+  const planTopMarginPx = planPxPerCm ? planPxPerCm * PLAN_TOP_MARGIN_CM : undefined;
+  const planBottomMarginPx = planPxPerCm ? planPxPerCm * PLAN_BOTTOM_MARGIN_CM : undefined;
+  const rulerTopSpacerPx = planPxPerCm ? planPxPerCm * (PLAN_TOP_MARGIN_CM + PLAN_EXTERIOR_CM) : undefined;
+  const rulerBottomSpacerPx = planPxPerCm ? planPxPerCm * (PLAN_BOTTOM_MARGIN_CM + PLAN_EXTERIOR_CM) : undefined;
+  const rulerStripPx = planPxPerCm ? planPxPerCm * preset.lengthCm : undefined;
+  const planViewX = -PLAN_EXTERIOR_CM;
+  const planViewW = preset.widthCm + PLAN_EXTERIOR_CM * 2;
+
+  function planExportSvg() {
+    return buildPlanSvg({
+      title: `${meta.label} · ${preset.label}`,
+      subtitle: `${(preset.widthCm / 100).toFixed(2)} × ${(preset.lengthCm / 100).toFixed(2)} × ${(preset.heightCm / 100).toFixed(2)} m · ${axleLabel(preset.axles)} · ${items.length} elemento${items.length === 1 ? "" : "s"}`,
+      reference: quoteNumber && quoteNumber !== "BORRADOR" ? `Folio ${quoteNumber}` : "Borrador",
+      customer: customer.name.trim() || undefined,
+      widthCm: preset.widthCm,
+      lengthCm: preset.lengthCm,
+      heightCm: preset.heightCm,
+      exteriorCm: PLAN_EXTERIOR_CM,
+      axleWheelYs,
+      axleWheelHeightCm: axleWheelHeight,
+      items: items.flatMap((item, index) => {
+        const definition = getEquipment(item.typeId);
+        if (!definition) return [];
+        return [{
+          number: index + 1,
+          name: definition.name,
+          shortName: definition.shortName,
+          color: definition.color,
+          xCm: item.xCm,
+          yCm: item.yCm,
+          widthCm: item.widthCm,
+          depthCm: item.depthCm,
+          alongCm: item.rotation === 0 ? item.widthCm : item.depthCm,
+          depthLabelCm: item.rotation === 0 ? item.depthCm : item.widthCm,
+          wallLabel: WALL_LABEL[item.wall],
+          exterior: (definition.mount ?? "inside") === "outside",
+        }];
+      }),
+      door: { ...door, wallLabel: WALL_LABEL[door.wall] },
+      windows,
+    });
+  }
+  const planFileBase = `plano-${(quoteNumber && quoteNumber !== "BORRADOR" ? quoteNumber : `${modelId}-${preset.widthCm}x${preset.lengthCm}`).replace(/[^\w-]+/g, "-")}`;
+  async function exportPlan(kind: "print" | "pdf" | "png") {
+    setPlanExportError("");
+    setPlanExporting(kind);
+    try {
+      const svg = planExportSvg();
+      if (kind === "print") printPlan(svg, planFileBase);
+      else if (kind === "pdf") await downloadPlanPdf(svg, `${planFileBase}.pdf`);
+      else await downloadPlanPng(svg, `${planFileBase}.png`);
+    } catch (error) {
+      setPlanExportError(error instanceof Error ? error.message : "No fue posible exportar el plano.");
+    } finally {
+      setPlanExporting(null);
+    }
+  }
+  const planExportActions = (variant: "dark" | "light") => (
+    <div className={`plan-export-actions plan-export-actions--${variant}`}>
+      <button type="button" onClick={() => exportPlan("print")} disabled={planExporting !== null}>Imprimir plano</button>
+      <button type="button" onClick={() => exportPlan("pdf")} disabled={planExporting !== null}>{planExporting === "pdf" ? "Generando…" : "Descargar PDF"}</button>
+      <button type="button" onClick={() => exportPlan("png")} disabled={planExporting !== null}>{planExporting === "png" ? "Generando…" : "Descargar imagen"}</button>
+      {planExportError && <small role="alert">{planExportError}</small>}
+    </div>
+  );
   const planAddedItems = items.length > 0 ? (
     <div className="plan-added-list-wrap">
       <div className="workspace-head plan-added-list-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{items.length} en el plano</strong></div></div>
@@ -1271,7 +1367,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
       <p className="configurator-steps-lead no-print">Sigue los pasos para configurar tu remolque.</p>
 
-      <section className={`configurator-shell no-print ${plano ? "" : "configurator-shell--simple"} ${!plano && advancedOpen ? "plan-designer-open" : ""}`}>
+      <section className={`configurator-shell no-print configurator-shell--simple ${advancedOpen ? "plan-designer-open" : ""}`}>
         <aside className="config-sidebar">
           {stepHeader(1, "Paso 1 · Elige la medida de tu remolque", quickModels ? "Elige un modelo o personaliza tus medidas" : "Ancho, largo, altura y ejes")}
           <div className={`step-panel ${activeStep === 1 ? "is-open" : ""}`}>
@@ -1339,24 +1435,24 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
         {showPlanEditor ? (
         <div
-          className={`plan-workspace ${!plano ? "plan-workspace--modal" : ""}`}
-          role={!plano ? "dialog" : undefined}
-          aria-modal={!plano ? true : undefined}
-          aria-labelledby={!plano ? "plan-designer-title" : undefined}
+          className="plan-workspace plan-workspace--modal"
+          role="dialog"
+          aria-modal
+          aria-labelledby="plan-designer-title"
         >
-          {!plano && (
-            <div className="plan-designer-head">
-              <div>
-                <span>DISEÑADOR DE DISTRIBUCIÓN</span>
-                <strong id="plan-designer-title">Acomoda tu equipo en el plano</strong>
-                <small>Arrastra cada elemento, revisa las medidas y vuelve cuando la distribución esté lista.</small>
-              </div>
+          <div className="plan-designer-head">
+            <div>
+              <span>DISEÑADOR DE DISTRIBUCIÓN</span>
+              <strong id="plan-designer-title">Acomoda tu equipo en el plano</strong>
+              <small>Arrastra cada elemento, revisa las medidas y vuelve cuando la distribución esté lista.</small>
+            </div>
+            <div className="plan-designer-head-actions">
+              {planExportActions("dark")}
               <button ref={planDialogCloseRef} type="button" className="button" onClick={closePlanDesigner}>Listo, guardar distribución</button>
             </div>
-          )}
+          </div>
           <div className="addons-equipment-picker">{equipmentPicker}</div>
           <div className="workspace-head"><div><span>PLANO / VISTA SUPERIOR</span><strong>{preset.label}</strong></div><div className="plan-legend"><span><i className="ok" /> Disponible</span><span><i className="danger" /> Cruce</span><span><i className="door" /> Puerta</span></div></div>
-          {plano && planAddedItems}
 
           {plano && (
             <div className="window-controls">
@@ -1384,38 +1480,33 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           <div className="plan-scroll">
             <div className="plan-row">
               <div className="ruler-strip-col">
-                <div className="ruler-strip-spacer" style={planTopMarginPx ? { height: planTopMarginPx } : undefined} />
-                <svg className="ruler-strip" viewBox={`0 0 30 ${preset.lengthCm}`} preserveAspectRatio="none" style={rulerHeightPx ? { height: rulerHeightPx } : undefined} aria-hidden="true">
+                <div className="ruler-strip-spacer" style={rulerTopSpacerPx ? { height: rulerTopSpacerPx } : undefined} />
+                <svg className="ruler-strip" viewBox={`0 0 30 ${preset.lengthCm}`} preserveAspectRatio="none" style={rulerStripPx ? { height: rulerStripPx } : undefined} aria-hidden="true">
                   <line x1={24} y1={0} x2={24} y2={preset.lengthCm} className="ruler-line" />
                   {ticksFor(preset.lengthCm, 10).map((v) => <line key={`lh-${v}`} x1={24} y1={v} x2={30 - (v % 50 === 0 ? 16 : 10)} y2={v} className="ruler-tick" />)}
                   {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`lhl-${v}`} x={6} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 6 ${v})`}>{v}</text>)}
                 </svg>
-                <div className="ruler-strip-spacer" style={planBottomMarginPx ? { height: planBottomMarginPx } : undefined} />
+                <div className="ruler-strip-spacer" style={rulerBottomSpacerPx ? { height: rulerBottomSpacerPx } : undefined} />
               </div>
 
               <div className="plan-column">
-                {/* Franja decorativa (tirón + regla superior), en su propio <svg> con touch-action:auto
-                    para que en móvil el scroll táctil funcione justo arriba del rectángulo. */}
-                <svg className="trailer-plan-margin" viewBox={`${-30} ${-PLAN_TOP_MARGIN_CM} ${preset.widthCm + 60} ${PLAN_TOP_MARGIN_CM}`} preserveAspectRatio="none" style={planTopMarginPx ? { height: planTopMarginPx } : undefined} aria-hidden="true">
-                  <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -65 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
-                  <circle cx={preset.widthCm / 2} cy="-66" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" />
-                  <text x={preset.widthCm / 2} y="-29" textAnchor="middle" className="plan-label">
-                    <tspan x={preset.widthCm / 2}>FRENTE</tspan>
-                    <tspan x={preset.widthCm / 2} dy="12">TIRÓN</tspan>
-                  </text>
+                {/* Franja decorativa (regla superior), en su propio <svg> con touch-action:auto para
+                    que en móvil el scroll táctil funcione justo arriba del plano. */}
+                <svg className="trailer-plan-margin" viewBox={`${planViewX} ${-PLAN_TOP_MARGIN_CM} ${planViewW} ${PLAN_TOP_MARGIN_CM}`} preserveAspectRatio="none" style={planTopMarginPx ? { height: planTopMarginPx } : undefined} aria-hidden="true">
+                  <text x={preset.widthCm / 2} y={-46} textAnchor="middle" className="plan-label">FRENTE · TIRÓN</text>
                   <g className="ruler ruler-top">
-                    <line x1={0} y1={-80} x2={preset.widthCm} y2={-80} className="ruler-line" />
-                    {ticksFor(preset.widthCm, 10).map((v) => <line key={`tw-${v}`} x1={v} y1={-80} x2={v} y2={-80 - (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
-                    {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`twl-${v}`} x={v} y={-101} textAnchor="middle" className="ruler-label">{v}</text>)}
+                    <line x1={0} y1={-10} x2={preset.widthCm} y2={-10} className="ruler-line" />
+                    {ticksFor(preset.widthCm, 10).map((v) => <line key={`tw-${v}`} x1={v} y1={-10} x2={v} y2={-10 - (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
+                    {rulerLabels(preset.widthCm, 50, 20).map((v) => <text key={`twl-${v}`} x={v} y={-31} textAnchor="middle" className="ruler-label">{v}</text>)}
                   </g>
                 </svg>
 
-                {/* El rectángulo del remolque y todo lo que se arrastra — sin cambios de comportamiento:
-                    sigue siendo el único <svg> con touch-action:none. */}
+                {/* El rectángulo del remolque, la franja exterior (PLAN_EXTERIOR_CM) y todo lo que se
+                    arrastra — sigue siendo el único <svg> con touch-action:none. */}
                 <svg
                   ref={svgRef}
                   className="trailer-plan"
-                  viewBox={`${-30} 0 ${preset.widthCm + 60} ${preset.lengthCm}`}
+                  viewBox={`${planViewX} ${-PLAN_EXTERIOR_CM} ${planViewW} ${preset.lengthCm + PLAN_EXTERIOR_CM * 2}`}
                   role="img"
                   aria-label={`Plano editable de remolque de ${preset.widthCm} por ${preset.lengthCm} centímetros`}
                   onPointerMove={moveDrag}
@@ -1424,6 +1515,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   onPointerDown={() => { setSelectedId(null); setDoorSelected(false); setWindowSelectedId(null); }}
                 >
                   <defs><pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="#dce5e5" strokeWidth="0.7" /></pattern><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#smallGrid)" /><path d="M 50 0 L 0 0 0 50" fill="none" stroke="#b9c9cc" strokeWidth="1.3" /></pattern></defs>
+                  <rect x={planViewX + 2} y={-PLAN_EXTERIOR_CM + 2} width={planViewW - 4} height={preset.lengthCm + PLAN_EXTERIOR_CM * 2 - 4} rx="6" fill="rgba(10,53,80,.025)" stroke="#b7c3c6" strokeDasharray="6 5" strokeWidth="1" pointerEvents="none" />
+                  <text x={planViewX + 8} y={-PLAN_EXTERIOR_CM + 12} className="plan-exterior-label" pointerEvents="none">EXTERIOR</text>
+                  <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -60 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" pointerEvents="none" />
+                  <circle cx={preset.widthCm / 2} cy="-61" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" pointerEvents="none" />
                   <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
                   {modelId === "food" && preset.widthCm > PERIMETER_TABLE_DEPTH_CM * 2 && preset.lengthCm > PERIMETER_TABLE_DEPTH_CM * 2 && (
                     <rect x={PERIMETER_TABLE_DEPTH_CM} y={PERIMETER_TABLE_DEPTH_CM} width={preset.widthCm - PERIMETER_TABLE_DEPTH_CM * 2} height={preset.lengthCm - PERIMETER_TABLE_DEPTH_CM * 2} fill="none" stroke="#5f7481" strokeDasharray="7 6" strokeWidth="1.5" opacity=".65" />
@@ -1472,7 +1567,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 {/* Franja decorativa (regla inferior + medida de ancho), en su propio <svg> con
                     touch-action:auto para que en móvil el scroll táctil funcione justo abajo del
                     rectángulo. */}
-                <svg className="trailer-plan-margin" viewBox={`${-30} ${preset.lengthCm} ${preset.widthCm + 60} ${PLAN_BOTTOM_MARGIN_CM}`} preserveAspectRatio="none" style={planBottomMarginPx ? { height: planBottomMarginPx } : undefined} aria-hidden="true">
+                <svg className="trailer-plan-margin" viewBox={`${planViewX} ${preset.lengthCm} ${planViewW} ${PLAN_BOTTOM_MARGIN_CM}`} preserveAspectRatio="none" style={planBottomMarginPx ? { height: planBottomMarginPx } : undefined} aria-hidden="true">
                   <g className="ruler ruler-bottom">
                     <line x1={0} y1={preset.lengthCm + 6} x2={preset.widthCm} y2={preset.lengthCm + 6} className="ruler-line" />
                     {ticksFor(preset.widthCm, 10).map((v) => <line key={`bw-${v}`} x1={v} y1={preset.lengthCm + 6} x2={v} y2={preset.lengthCm + (v % 50 === 0 ? 16 : 10)} className="ruler-tick" />)}
@@ -1483,13 +1578,13 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
               </div>
 
               <div className="ruler-strip-col">
-                <div className="ruler-strip-spacer" style={planTopMarginPx ? { height: planTopMarginPx } : undefined} />
-                <svg className="ruler-strip" viewBox={`0 0 30 ${preset.lengthCm}`} preserveAspectRatio="none" style={rulerHeightPx ? { height: rulerHeightPx } : undefined} aria-hidden="true">
+                <div className="ruler-strip-spacer" style={rulerTopSpacerPx ? { height: rulerTopSpacerPx } : undefined} />
+                <svg className="ruler-strip" viewBox={`0 0 30 ${preset.lengthCm}`} preserveAspectRatio="none" style={rulerStripPx ? { height: rulerStripPx } : undefined} aria-hidden="true">
                   <line x1={6} y1={0} x2={6} y2={preset.lengthCm} className="ruler-line" />
                   {ticksFor(preset.lengthCm, 10).map((v) => <line key={`rh-${v}`} x1={6} y1={v} x2={v % 50 === 0 ? 16 : 10} y2={v} className="ruler-tick" />)}
                   {rulerLabels(preset.lengthCm, 50, 20).map((v) => <text key={`rhl-${v}`} x={24} y={v} textAnchor="middle" dominantBaseline="middle" className="ruler-label" transform={`rotate(-90 24 ${v})`}>{v}</text>)}
                 </svg>
-                <div className="ruler-strip-spacer" style={planBottomMarginPx ? { height: planBottomMarginPx } : undefined} />
+                <div className="ruler-strip-spacer" style={rulerBottomSpacerPx ? { height: rulerBottomSpacerPx } : undefined} />
               </div>
             </div>
           </div>
@@ -1516,7 +1611,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
             <div className="item-editor empty"><span>Selecciona un elemento, la puerta o una ventana en el plano para ajustar su medida o cambiarlo de pared. Todo se desliza pegado a la orilla del remolque.</span></div>
           )}
 
-          {!plano && planAddedItems}
+          {planAddedItems}
         </div>
         ) : (
         <div className="addons-workspace">
@@ -1542,15 +1637,16 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           ) : (
             <div className="item-editor empty"><span>Agrega aditamentos desde la lista de arriba para armar tu configuración.</span></div>
           )}
-          {modelId === "food" && (
+          {planAvailable && (
             <div className={`plan-launch-card ${planReviewed ? "is-ready" : ""} ${items.length ? "" : "is-disabled"}`}>
               <div className="plan-launch-copy">
                 <span className="plan-launch-status">{planReviewed ? "Plano configurado" : items.length ? "Distribución opcional" : "Plano pendiente"}</span>
                 <strong>{planReviewed ? "Tu distribución quedó guardada" : items.length ? "¿Quieres elegir la posición exacta?" : "Agrega accesorios para diseñar el plano"}</strong>
                 <small>{planReviewed ? `${items.length} elemento${items.length === 1 ? "" : "s"} en el plano. Puedes volver a editarlo cuando quieras.` : items.length ? "Abre el diseñador en pantalla completa para acomodar cada accesorio antes de revisar tu cotización." : "El diseñador estará disponible cuando agregues al menos un aditamento."}</small>
                 <button type="button" className="qty-add" onClick={openPlanDesigner} disabled={!items.length}>{planReviewed ? "Editar plano 2D →" : "Diseñar mi plano 2D →"}</button>
+                {items.length > 0 && planExportActions("light")}
               </div>
-              <svg className="plan-launch-preview" viewBox={`${-20} ${-42} ${preset.widthCm + 40} ${preset.lengthCm + 62}`} aria-label="Vista previa de la distribución actual">
+              <svg className="plan-launch-preview" viewBox={`${-PLAN_EXTERIOR_CM} ${-PLAN_EXTERIOR_CM} ${preset.widthCm + PLAN_EXTERIOR_CM * 2} ${preset.lengthCm + PLAN_EXTERIOR_CM * 2}`} aria-label="Vista previa de la distribución actual">
                 <path d={`M ${preset.widthCm / 2 - 30} 0 L ${preset.widthCm / 2} -36 L ${preset.widthCm / 2 + 30} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
                 <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />
                 {items.map((item) => {
@@ -1562,7 +1658,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
             </div>
           )}
           {layoutErrors.length > 0 && (
-            <div className="layout-status has-errors"><strong>Ajuste pendiente</strong><span>No caben todos los aditamentos con esta medida, quita alguno.</span></div>
+            <div className="layout-status has-errors"><strong>Ajuste pendiente</strong><span>{plano ? layoutErrors[0] ?? "Abre el plano 2D para corregir la distribución." : "No caben todos los aditamentos con esta medida, quita alguno."}</span></div>
           )}
           <button type="button" className="step-advance button" onClick={() => setActiveStep(3)}>Continuar al paso 3 →</button>
           </div>
@@ -1573,7 +1669,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           {stepHeader(3, "Paso 3 · Revisa tu cotización", "Después pasamos a tus datos")}
           <div className={`step-panel ${activeStep === 3 ? "is-open" : ""}`}>
           <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
-          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}</ol>
+          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.free ? "Sin costo" : line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}{isVendor && entry.mount === "outside" ? " (ext.)" : ""}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}</ol>
           {!items.length && !specialItems.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
           {isVendor && (
             <div className="vendor-discount-box">
@@ -1631,8 +1727,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           </div>
         ) : (
         <form className="quote-customer-form" onSubmit={initialQuote ? (event) => { event.preventDefault(); saveVendorChanges(); } : plano ? (event) => { event.preventDefault(); saveAsNewVersion(); } : submitQuote}>
-          <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>Teléfono<input name="phone" required minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
-          <div className="form-row form-row-3"><label>Correo electrónico<input name="email" required type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
+          <div className="form-row"><label>Nombre completo<input name="name" required minLength={2} autoComplete="name" value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} /></label><label>{isVendor ? "Teléfono (o correo)" : "Teléfono"}<input name="phone" required={!isVendor} minLength={7} inputMode="tel" autoComplete="tel" value={customer.phone} onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))} /></label></div>
+          <div className="form-row form-row-3"><label>{isVendor ? "Correo (o teléfono)" : "Correo electrónico"}<input name="email" required={!isVendor} type="email" autoComplete="email" value={customer.email} onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))} /></label><label>Ciudad<input name="city" required value={customer.city} onChange={(event) => setCustomer((current) => ({ ...current, city: event.target.value }))} /></label><label>Estado<select name="state" required value={customer.state} onChange={(event) => setCustomer((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1">{MEXICAN_STATES.map((stateName) => <option key={stateName}>{stateName}</option>)}</select></label></div>
           <label>{plano ? "Comentarios" : "Notas para el equipo"}<textarea name="notes" rows={4} placeholder="Cuéntanos el uso que le darás, vehículo de arrastre, aditamentos especiales, color o fecha objetivo…" value={customer.notes} onChange={(event) => setCustomer((current) => ({ ...current, notes: event.target.value }))} /></label>
           {!initialQuote && !plano && <label className="honeypot" aria-hidden="true">Empresa<input name="company" tabIndex={-1} autoComplete="off" /></label>}
           {!initialQuote && !plano && turnstileSiteKey && (
@@ -1676,9 +1772,9 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(combinedTotal)}</strong></div></div>
           <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div><div><small>ESTADO</small><strong>{customer.state || "Por completar"}</strong></div></div>
         </div>
-        {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-25} ${-60} ${preset.widthCm + 50} ${preset.lengthCm + 85}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -48 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
+        {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-PLAN_EXTERIOR_CM} ${-PLAN_EXTERIOR_CM} ${preset.widthCm + PLAN_EXTERIOR_CM * 2} ${preset.lengthCm + PLAN_EXTERIOR_CM * 2}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -60 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
-        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial)</td><td>{entry.widthCm} × {entry.depthCm} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.free ? "Sin costo" : line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial{entry.mount ? ` · ${entry.mount === "outside" ? "exterior" : "interior"}` : ""}){entry.comment ? <small className="document-line-note">{entry.comment}</small> : null}</td><td>{entry.widthCm} × {entry.depthCm} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(combinedSubtotal)}</strong></div><div><span>IVA</span><strong>{money(combinedIva)}</strong></div><div><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
         {customer.notes && <div className="document-notes"><strong>Notas del proyecto</strong><p>{customer.notes}</p></div>}

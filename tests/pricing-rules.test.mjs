@@ -124,6 +124,18 @@ test("uses the resolved included count when calculating a public quote", () => {
   assert.equal(promoted.extras, 0);
 });
 
+test("never charges the gas base nor lets it use an included slot", () => {
+  const compactId = buildCustomPresetId("food", 200, 250, 210, 1);
+  const planchas = [0, 1].map((index) => ({ instanceId: `item-${index}`, typeId: "plancha", xCm: 0, yCm: index * 50, widthCm: 90, depthCm: 50, rotation: 0 }));
+  const gas = { instanceId: "gas", typeId: "base-gas", xCm: 0, yCm: 250, widthCm: 40, depthCm: 40, rotation: 0 };
+  const quote = calculateQuote(compactId, [gas, ...planchas], [], false);
+  assert.equal(quote.preset.includedEquipment, 2);
+  assert.equal(quote.extras, 0);
+  assert.equal(quote.includedUsed, 2);
+  assert.equal(quote.lines[0].free, true);
+  assert.equal(quote.lines[0].linePrice, 0);
+});
+
 test("validates the standard matrix and every supported custom price", () => {
   assert.deepEqual(validateStandardTrailerPrices(), []);
   for (const row of STANDARD_TRAILER_PRICES) {

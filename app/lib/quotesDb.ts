@@ -164,8 +164,12 @@ export async function searchQuotes(term: string, limit = 40, stage?: PipelineSta
   return (await response.json()) as QuoteRow[];
 }
 
-export async function getSiblingQuotes(email: string, excludeId: number): Promise<QuoteRow[]> {
-  const response = await serviceRoleFetch(`/rest/v1/quotes?select=*&email=eq.${encodeURIComponent(email)}&id=neq.${excludeId}&order=created_at.desc`);
+// Desde el panel de vendedor el correo o el teléfono pueden venir vacíos: se agrupa por el que
+// exista (correo primero) y nunca por un valor vacío, que juntaría clientes distintos.
+export async function getSiblingQuotes(contact: { email: string; phone: string }, excludeId: number): Promise<QuoteRow[]> {
+  const filter = contact.email ? `email=eq.${encodeURIComponent(contact.email)}` : contact.phone ? `phone=eq.${encodeURIComponent(contact.phone)}` : null;
+  if (!filter) return [];
+  const response = await serviceRoleFetch(`/rest/v1/quotes?select=*&${filter}&id=neq.${excludeId}&order=created_at.desc`);
   if (!response.ok) throw new Error(`Supabase rechazó la consulta de cotizaciones relacionadas (status ${response.status}).`);
   return (await response.json()) as QuoteRow[];
 }

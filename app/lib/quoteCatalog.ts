@@ -323,6 +323,8 @@ export type EquipmentDefinition = {
   mount?: "inside" | "outside";
   // Mounted above or below the working counter, so it doesn't compete for floor/wall space with other equipment.
   overlapExempt?: boolean;
+  // Se coloca solo en cada Food Trailer nuevo y nunca se cobra: no usa uno de los incluidos ni paga tarifa.
+  alwaysFree?: boolean;
 };
 
 export type PlacedEquipment = {
@@ -356,7 +358,7 @@ export const EQUIPMENT: EquipmentDefinition[] = [
   { id: "campana", model: "food", name: "Campana con extractor", shortName: "Campana", category: "especial", widthCm: 100, depthCm: 60, minWidthCm: 90, maxWidthCm: 450, minDepthCm: 45, maxDepthCm: 75, color: "#714d82", description: "Campana con extractores; va montada en alto y puede sobreponerse a otros equipos.", overlapExempt: true },
   { id: "repisa", model: "food", name: "Repisa baja", shortName: "Repisa", category: "especial", widthCm: 120, depthCm: 35, minWidthCm: 50, maxWidthCm: 300, minDepthCm: 25, maxDepthCm: 50, color: "#7d6a4c", description: "Repisa bajo mesa de trabajo; puede sobreponerse a otros equipos.", overlapExempt: true },
   { id: "barra-abatible", model: "food", name: "Barra abatible", shortName: "Barra", category: "especial", widthCm: 220, depthCm: 25, minWidthCm: 100, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, color: "#2f5d70", description: "Barra cromada o antiderrapante abatible para servicio; va montada por fuera del remolque.", mount: "outside" },
-  { id: "base-gas", model: "food", name: "Base para gas", shortName: "Base gas", category: "especial", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, color: "#6f6f6f", description: "Base exterior para cilindro; va montada por fuera y no afecta el interior.", mount: "outside" },
+  { id: "base-gas", model: "food", name: "Base para gas", shortName: "Base gas", category: "especial", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, color: "#6f6f6f", description: "Base exterior para cilindro; va montada por fuera y no afecta el interior. Siempre sin costo.", mount: "outside", alwaysFree: true },
 
   { id: "rampa", model: "cargo", name: "Rampa de acceso", shortName: "Rampa", category: "acceso", widthCm: 150, depthCm: 45, minWidthCm: 100, maxWidthCm: 220, minDepthCm: 35, maxDepthCm: 60, color: "#c45d35", description: "Rampa abatible para carga y descarga por la parte trasera." },
   { id: "compuerta", model: "cargo", name: "Compuerta trasera abatible", shortName: "Compuerta", category: "acceso", widthCm: 150, depthCm: 20, minWidthCm: 100, maxWidthCm: 220, minDepthCm: 15, maxDepthCm: 30, color: "#8d3c31", description: "Compuerta trasera con bisagras reforzadas." },
@@ -764,7 +766,8 @@ export function isValidPresetId(id: string) {
 // Los primeros preset.includedEquipment aditamentos van sin costo y el resto cuesta el flat
 // EXTRA_EQUIPMENT_PRICE. Los aditamentos especiales entran en el
 // mismo conteo y en la misma tarifa plana, en el orden en que se agregaron: primero los del plano
-// (items) y luego los especiales (specialItems).
+// (items) y luego los especiales (specialItems). Los equipos alwaysFree (base para gas) no cuentan
+// ni se cobran nunca.
 export function calculateQuote<T extends { name: string; widthCm: number; depthCm: number }>(presetId: string, items: PlacedEquipment[], specialItems: T[], includeIva: boolean) {
   const preset = getPreset(presetId);
   let includedUsed = 0;
@@ -772,11 +775,12 @@ export function calculateQuote<T extends { name: string; widthCm: number; depthC
   const lines = items.flatMap((item) => {
     const definition = getEquipment(item.typeId);
     if (!definition) return [];
+    if (definition.alwaysFree) return [{ item, definition, linePrice: 0, included: false, free: true }];
     const included = includedUsed < preset.includedEquipment;
     if (included) includedUsed += 1;
     const linePrice = included ? 0 : EXTRA_EQUIPMENT_PRICE;
     extras += linePrice;
-    return [{ item, definition, linePrice, included }];
+    return [{ item, definition, linePrice, included, free: false }];
   });
   const specialLines = specialItems.map((entry) => {
     const included = includedUsed < preset.includedEquipment;

@@ -45,3 +45,12 @@ alter table public.quotes add constraint quotes_source_check check (source in ('
 
 comment on column public.quotes.parent_quote_id is 'Cotización anterior de la que partió esta versión (NULL si es la primera).';
 comment on column public.quotes.vendor_edited is 'true si un vendedor la creó o editó desde /vendedor/clientes (no el cliente desde el sitio público).';
+
+-- Desde el panel de vendedor basta con teléfono O correo (uno de los dos). El que falte se guarda
+-- como cadena vacía; el sitio público sigue pidiendo ambos desde app/api/quote/route.ts.
+alter table public.quotes drop constraint if exists quotes_phone_check;
+alter table public.quotes add constraint quotes_phone_check check (phone = '' or char_length(phone) between 7 and 40);
+alter table public.quotes drop constraint if exists quotes_email_check;
+alter table public.quotes add constraint quotes_email_check check (email = '' or char_length(email) between 5 and 160);
+alter table public.quotes drop constraint if exists quotes_contact_present_check;
+alter table public.quotes add constraint quotes_contact_present_check check (phone <> '' or email <> '');

@@ -25,7 +25,9 @@ function equipmentPrice(typeId: string, settings: PricingSettings) {
   return settings.extra_equipment_price;
 }
 
-export function calculateVendorQuote<T extends { name: string; widthCm: number; depthCm: number }>(
+// Base para gas (alwaysFree) nunca cuenta ni se cobra. Un aditamento especial con customPrice usa
+// el precio que el vendedor le puso y no consume uno de los incluidos.
+export function calculateVendorQuote<T extends { name: string; widthCm: number; depthCm: number; customPrice?: number | null }>(
   presetId: string,
   items: PlacedEquipment[],
   specialItems: T[],
@@ -40,13 +42,18 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
   const lines = items.flatMap((item) => {
     const definition = getEquipment(item.typeId);
     if (!definition) return [];
+    if (definition.alwaysFree) return [{ item, definition, linePrice: 0, included: false, free: true }];
     const included = includedUsed < includedCount;
     if (included) includedUsed += 1;
     const linePrice = included ? 0 : equipmentPrice(item.typeId, settings);
     extras += linePrice;
-    return [{ item, definition, linePrice, included }];
+    return [{ item, definition, linePrice, included, free: false }];
   });
   const specialLines = specialItems.map((entry) => {
+    if (typeof entry.customPrice === "number" && Number.isFinite(entry.customPrice) && entry.customPrice >= 0) {
+      extras += entry.customPrice;
+      return { ...entry, linePrice: entry.customPrice, included: false };
+    }
     const included = includedUsed < includedCount;
     if (included) includedUsed += 1;
     const linePrice = included ? 0 : settings.extra_equipment_price;
