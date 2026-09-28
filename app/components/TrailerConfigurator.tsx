@@ -48,6 +48,7 @@ import {
   money,
   placeOnWall,
   rectsOverlap,
+  specialEquipmentId,
   validateLayout,
   wallForPoint,
   wallLengthCm,
@@ -63,7 +64,7 @@ import { buildPlanSvg, downloadPlanPdf, downloadPlanPng, printPlan } from "../li
 type PlacedItem = PlacedEquipment & { wall: Wall };
 type SendState = "idle" | "sending" | "sent" | "error";
 type CustomerInfo = { name: string; phone: string; email: string; city: string; state: string; notes: string };
-type InitialSpecialItem = { name: string; widthCm: number; depthCm: number; price: number; comment?: string; mount?: "inside" | "outside"; customPrice?: number | null };
+type InitialSpecialItem = { id?: string; name: string; widthCm: number; depthCm: number; heightCm?: number | null; price: number; comment?: string; mount?: "inside" | "outside"; customPrice?: number | null };
 // Datos de una cotización ya guardada que el panel de vendedor precarga en el configurador para
 // editarla o partir de ella hacia una versión nueva — ver app/vendedor/clientes/[id]/page.tsx.
 export type InitialQuoteFile = { path: string; name: string; uploadedAt: string; url: string | null };
@@ -366,6 +367,19 @@ function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLe
   return working;
 }
 
+// Pieza del plano de un aditamento especial: usa el tipo oculto "especial" (interior o exterior)
+// con la medida propia del especial, buscando un hueco libre igual que un equipo del catálogo.
+function placeSpecialPiece(specialId: string, mount: "inside" | "outside" | undefined, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig): PlacedItem | null {
+  const typeId = specialEquipmentId(mount);
+  const base = getEquipment(typeId);
+  if (!base) return null;
+  const along = clamp(Math.round(alongCm), base.minWidthCm, base.maxWidthCm);
+  const depth = clamp(Math.round(depthCm), base.minDepthCm, base.maxDepthCm);
+  const sized = { ...base, widthCm: along, depthCm: depth, minWidthCm: along, maxWidthCm: along };
+  const placement = findOpenPlacement(sized, trailerWidthCm, trailerLengthCm, existing, door);
+  return { ...makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, trailerWidthCm, trailerLengthCm, base.mount ?? "inside"), specialId };
+}
+
 // Coloca de entrada tantos aditamentos como el tamaño elegido incluya sin costo (2 o 5, ver
 // getIncludedEquipmentCount) — así el remolque nunca arranca ya "usando" un incluido de más ni de
 // menos. La lista base son los primeros 5 típicos; con solo 2 incluidos se recorta a los 2 primeros.
@@ -418,8 +432,9 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [door, setDoor] = useState<DoorConfig>(() => initialQuote?.door ?? defaultDoor(preset.widthCm));
   const [windows, setWindows] = useState<WindowConfig[]>(() => initialQuote?.windows ?? (modelId === "food" ? defaultWindows(door.wall, preset.widthCm, preset.lengthCm, preset.heightCm) : []));
   const [windowSelectedId, setWindowSelectedId] = useState<string | null>(null);
-  const [specialItems, setSpecialItems] = useState<(InitialSpecialItem & { id: string })[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ id: uid(), ...entry })));
-  const [specialForm, setSpecialForm] = useState<{ name: string; widthCm: string; depthCm: string; mount: "inside" | "outside" }>({ name: "", widthCm: "", depthCm: "", mount: "inside" });
+  const [specialItems, setSpecialItems] = useState<(InitialSpecialItem & { id: string })[]>(() => (initialQuote?.specialItems ?? []).map((entry) => ({ ...entry, id: entry.id || uid() })));
+  const emptySpecialForm = { name: "", widthCm: "", depthCm: "", heightCm: "", includeHeight: false, price: "", mount: "inside" as "inside" | "outside" };
+  const [specialForm, setSpecialForm] = useState(emptySpecialForm);
   const [specialOpen, setSpecialOpen] = useState(false);
   // Cliente y vendedor ven primero la lista simple de Paso 2 con acomodo automático y entran al
   // plano 2D completo en una ventana a pantalla completa. En el público solo Food tiene plano; el
@@ -429,9 +444,19 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const planDialogCloseRef = useRef<HTMLButtonElement | null>(null);
   const showPlanEditor = advancedOpen;
   const planAvailable = plano || modelId === "food";
-  const [items, setItems] = useState<PlacedItem[]>(() => initialQuote
-    ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
-    : starterLayout(modelId, preset.widthCm, preset.lengthCm, door, preset.includedEquipment));
+  const [items, setItems] = useState<PlacedItem[]>(() => {
+    const base = initialQuote
+      ? initialQuote.items.map((item) => ({ ...item, wall: wallForPoint(item.xCm + item.widthCm / 2, item.yCm + item.depthCm / 2, preset.widthCm, preset.lengthCm) }))
+      : starterLayout(modelId, preset.widthCm, preset.lengthCm, door, preset.includedEquipment);
+    // Cotizaciones guardadas antes de que los especiales vivieran en el plano: se les coloca su pieza.
+    let working = base;
+    for (const special of specialItems) {
+      if (working.some((item) => item.specialId === special.id)) continue;
+      const piece = placeSpecialPiece(special.id, special.mount, special.widthCm, special.depthCm, preset.widthCm, preset.lengthCm, working, door);
+      if (piece) working = [...working, piece];
+    }
+    return working;
+  });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Lets the Ancho/Fondo fields be cleared to blank while retyping instead of snapping back to the
   // last committed number on every keystroke; null means "show the committed value as usual".
@@ -554,11 +579,23 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   // Ambas ramas regresan exactamente las mismas llaves (discountAmount/preDiscountSubtotal
   // incluidas, en 0 para el público) para que el resto del componente no necesite distinguir cuál
   // función se usó.
+  // La medida de cada especial es la de su pieza en el plano (se puede redimensionar ahí).
+  const resolvedSpecials = useMemo(() => specialItems.map((special) => {
+    const piece = items.find((item) => item.specialId === special.id);
+    if (!piece) return special;
+    return { ...special, widthCm: piece.rotation === 0 ? piece.widthCm : piece.depthCm, depthCm: piece.rotation === 0 ? piece.depthCm : piece.widthCm };
+  }), [specialItems, items]);
+  const specialById = useMemo(() => new Map(resolvedSpecials.map((special) => [special.id, special])), [resolvedSpecials]);
+  const itemName = (item: PlacedItem, definition: { name: string; shortName: string }, short = false) => {
+    const special = item.specialId ? specialById.get(item.specialId) : undefined;
+    if (special) return special.name;
+    return short ? definition.shortName : definition.name;
+  };
   const quote = useMemo(() => {
-    if (isVendor) return calculateVendorQuote(presetId, items, specialItems, includeIva, pricingSettings, discount);
-    const base = calculateQuote(presetId, items, specialItems, includeIva);
+    if (isVendor) return calculateVendorQuote(presetId, items, resolvedSpecials, includeIva, pricingSettings, discount);
+    const base = calculateQuote(presetId, items, resolvedSpecials, includeIva);
     return { ...base, preDiscountSubtotal: base.subtotal, discountAmount: 0 };
-  }, [isVendor, presetId, items, specialItems, includeIva, pricingSettings, discount]);
+  }, [isVendor, presetId, items, resolvedSpecials, includeIva, pricingSettings, discount]);
   const combinedSubtotal = quote.subtotal;
   const combinedIva = quote.iva;
   const combinedTotal = quote.total;
@@ -567,6 +604,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const selectedDefinition = selected ? getEquipment(selected.typeId) : null;
   const selectedAlongLimits = selectedDefinition ? { min: selectedDefinition.minWidthCm, max: selectedDefinition.maxWidthCm } : null;
   const selectedDepthLimits = selectedDefinition ? { min: selectedDefinition.minDepthCm, max: selectedDefinition.maxDepthCm } : null;
+  const selectedSpecial = selected?.specialId ? specialById.get(selected.specialId) ?? null : null;
   const collisionIds = useMemo(() => {
     const ids = new Set<string>();
     for (let i = 0; i < items.length; i += 1) for (let j = i + 1; j < items.length; j += 1) {
@@ -652,30 +690,54 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     flashAdded(typeId);
   }
 
-  // Un accesorio fuera del catálogo estándar, con nombre y medida propios (cliente o vendedor).
-  // Listado en la cotización pero no colocado en el plano 2D. Su precio ya no lo escribe quien lo
-  // agrega: cuenta igual que un equipo del catálogo dentro de la cantidad incluida por el tamaño;
-  // el campo price se conserva en 0 solo por compatibilidad
-  // con cotizaciones ya guardadas que sí tenían un precio propio.
+  // Un accesorio fuera del catálogo estándar, con nombre, medida y (opcional) altura propios. Se
+  // coloca en el plano como una pieza más (tipo "especial", ligada por specialId) que se arrastra,
+  // redimensiona y cambia de pared igual que un equipo del catálogo. Sin precio propio cuenta como
+  // un equipo más dentro de los incluidos; el vendedor puede fijarle un precio (customPrice).
   function addSpecialItem() {
     const name = specialForm.name.trim();
     const widthCm = Number(specialForm.widthCm);
     const depthCm = Number(specialForm.depthCm);
     if (!name || !Number.isFinite(widthCm) || widthCm <= 0 || !Number.isFinite(depthCm) || depthCm <= 0) return;
-    setSpecialItems((current) => [...current, isVendor ? { id: uid(), name, widthCm, depthCm, price: 0, comment: "", mount: specialForm.mount, customPrice: null } : { id: uid(), name, widthCm, depthCm, price: 0 }]);
-    setSpecialForm({ name: "", widthCm: "", depthCm: "", mount: "inside" });
+    const heightValue = Number(specialForm.heightCm);
+    const heightCm = specialForm.includeHeight && specialForm.heightCm !== "" && Number.isFinite(heightValue) && heightValue > 0 ? heightValue : null;
+    const priceValue = Number(specialForm.price);
+    const customPrice = isVendor && specialForm.price !== "" && Number.isFinite(priceValue) && priceValue >= 0 ? priceValue : null;
+    const id = uid();
+    const special = isVendor
+      ? { id, name, widthCm, depthCm, heightCm, price: 0, comment: "", mount: specialForm.mount, customPrice }
+      : { id, name, widthCm, depthCm, heightCm, price: 0, mount: specialForm.mount };
+    const piece = placeSpecialPiece(id, special.mount, widthCm, depthCm, preset.widthCm, preset.lengthCm, items, door);
+    setSpecialItems((current) => [...current, special]);
+    if (piece) { setItems((current) => [...current, piece]); setSelectedId(piece.instanceId); setDoorSelected(false); }
+    setSpecialForm(emptySpecialForm);
     setSendState("idle"); setQuoteNumber("BORRADOR");
     flashAdded("special");
   }
 
-  // Solo vendedor: comentario, interior/exterior y precio propio del aditamento especial.
-  function updateSpecialItem(id: string, patch: Partial<Pick<InitialSpecialItem, "comment" | "mount" | "customPrice">>) {
+  // Comentario y precio solo los edita el vendedor; nombre, altura y montaje cualquiera. Cambiar
+  // interior/exterior vuelve a colocar la pieza con el tipo correspondiente.
+  function updateSpecialItem(id: string, patch: Partial<Pick<InitialSpecialItem, "name" | "heightCm" | "comment" | "mount" | "customPrice">>) {
     setSpecialItems((current) => current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
+    if (patch.mount) {
+      const nextMount = patch.mount;
+      setItems((current) => {
+        const piece = current.find((item) => item.specialId === id);
+        if (piece && (getEquipment(piece.typeId)?.mount ?? "inside") === nextMount) return current;
+        const others = current.filter((item) => item.specialId !== id);
+        const special = specialById.get(id);
+        const along = piece ? (piece.rotation === 0 ? piece.widthCm : piece.depthCm) : special?.widthCm ?? 60;
+        const depth = piece ? (piece.rotation === 0 ? piece.depthCm : piece.widthCm) : special?.depthCm ?? 40;
+        const next = placeSpecialPiece(id, nextMount, along, depth, preset.widthCm, preset.lengthCm, others, door);
+        return next ? [...others, next] : others;
+      });
+    }
     setSendState("idle");
   }
 
   function removeSpecialItem(id: string) {
     setSpecialItems((current) => current.filter((entry) => entry.id !== id));
+    setItems((current) => current.filter((item) => item.specialId !== id));
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
 
@@ -746,6 +808,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
 
   function removeItem(instanceId: string) {
+    const specialId = items.find((item) => item.instanceId === instanceId)?.specialId;
+    if (specialId) setSpecialItems((current) => current.filter((entry) => entry.id !== specialId));
     setItems((current) => current.filter((item) => item.instanceId !== instanceId));
     if (selectedId === instanceId) setSelectedId(null);
     setSendState("idle"); setQuoteNumber("BORRADOR");
@@ -1057,7 +1121,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       const response = await fetch("/api/quote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...values, presetId, items, door, windows, includeIva, specialItems }),
+        body: JSON.stringify({ ...values, presetId, items, door, windows, includeIva, specialItems: resolvedSpecials }),
       });
       const result = await response.json() as { error?: string; quoteNumber?: string; emailSent?: boolean; message?: string };
       if (!response.ok) throw new Error(result.error || "No fue posible enviar la cotización.");
@@ -1091,7 +1155,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
 
   function vendorQuotePayload() {
-    return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems, discount };
+    return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems: resolvedSpecials, discount };
   }
 
   // "Guardar cambios": actualiza la MISMA cotización que se precargó (mismo folio y versión).
@@ -1232,24 +1296,30 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 <label>Nombre<input type="text" value={specialForm.name} onChange={(event) => setSpecialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Rotulado especial" /></label>
                 <label>Ancho cm<input type="number" min={1} value={specialForm.widthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, widthCm: event.target.value }))} /></label>
                 <label>Fondo cm<input type="number" min={1} value={specialForm.depthCm} onChange={(event) => setSpecialForm((current) => ({ ...current, depthCm: event.target.value }))} /></label>
+                <button type="button" className={`special-height-toggle ${specialForm.includeHeight ? "is-active" : ""}`} aria-pressed={specialForm.includeHeight} onClick={() => setSpecialForm((current) => ({ ...current, includeHeight: !current.includeHeight, heightCm: current.includeHeight ? "" : current.heightCm }))}>{specialForm.includeHeight ? "✓ Con altura" : "+ Incluir altura"}</button>
+                {specialForm.includeHeight && <label>Alto cm<input type="number" min={1} value={specialForm.heightCm} onChange={(event) => setSpecialForm((current) => ({ ...current, heightCm: event.target.value }))} /></label>}
                 {isVendor && <label>Montaje<select value={specialForm.mount} onChange={(event) => setSpecialForm((current) => ({ ...current, mount: event.target.value === "outside" ? "outside" : "inside" }))}><option value="inside">Interior</option><option value="outside">Exterior</option></select></label>}
-                <button type="button" className={`qty-add ${justAddedId === "special" ? "qty-add-success" : ""}`} onClick={addSpecialItem}>{justAddedId === "special" ? "✓ Agregado" : "Agregar especial"}</button>
+                {isVendor && <label>Precio (opcional)<input type="number" min={0} step="any" placeholder="Tarifa vigente" value={specialForm.price} onChange={(event) => setSpecialForm((current) => ({ ...current, price: event.target.value }))} /></label>}
+                <button type="button" className={`qty-add ${justAddedId === "special" ? "qty-add-success" : ""}`} onClick={addSpecialItem}>{justAddedId === "special" ? "✓ Agregado al plano" : "Agregar especial al plano"}</button>
               </div>
-              {specialItems.length > 0 && (
+              {resolvedSpecials.length > 0 && (
                 <ul className="special-item-list">
-                  {specialItems.map((entry, index) => {
+                  {resolvedSpecials.map((entry, index) => {
                     const line = quote.specialLines[index];
+                    const piece = items.find((item) => item.specialId === entry.id);
                     return (
-                      <li key={entry.id} className={isVendor ? "special-item-vendor" : undefined}>
-                        <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm} cm{isVendor ? ` · ${entry.mount === "outside" ? "Exterior" : "Interior"}` : ""} · {line?.included ? "Incluido" : money(line?.linePrice ?? EXTRA_EQUIPMENT_PRICE)}</small></span>
-                        <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
-                        {isVendor && (
-                          <div className="special-item-vendor-fields">
-                            <label>Montaje<select value={entry.mount ?? "inside"} onChange={(event) => updateSpecialItem(entry.id, { mount: event.target.value === "outside" ? "outside" : "inside" })}><option value="inside">Interior</option><option value="outside">Exterior</option></select></label>
-                            <label>Precio<input type="number" min={0} step="any" placeholder={line?.included && entry.customPrice == null ? "Incluido" : "Tarifa vigente"} value={entry.customPrice ?? ""} onChange={(event) => { const raw = event.target.value; const parsed = Number(raw); updateSpecialItem(entry.id, { customPrice: raw === "" || !Number.isFinite(parsed) || parsed < 0 ? null : parsed }); }} /></label>
-                            <label className="special-item-comment">Comentarios<textarea rows={2} maxLength={500} placeholder="Material, acabado, detalles de fabricación…" value={entry.comment ?? ""} onChange={(event) => updateSpecialItem(entry.id, { comment: event.target.value })} /></label>
-                          </div>
-                        )}
+                      <li key={entry.id} className="special-item-vendor">
+                        <span><strong>{entry.name}</strong><small>{entry.widthCm} × {entry.depthCm}{entry.heightCm ? ` × ${entry.heightCm}` : ""} cm · {entry.mount === "outside" ? "Exterior" : "Interior"} · {line?.included ? "Incluido" : money(line?.linePrice ?? EXTRA_EQUIPMENT_PRICE)}</small></span>
+                        <div className="special-item-actions">
+                          {piece && <button type="button" className="qty-add" onClick={() => { setSelectedId(piece.instanceId); setDoorSelected(false); setWindowSelectedId(null); if (planAvailable && !advancedOpen) openPlanDesigner(); }}>Ver en plano</button>}
+                          <button type="button" className="danger-button" onClick={() => removeSpecialItem(entry.id)}>Quitar</button>
+                        </div>
+                        <div className="special-item-vendor-fields">
+                          <label>Altura cm<input type="number" min={0} placeholder="Sin altura" value={entry.heightCm ?? ""} onChange={(event) => { const raw = event.target.value; const parsed = Number(raw); updateSpecialItem(entry.id, { heightCm: raw === "" || !Number.isFinite(parsed) || parsed <= 0 ? null : parsed }); }} /></label>
+                          {isVendor && <label>Montaje<select value={entry.mount ?? "inside"} onChange={(event) => updateSpecialItem(entry.id, { mount: event.target.value === "outside" ? "outside" : "inside" })}><option value="inside">Interior</option><option value="outside">Exterior</option></select></label>}
+                          {isVendor && <label>Precio<input type="number" min={0} step="any" placeholder={line?.included && entry.customPrice == null ? "Incluido" : "Tarifa vigente"} value={entry.customPrice ?? ""} onChange={(event) => { const raw = event.target.value; const parsed = Number(raw); updateSpecialItem(entry.id, { customPrice: raw === "" || !Number.isFinite(parsed) || parsed < 0 ? null : parsed }); }} /></label>}
+                          {isVendor && <label className="special-item-comment">Comentarios<textarea rows={2} maxLength={500} placeholder="Material, acabado, detalles de fabricación…" value={entry.comment ?? ""} onChange={(event) => updateSpecialItem(entry.id, { comment: event.target.value })} /></label>}
+                        </div>
                       </li>
                     );
                   })}
@@ -1298,8 +1368,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         if (!definition) return [];
         return [{
           number: index + 1,
-          name: definition.name,
-          shortName: definition.shortName,
+          name: itemName(item, definition),
+          shortName: itemName(item, definition, true),
           color: definition.color,
           xCm: item.xCm,
           yCm: item.yCm,
@@ -1348,7 +1418,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           return (
             <li key={item.instanceId} className={`addons-row ${selectedId === item.instanceId ? "is-selected" : ""}`} onClick={() => { setSelectedId(item.instanceId); setDoorSelected(false); setWindowSelectedId(null); }}>
               <i style={{ background: definition.color }} />
-              <span><strong>{index + 1}. {definition.name}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm · {WALL_LABEL[item.wall]}</small></span>
+              <span><strong>{index + 1}. {itemName(item, definition)}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm · {(definition.mount ?? "inside") === "outside" ? "Exterior" : WALL_LABEL[item.wall]}</small></span>
               <button type="button" className="danger-button" onClick={(event) => { event.stopPropagation(); removeItem(item.instanceId); }}>Quitar</button>
             </li>
           );
@@ -1537,7 +1607,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                     return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""} ${faint ? "faint" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
                       <rect width={item.widthCm} height={item.depthCm} rx="3" fill={faint ? "#9aa4a7" : definition.color} fillOpacity={faint ? ".16" : ".92"} />
                       <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : faint ? "#b7c0c2" : "#0a3550"} strokeWidth={active ? 4 : faint ? 1.2 : 2} strokeDasharray={faint ? "4 3" : undefined} />
-                      <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className={`item-label ${faint ? "faint" : ""}`}><tspan x={item.widthCm / 2}>{index + 1}. {definition.shortName}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
+                      <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className={`item-label ${faint ? "faint" : ""}`}><tspan x={item.widthCm / 2}>{index + 1}. {itemName(item, definition, true)}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
                     </g>;
                   })}
 
@@ -1593,9 +1663,17 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
 
           {selected && selectedDefinition && selectedAlongLimits && selectedDepthLimits ? (
             <div className="item-editor">
-              <div><span>ELEMENTO SELECCIONADO</span><strong>{selectedDefinition.name}</strong><small>{selectedDefinition.description} {(selectedDefinition.mount ?? "inside") === "outside" ? "Va montado por fuera del remolque." : `Pared actual: ${WALL_LABEL[selected.wall]}.`}</small></div>
+              <div><span>{selectedSpecial ? "ADITAMENTO ESPECIAL" : "ELEMENTO SELECCIONADO"}</span><strong>{itemName(selected, selectedDefinition)}</strong><small>{selectedSpecial ? (selectedSpecial.comment || "Fuera del catálogo, con medida propia.") : selectedDefinition.description} {(selectedDefinition.mount ?? "inside") === "outside" ? "Va montado por fuera del remolque." : `Pared actual: ${WALL_LABEL[selected.wall]}.`}</small></div>
               <label>Ancho<input type="number" min={selectedAlongLimits.min} max={Math.min(selectedAlongLimits.max, wallLengthCm(selected.wall, preset.widthCm, preset.lengthCm))} value={alongDraft ?? (selected.rotation === 0 ? selected.widthCm : selected.depthCm)} onChange={(event) => { const raw = event.target.value; setAlongDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateItemSize(selected.instanceId, "along", parsed); }} onBlur={() => setAlongDraft(null)} /><b>cm</b></label>
               <label>Fondo<input type="number" min={selectedDepthLimits.min} max={selectedDepthLimits.max} value={depthDraft ?? (selected.rotation === 0 ? selected.depthCm : selected.widthCm)} onChange={(event) => { const raw = event.target.value; setDepthDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateItemSize(selected.instanceId, "depth", parsed); }} onBlur={() => setDepthDraft(null)} /><b>cm</b></label>
+              {selectedSpecial && (selectedSpecial.heightCm != null ? (
+                <>
+                  <label>Alto<input key={selectedSpecial.id} type="number" min={1} defaultValue={selectedSpecial.heightCm} onChange={(event) => { const parsed = Number(event.target.value); if (event.target.value !== "" && Number.isFinite(parsed) && parsed > 0) updateSpecialItem(selectedSpecial.id, { heightCm: parsed }); }} /><b>cm</b></label>
+                  <button type="button" onClick={() => updateSpecialItem(selectedSpecial.id, { heightCm: null })}>Quitar altura</button>
+                </>
+              ) : (
+                <button type="button" onClick={() => updateSpecialItem(selectedSpecial.id, { heightCm: 100 })}>+ Incluir altura</button>
+              ))}
               <button type="button" onClick={() => cycleWall(selected.instanceId)}>Cambiar de pared ↻</button>
               <button type="button" className="danger-button" onClick={removeSelected}>Eliminar</button>
             </div>
@@ -1628,7 +1706,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 return (
                   <li key={item.instanceId} className="addons-row">
                     <i style={{ background: definition.color }} />
-                    <span><strong>{index + 1}. {definition.name}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm</small></span>
+                    <span><strong>{index + 1}. {itemName(item, definition)}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm</small></span>
                     <button type="button" className="danger-button" onClick={() => removeItem(item.instanceId)}>Quitar</button>
                   </li>
                 );
@@ -1669,7 +1747,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           {stepHeader(3, "Paso 3 · Revisa tu cotización", "Después pasamos a tus datos")}
           <div className={`step-panel ${activeStep === 3 ? "is-open" : ""}`}>
           <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
-          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.free ? "Sin costo" : line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}{isVendor && entry.mount === "outside" ? " (ext.)" : ""}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}</ol>
+          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.free ? "Sin costo" : line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}{entry.mount === "outside" ? " (ext.)" : ""}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}</ol>
           {!items.length && !specialItems.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
           {isVendor && (
             <div className="vendor-discount-box">
@@ -1774,7 +1852,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         </div>
         {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-PLAN_EXTERIOR_CM} ${-PLAN_EXTERIOR_CM} ${preset.widthCm + PLAN_EXTERIOR_CM * 2} ${preset.lengthCm + PLAN_EXTERIOR_CM * 2}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -60 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
-        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.free ? "Sin costo" : line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial{entry.mount ? ` · ${entry.mount === "outside" ? "exterior" : "interior"}` : ""}){entry.comment ? <small className="document-line-note">{entry.comment}</small> : null}</td><td>{entry.widthCm} × {entry.depthCm} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.free ? "Sin costo" : line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial{entry.mount ? ` · ${entry.mount === "outside" ? "exterior" : "interior"}` : ""}){entry.comment ? <small className="document-line-note">{entry.comment}</small> : null}</td><td>{entry.widthCm} × {entry.depthCm}{entry.heightCm ? ` × ${entry.heightCm}` : ""} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(combinedSubtotal)}</strong></div><div><span>IVA</span><strong>{money(combinedIva)}</strong></div><div><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
         {customer.notes && <div className="document-notes"><strong>Notas del proyecto</strong><p>{customer.notes}</p></div>}

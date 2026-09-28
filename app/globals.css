@@ -222,6 +222,10 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .special-item-list small { display:block; margin-top:3px; color:var(--muted); font-size:9px; }
 .special-item-form select,.special-item-vendor-fields select,.special-item-vendor-fields input,.special-item-vendor-fields textarea { display:block; width:100%; margin-top:6px; padding:9px 8px; border:1px solid #c7d0ce; background:#f9faf9; color:var(--deep); font:500 12px Arial; }
 .special-item-list li.special-item-vendor { flex-wrap:wrap; }
+.special-height-toggle { align-self:end; min-height:36px; padding:0 10px; border:1px dashed #9fb0b6; background:#fff; color:var(--deep); font:800 10px Arial,sans-serif; letter-spacing:.04em; cursor:pointer; }
+.special-height-toggle.is-active { border-style:solid; border-color:var(--deep); background:#eef4f5; }
+.special-item-actions { display:flex; gap:6px; align-items:center; }
+.special-item-actions .qty-add { min-height:30px; padding:0 10px; font-size:9px; }
 .special-item-vendor-fields { flex-basis:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .special-item-vendor-fields label { color:var(--deep); font-size:9px; font-weight:900; letter-spacing:.06em; text-transform:uppercase; }
 .special-item-vendor-fields .special-item-comment { grid-column:1/-1; }

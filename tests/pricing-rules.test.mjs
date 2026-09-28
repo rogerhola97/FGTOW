@@ -136,6 +136,17 @@ test("never charges the gas base nor lets it use an included slot", () => {
   assert.equal(quote.lines[0].linePrice, 0);
 });
 
+test("charges a special add-on once even though it also has a piece on the plan", () => {
+  const compactId = buildCustomPresetId("food", 200, 250, 210, 1);
+  const piece = { instanceId: "sp", typeId: "especial", xCm: 0, yCm: 0, widthCm: 80, depthCm: 40, rotation: 0, specialId: "s1" };
+  const planchas = [0, 1].map((index) => ({ instanceId: `item-${index}`, typeId: "plancha", xCm: 0, yCm: 60 + index * 50, widthCm: 90, depthCm: 50, rotation: 0 }));
+  const quote = calculateQuote(compactId, [piece, ...planchas], [{ id: "s1", name: "Rotulado", widthCm: 80, depthCm: 40 }], false);
+  assert.equal(quote.lines.length, 2);
+  assert.equal(quote.specialLines.length, 1);
+  assert.equal(quote.specialLines[0].included, false);
+  assert.equal(quote.extras, 2500);
+});
+
 test("validates the standard matrix and every supported custom price", () => {
   assert.deepEqual(validateStandardTrailerPrices(), []);
   for (const row of STANDARD_TRAILER_PRICES) {

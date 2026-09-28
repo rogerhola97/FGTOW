@@ -41,7 +41,7 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
   let extras = 0;
   const lines = items.flatMap((item) => {
     const definition = getEquipment(item.typeId);
-    if (!definition) return [];
+    if (!definition || definition.special) return [];
     if (definition.alwaysFree) return [{ item, definition, linePrice: 0, included: false, free: true }];
     const included = includedUsed < includedCount;
     if (included) includedUsed += 1;

@@ -325,6 +325,9 @@ export type EquipmentDefinition = {
   overlapExempt?: boolean;
   // Se coloca solo en cada Food Trailer nuevo y nunca se cobra: no usa uno de los incluidos ni paga tarifa.
   alwaysFree?: boolean;
+  // Pieza del plano que representa un aditamento especial (specialItems). No aparece en la lista
+  // del catálogo y no genera línea de precio propia: se cobra como aditamento especial.
+  special?: boolean;
 };
 
 export type PlacedEquipment = {
@@ -335,6 +338,8 @@ export type PlacedEquipment = {
   widthCm: number;
   depthCm: number;
   rotation: 0 | 90;
+  // Enlaza la pieza del plano con su aditamento especial (specialItems[].id).
+  specialId?: string;
 };
 
 export const TRAILER_PRESETS: TrailerPreset[] = [
@@ -377,6 +382,8 @@ export const EQUIPMENT: EquipmentDefinition[] = [
   { id: "soporte-cuatri", model: "rzr", name: "Soporte cuatrimoto adicional", shortName: "Soporte", category: "almacen", widthCm: 60, depthCm: 90, minWidthCm: 50, maxWidthCm: 80, minDepthCm: 70, maxDepthCm: 120, color: "#3c8f84", description: "Soporte adicional para una segunda cuatrimoto." },
   { id: "cama-baja", model: "rzr", name: "Extensión de cama baja", shortName: "Cama baja", category: "estructura", widthCm: 194, depthCm: 60, minWidthCm: 150, maxWidthCm: 220, minDepthCm: 40, maxDepthCm: 90, color: "#8d3c31", description: "Extensión de cama baja para UTV de mayor longitud." },
   { id: "portallantas", model: "rzr", name: "Portallantas de refacción", shortName: "Portallantas", category: "seguridad", widthCm: 40, depthCm: 40, minWidthCm: 30, maxWidthCm: 50, minDepthCm: 30, maxDepthCm: 50, color: "#6f6f6f", description: "Soporte para llanta de refacción." },
+  { id: "especial", model: "food", name: "Aditamento especial", shortName: "Especial", category: "especial", widthCm: 60, depthCm: 40, minWidthCm: 5, maxWidthCm: 900, minDepthCm: 5, maxDepthCm: 300, color: "#a8324a", description: "Aditamento fuera del catálogo con nombre y medida propios.", special: true },
+  { id: "especial-exterior", model: "food", name: "Aditamento especial exterior", shortName: "Especial", category: "especial", widthCm: 60, depthCm: 40, minWidthCm: 5, maxWidthCm: 900, minDepthCm: 5, maxDepthCm: 60, color: "#a8324a", description: "Aditamento fuera del catálogo montado por fuera del remolque.", mount: "outside", special: true },
 ];
 
 export function money(value: number) {
@@ -388,7 +395,13 @@ export function getPresetsForModel(modelId: ModelId) {
 }
 
 export function getEquipmentForModel(modelId: ModelId) {
-  return EQUIPMENT.filter((equipment) => equipment.model === modelId);
+  return EQUIPMENT.filter((equipment) => equipment.model === modelId && !equipment.special);
+}
+
+export const SPECIAL_EQUIPMENT_ID = "especial";
+export const SPECIAL_EQUIPMENT_OUTSIDE_ID = "especial-exterior";
+export function specialEquipmentId(mount: "inside" | "outside" | undefined) {
+  return mount === "outside" ? SPECIAL_EQUIPMENT_OUTSIDE_ID : SPECIAL_EQUIPMENT_ID;
 }
 
 export function getEquipment(id: string) {
@@ -774,7 +787,7 @@ export function calculateQuote<T extends { name: string; widthCm: number; depthC
   let extras = 0;
   const lines = items.flatMap((item) => {
     const definition = getEquipment(item.typeId);
-    if (!definition) return [];
+    if (!definition || definition.special) return [];
     if (definition.alwaysFree) return [{ item, definition, linePrice: 0, included: false, free: true }];
     const included = includedUsed < preset.includedEquipment;
     if (included) includedUsed += 1;

@@ -22,7 +22,7 @@ export default async function VendedorPreciosPage() {
       <span className="eyebrow">Hola, {vendor.name}</span>
       <h1>Tarifas de<br /><em>aditamentos.</em></h1>
       <p>La matriz de remolques, los ejes obligatorios, las alturas permitidas y los accesorios incluidos son comunes para todos los cotizadores. Aquí puedes ajustar solamente los aditamentos adicionales del panel de vendedor.</p>
-      <PricingSettingsForm initialSettings={settings} equipment={EQUIPMENT.filter((item) => !item.alwaysFree)} />
+      <PricingSettingsForm initialSettings={settings} equipment={EQUIPMENT.filter((item) => !item.alwaysFree && !item.special)} />
     </section>
   </main>;
 }
