@@ -201,11 +201,12 @@ export function ContractDocument({ quote, data }: { quote: QuoteRow; data: Quote
   </article>;
 }
 
-export function InvoiceLetterDocument({ quote, data }: { quote: QuoteRow; data: QuoteDocumentsData }) {
+export function InvoiceLetterDocument({ quote, data, isPreview = false }: { quote: QuoteRow; data: QuoteDocumentsData; isPreview?: boolean }) {
   const preset = getPreset(quote.trailer_preset);
   const total = Number(quote.total) || 0;
-  return <article className="legal-document legal-invoice-letter">
+  return <article className={`legal-document legal-invoice-letter ${isPreview ? "is-preview" : "is-issued"}`}>
     <section className="legal-document-page">
+      {isPreview && <div className="legal-preview-watermark" aria-hidden="true">VISTA PREVIA · PAGO PENDIENTE</div>}
       <Header data={data} title="Carta factura" quoteNumber={quote.quote_number} />
       <CustomerStrip quote={quote} />
       <p className="legal-letter-intro">{data.issuer.legalName ? `Por medio de la presente, ${data.issuer.legalName} hace constar la operación correspondiente a la unidad descrita a continuación.` : "Por medio de la presente se hace constar la operación correspondiente a la unidad descrita a continuación."}</p>

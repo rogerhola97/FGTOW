@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InvoiceLetterDocument } from "../../../../../components/LegalDocuments";
 import { PrintDocumentButton } from "../../../../../components/PrintDocumentButton";
+import { canIssueInvoiceLetter } from "../../../../../lib/pipelineStages";
 import { resolveQuoteDocumentsData } from "../../../../../lib/quoteDocuments";
 import { getQuoteById } from "../../../../../lib/quotesDb";
 import { requireVendor } from "../../../../../lib/vendorAuth";
@@ -16,12 +17,13 @@ export default async function InvoiceLetterPreviewPage({ params }: { params: Pro
   const quote = await getQuoteById(id);
   if (!quote) notFound();
   const data = resolveQuoteDocumentsData(quote);
+  const canIssue = canIssueInvoiceLetter(quote.pipeline_stage);
 
   return <main className="legal-document-preview">
     <div className="legal-preview-toolbar no-print">
-      <div><span>Vista previa</span><strong>Carta factura · {quote.quote_number}</strong></div>
-      <div><Link href={`/vendedor/clientes/${quote.id}`}>Volver a editar</Link><Link href={`/vendedor/clientes/${quote.id}/documentos/contrato`}>Ver contrato</Link><PrintDocumentButton /></div>
+      <div><span>{canIssue ? "Disponible para emitir" : "Vista previa · Pago pendiente"}</span><strong>Carta factura · {quote.quote_number}</strong></div>
+      <div><Link href={`/vendedor/clientes/${quote.id}`}>Volver a editar</Link><Link href={`/vendedor/clientes/${quote.id}/documentos/contrato`}>Ver contrato</Link>{canIssue ? <PrintDocumentButton label="Emitir / guardar PDF" /> : <span className="legal-issue-locked">Se habilita en la etapa Pagada</span>}</div>
     </div>
-    <InvoiceLetterDocument quote={quote} data={data} />
+    <InvoiceLetterDocument quote={quote} data={data} isPreview={!canIssue} />
   </main>;
 }

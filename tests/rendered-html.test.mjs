@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("contains the complete FG TOW commercial experience", async () => {
-  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company, documentsEditor, legalDocuments, quoteDocuments, documentsApi, vendorQuotePage] = await Promise.all([
+  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company, documentsEditor, legalDocuments, quoteDocuments, documentsApi, vendorQuotePage, invoiceLetterPage, pipelineStages] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/LeadForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/contact/route.ts", import.meta.url), "utf8"),
@@ -25,6 +25,8 @@ test("contains the complete FG TOW commercial experience", async () => {
     readFile(new URL("../app/lib/quoteDocuments.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/vendedor/quotes/[id]/documents/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/vendedor/clientes/[id]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/vendedor/clientes/[id]/documentos/carta-factura/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/pipelineStages.ts", import.meta.url), "utf8"),
   ]);
   assert.match(home, /Tu proyecto/);
   assert.match(home, /name: "RZR Sport"/);
@@ -89,7 +91,8 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(documentsEditor, /Guardar contrato/);
   assert.match(documentsEditor, /Ver contrato/);
   assert.match(documentsEditor, /Guardar carta factura/);
-  assert.match(documentsEditor, /Ver carta factura/);
+  assert.match(documentsEditor, /Emitir carta factura/);
+  assert.match(documentsEditor, /Ver vista previa/);
   assert.ok(vendorQuotePage.indexOf("<TrailerConfigurator") < vendorQuotePage.indexOf("<VendorDocumentsEditor"));
   assert.match(legalDocuments, /Contrato de compraventa/);
   assert.match(legalDocuments, /Carta factura/);
@@ -99,6 +102,10 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(quoteDocuments, /legalName: ""/);
   assert.match(quoteDocuments, /issuerLegalName === "FG TOW · De FG INV" \? "" : issuerLegalName/);
   assert.match(legalDocuments, /label="Remolque tipo" value=\{data\.vehicle\.invoiceTrailerType\}/);
+  assert.match(legalDocuments, /VISTA PREVIA · PAGO PENDIENTE/);
+  assert.match(invoiceLetterPage, /canIssue \? <PrintDocumentButton/);
+  assert.match(invoiceLetterPage, /isPreview=\{!canIssue\}/);
+  assert.match(pipelineStages, /stage === "pagada" \|\| stage === "entregada"/);
   assert.match(documentsApi, /document_data/);
   assert.doesNotMatch(home, /SkeletonPreview|codex-preview/);
 });

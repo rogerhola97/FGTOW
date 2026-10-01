@@ -12,3 +12,7 @@ export const STAGE_LABEL: Record<PipelineStage, string> = {
 };
 
 export const STAGE_ORDER: PipelineStage[] = ["cotizacion", "produccion", "anticipo", "pagada", "entregada"];
+
+export function canIssueInvoiceLetter(stage: PipelineStage | null | undefined) {
+  return stage === "pagada" || stage === "entregada";
+}

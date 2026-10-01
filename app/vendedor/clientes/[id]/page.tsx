@@ -108,7 +108,7 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
     <TrailerConfigurator modelId={quote.model as ModelId} initialQuote={initialQuote} isVendor />
 
     <div className="vendor-documents-after-quote no-print">
-      <VendorDocumentsEditor quoteId={quote.id} quoteNumber={quote.quote_number} total={Number(quote.total)} initialData={documentData} />
+      <VendorDocumentsEditor quoteId={quote.id} quoteNumber={quote.quote_number} total={Number(quote.total)} pipelineStage={quote.pipeline_stage ?? "cotizacion"} initialData={documentData} />
     </div>
 
     <footer className="no-print"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div><Link href="/vendedor/clientes">Clientes</Link></div><small>© 2026 FG TOW · De FG INV</small></footer>

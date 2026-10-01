@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { canIssueInvoiceLetter, type PipelineStage } from "../lib/pipelineStages";
 import { QuoteDocumentsData } from "../lib/quoteDocuments";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -13,7 +14,7 @@ function money(value: number) {
   return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(value || 0);
 }
 
-export function VendorDocumentsEditor({ quoteId, quoteNumber, total, initialData }: { quoteId: number; quoteNumber: string; total: number; initialData: QuoteDocumentsData }) {
+export function VendorDocumentsEditor({ quoteId, quoteNumber, total, pipelineStage, initialData }: { quoteId: number; quoteNumber: string; total: number; pipelineStage: PipelineStage; initialData: QuoteDocumentsData }) {
   const router = useRouter();
   const [data, setData] = useState(initialData);
   const [states, setStates] = useState<Record<DocumentKind, SaveState>>({ contrato: "idle", "carta-factura": "idle" });
@@ -95,6 +96,7 @@ export function VendorDocumentsEditor({ quoteId, quoteNumber, total, initialData
 
   const showDeposit = data.payment.schedule === "deposit_balance" || data.payment.schedule === "deposit_installments";
   const showInstallments = data.payment.schedule === "deposit_installments" || data.payment.schedule === "installments";
+  const canIssueInvoice = canIssueInvoiceLetter(pipelineStage);
 
   const issuerFields = <div className="vendor-document-grid">
     <label>Razón social / emisor<input value={data.issuer.legalName} maxLength={240} onChange={(event) => updateIssuer("legalName", event.target.value)} /></label>
@@ -187,8 +189,12 @@ export function VendorDocumentsEditor({ quoteId, quoteNumber, total, initialData
         </details>
 
         <details className="vendor-document-card">
-          <summary><span><strong>Carta factura</strong><small>Identificación de la unidad, importe y datos fiscales.</small></span><b>Desplegar</b></summary>
+          <summary><span><strong>Carta factura</strong><small>{canIssueInvoice ? "Pago completo: documento disponible para emitir." : "Vista previa disponible; la emisión se habilita al quedar pagada."}</small></span><b>Desplegar</b></summary>
           <form onSubmit={(event) => submit(event, "carta-factura")} className="vendor-document-form">
+            <div className={`vendor-document-availability ${canIssueInvoice ? "is-available" : "is-preview"}`}>
+              <strong>{canIssueInvoice ? "Carta factura disponible para emitir" : "Vista previa · pago pendiente"}</strong>
+              <span>{canIssueInvoice ? "La cotización está pagada. Ya puedes generar la versión oficial." : "Puedes completar, guardar y revisar los datos. La versión oficial se habilitará en la etapa Pagada."}</span>
+            </div>
             <section className="vendor-document-form-section">
               <h3>Datos de la unidad</h3>
               <p className="vendor-document-shared-note">Estos datos se comparten con el contrato; cualquier cambio se reflejará en ambos documentos.</p>
@@ -234,7 +240,7 @@ export function VendorDocumentsEditor({ quoteId, quoteNumber, total, initialData
 
             <div className="vendor-document-actions">
               <button type="submit" className="button" disabled={states["carta-factura"] === "saving"}>{states["carta-factura"] === "saving" ? "Guardando…" : "Guardar carta factura"}</button>
-              <button type="button" className="button button-outline" onClick={() => openDocument("carta-factura")}>Ver carta factura</button>
+              <button type="button" className="button button-outline" onClick={() => openDocument("carta-factura")}>{canIssueInvoice ? "Emitir carta factura" : "Ver vista previa"}</button>
               <p className={`form-status ${states["carta-factura"]}`} role="status">{messages["carta-factura"]}</p>
             </div>
           </form>

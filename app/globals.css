@@ -781,6 +781,11 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .vendor-document-card>summary b:after { content:" +"; color:var(--gold); font-size:16px; }
 .vendor-document-card[open]>summary b:after { content:" −"; }
 .vendor-document-form { display:flex; flex-direction:column; border-top:1px solid var(--line); }
+.vendor-document-availability { display:flex; margin:24px 28px 0; padding:14px 16px; flex-direction:column; gap:5px; border-left:4px solid var(--gold); background:#fff8e6; }
+.vendor-document-availability strong { color:var(--deep); font-size:10px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+.vendor-document-availability span { color:var(--muted); font-size:11px; line-height:1.5; }
+.vendor-document-availability.is-available { border-left-color:#2d8a55; background:#eaf5ee; }
+.vendor-document-availability.is-available strong { color:#1f6b41; }
 .vendor-document-form-section { padding-top:24px; border-bottom:1px solid var(--line); }
 .vendor-document-form-section h3 { margin:0; padding:0 28px 17px; color:var(--blue); font-size:10px; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
 .vendor-document-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px 18px; padding:4px 28px 28px; }
@@ -807,8 +812,10 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .legal-preview-toolbar>div:last-child { display:flex; align-items:center; gap:10px; }
 .legal-preview-toolbar a { padding:9px 11px; border:1px solid rgba(255,255,255,.32); font-size:9px; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
 .legal-preview-toolbar .button { min-height:36px; padding:0 14px; background:var(--gold); color:var(--deep); font-size:9px; }
+.legal-issue-locked { padding:9px 11px; border:1px solid rgba(255,255,255,.22); color:rgba(255,255,255,.72); font-size:9px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 .legal-document { width:min(210mm,calc(100% - 32px)); margin:0 auto; color:var(--deep); }
 .legal-document-page { position:relative; min-height:297mm; margin:0 0 18px; padding:15mm 15mm 12mm; display:flex; flex-direction:column; overflow:hidden; background:#fff; border-top:6px solid var(--gold); box-shadow:0 16px 45px rgba(6,41,62,.16); }
+.legal-preview-watermark { position:absolute; top:49%; left:50%; z-index:10; width:125%; padding:13px 0; transform:translate(-50%,-50%) rotate(-27deg); border:4px solid rgba(172,70,38,.15); color:rgba(172,70,38,.18); font-size:34px; font-weight:900; letter-spacing:.12em; text-align:center; text-transform:uppercase; pointer-events:none; }
 .legal-document-header { display:grid; grid-template-columns:190px 1fr; align-items:start; gap:22px; padding-bottom:14px; border-bottom:2px solid var(--deep); }
 .legal-document-header img { width:185px; height:auto; object-fit:contain; }
 .legal-document-contact { display:flex; flex-direction:column; align-items:flex-end; gap:3px; color:var(--muted); font-size:8.5px; line-height:1.3; text-align:right; }
@@ -891,6 +898,7 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
   .vendor-document-card>summary b:after { font-size:18px; }
   .vendor-document-form-section h3 { padding-left:18px; padding-right:18px; }
   .vendor-document-shared-note { margin-left:18px; margin-right:18px; }
+  .vendor-document-availability { margin-left:18px; margin-right:18px; }
   .legal-document,.legal-preview-toolbar { width:calc(100% - 20px); }
   .legal-document-header { grid-template-columns:1fr; }
   .legal-document-contact { align-items:flex-start; text-align:left; }
