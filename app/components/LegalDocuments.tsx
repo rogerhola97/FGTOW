@@ -176,7 +176,7 @@ export function ContractDocument({ quote, data }: { quote: QuoteRow; data: Quote
       <footer className="legal-page-footer"><span>FG TOW · De FG INV</span><span>Página 1 de 3</span></footer>
     </section>
 
-    <section className="legal-document-page">
+    <section className="legal-document-page legal-contract-plan-page">
       <Header data={data} title="Anexo técnico · plano" quoteNumber={quote.quote_number} />
       <div className="legal-plan-title"><div><small>UNIDAD</small><strong>{preset.label}</strong></div><div><small>CLIENTE</small><strong>{quote.name}</strong></div><div><small>ELEMENTOS</small><strong>{configuration.items?.length ?? 0}</strong></div></div>
       <Plan quote={quote} />

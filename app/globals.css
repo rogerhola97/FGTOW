@@ -915,12 +915,21 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
   .legal-document-preview,.legal-document-preview * { visibility:visible!important; }
   .legal-document-preview { position:absolute; inset:0 auto auto 0; width:100%; padding:0!important; }
   .legal-document { width:100%; max-width:none; margin:0; }
-  .legal-document-page { width:100%; min-height:280mm; margin:0; padding:5mm 6mm 4mm; overflow:visible; border-top:4px solid #d6a229; box-shadow:none; break-after:page; page-break-after:always; }
+  .legal-document-page { width:100%; min-height:276mm; margin:0; padding:5mm 6mm 4mm; overflow:visible; border-top:4px solid #d6a229; box-shadow:none; break-after:page; page-break-after:always; }
   .legal-document-page:last-child { break-after:auto; page-break-after:auto; }
   .legal-document-header { grid-template-columns:180px 1fr; }
   .legal-customer-strip { grid-template-columns:1.25fr .85fr 1.15fr 1fr; }
   .legal-details-grid { grid-template-columns:1fr 1fr; }
-  .legal-plan-wrap { min-height:127mm; }
-  .legal-plan-wrap svg { max-height:129mm; }
+  .legal-plan-wrap { min-height:115mm; }
+  .legal-plan-wrap svg { max-height:117mm; }
+  .legal-contract-plan-page .legal-plan-title { margin:11px 0 8px; }
+  .legal-contract-plan-page .legal-plan-wrap { min-height:105mm; margin:10px 0; padding:6px; }
+  .legal-contract-plan-page .legal-plan-wrap svg { max-height:107mm; }
+  .legal-contract-plan-page .legal-plan-legend { grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px 10px; margin-top:7px; }
+  .legal-contract-plan-page .legal-plan-legend div { gap:5px; font-size:7px; }
+  .legal-contract-plan-page .legal-plan-legend b { width:13px; height:13px; }
+  .legal-contract-plan-page .legal-plan-note { margin-top:8px; padding:7px 10px; }
+  .legal-contract-plan-page .legal-signatures { padding-top:18px; }
+  .legal-contract-plan-page .legal-page-footer { margin-top:8px; }
   .legal-section,.legal-payment-summary,.legal-delivery,.legal-signatures,.legal-payment-card,.legal-plan-note { break-inside:avoid; page-break-inside:avoid; }
 }

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("contains the complete FG TOW commercial experience", async () => {
-  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company, documentsEditor, legalDocuments, quoteDocuments, documentsApi, vendorQuotePage, invoiceLetterPage, pipelineStages] = await Promise.all([
+  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company, documentsEditor, legalDocuments, quoteDocuments, documentsApi, vendorQuotePage, invoiceLetterPage, pipelineStages, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/LeadForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/contact/route.ts", import.meta.url), "utf8"),
@@ -27,6 +27,7 @@ test("contains the complete FG TOW commercial experience", async () => {
     readFile(new URL("../app/vendedor/clientes/[id]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/vendedor/clientes/[id]/documentos/carta-factura/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/pipelineStages.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(home, /Tu proyecto/);
   assert.match(home, /name: "RZR Sport"/);
@@ -103,6 +104,9 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(quoteDocuments, /issuerLegalName === "FG TOW · De FG INV" \? "" : issuerLegalName/);
   assert.match(legalDocuments, /label="Remolque tipo" value=\{data\.vehicle\.invoiceTrailerType\}/);
   assert.match(legalDocuments, /VISTA PREVIA · PAGO PENDIENTE/);
+  assert.match(legalDocuments, /legal-contract-plan-page/);
+  assert.match(styles, /\.legal-document-page \{[^}]*min-height:276mm[^}]*break-after:page; page-break-after:always;/);
+  assert.doesNotMatch(styles, /\.legal-document-page \{[^}]*min-height:280mm/);
   assert.match(invoiceLetterPage, /canIssue \? <PrintDocumentButton/);
   assert.match(invoiceLetterPage, /isPreview=\{!canIssue\}/);
   assert.match(pipelineStages, /stage === "pagada" \|\| stage === "entregada"/);
