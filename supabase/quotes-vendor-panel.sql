@@ -54,3 +54,10 @@ alter table public.quotes drop constraint if exists quotes_email_check;
 alter table public.quotes add constraint quotes_email_check check (email = '' or char_length(email) between 5 and 160);
 alter table public.quotes drop constraint if exists quotes_contact_present_check;
 alter table public.quotes add constraint quotes_contact_present_check check (phone <> '' or email <> '');
+
+-- Datos editables para el contrato y la carta factura. Se mantienen juntos porque forman parte
+-- de la misma operación comercial, pero el panel genera dos vistas imprimibles independientes.
+alter table public.quotes add column if not exists document_data jsonb not null default '{}'::jsonb;
+alter table public.quotes drop constraint if exists quotes_document_data_object_check;
+alter table public.quotes add constraint quotes_document_data_object_check check (jsonb_typeof(document_data) = 'object');
+comment on column public.quotes.document_data is 'Datos editables del contrato, carta factura, forma de pago y facturación fiscal.';

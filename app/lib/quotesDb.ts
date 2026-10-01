@@ -8,6 +8,7 @@
 //   de haber hecho el insert público.
 import { readEnv } from "./vendorAuth";
 import { PipelineStage } from "./pipelineStages";
+import type { QuoteDocumentsData } from "./quoteDocuments";
 
 export type { PipelineStage };
 export type DiscountType = "percent" | "amount";
@@ -45,6 +46,7 @@ export type QuoteRow = Record<string, unknown> & {
   reference_image_files: QuoteFile[];
   invoice_files: QuoteFile[];
   delivery_photo_files: QuoteFile[];
+  document_data: QuoteDocumentsData | null;
 };
 
 function requireSupabaseUrl() {

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("contains the complete FG TOW commercial experience", async () => {
-  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company] = await Promise.all([
+  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company, documentsEditor, legalDocuments, quoteDocuments, documentsApi] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/LeadForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/contact/route.ts", import.meta.url), "utf8"),
@@ -20,6 +20,10 @@ test("contains the complete FG TOW commercial experience", async () => {
     readFile(new URL("../supabase/quotes-vendor-panel.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/mexicanStates.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/company.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/VendorDocumentsEditor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/LegalDocuments.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/quoteDocuments.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/vendedor/quotes/[id]/documents/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(home, /Tu proyecto/);
   assert.match(home, /name: "RZR Sport"/);
@@ -72,5 +76,15 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(quoteSchema, /axles in \(1, 2, 3\)/);
   assert.match(vendorPanelSchema, /add column if not exists state/);
   assert.match(vendorPanelSchema, /parent_quote_id/);
+  assert.match(vendorPanelSchema, /document_data jsonb/);
+  assert.match(documentsEditor, /Anticipo y resto a meses/);
+  assert.match(documentsEditor, /Todo a meses/);
+  assert.match(documentsEditor, /El cliente requiere factura \(CFDI\)/);
+  assert.match(documentsEditor, /no captures número completo de tarjeta/i);
+  assert.match(legalDocuments, /Contrato de compraventa/);
+  assert.match(legalDocuments, /Carta factura/);
+  assert.doesNotMatch(legalDocuments, /Facebook/i);
+  assert.match(quoteDocuments, /paymentScheduleLabel/);
+  assert.match(documentsApi, /document_data/);
   assert.doesNotMatch(home, /SkeletonPreview|codex-preview/);
 });

@@ -5,7 +5,9 @@ import { DeleteQuoteButton } from "../../../components/DeleteQuoteButton";
 import { PipelineStageControl } from "../../../components/PipelineStageControl";
 import { QuoteFileManager } from "../../../components/QuoteFileManager";
 import { InitialQuoteData, TrailerConfigurator } from "../../../components/TrailerConfigurator";
+import { VendorDocumentsEditor } from "../../../components/VendorDocumentsEditor";
 import { DoorConfig, ModelId, PlacedEquipment, WindowConfig } from "../../../lib/quoteCatalog";
+import { resolveQuoteDocumentsData } from "../../../lib/quoteDocuments";
 import { getPricingSettings } from "../../../lib/pricingSettingsDb";
 import { DEFAULT_PRICING_SETTINGS } from "../../../lib/pricingSettingsShape";
 import { signQuoteFileUrls } from "../../../lib/quoteFilesDb";
@@ -34,6 +36,7 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
     getPricingSettings().catch(() => DEFAULT_PRICING_SETTINGS),
   ]);
   const configuration = (quote.configuration ?? {}) as StoredConfiguration;
+  const documentData = resolveQuoteDocumentsData(quote);
 
   const [referenceImages, invoiceFiles, deliveryPhotos] = await Promise.all([
     signQuoteFileUrls("reference", quote.reference_image_files ?? []),
@@ -99,6 +102,8 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
           </ul>
         </div>
       )}
+
+      <VendorDocumentsEditor quoteId={quote.id} quoteNumber={quote.quote_number} total={Number(quote.total)} initialData={documentData} />
     </section>
 
     <TrailerConfigurator modelId={quote.model as ModelId} initialQuote={initialQuote} isVendor />
