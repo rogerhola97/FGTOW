@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("contains the complete FG TOW commercial experience", async () => {
-  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company, documentsEditor, legalDocuments, quoteDocuments, documentsApi] = await Promise.all([
+  const [home, form, api, schema, foodConfiguratorPage, cargoConfiguratorPage, rzrConfiguratorPage, configurator, quoteApi, quoteSubmission, quotesDb, quoteCatalog, quoteSchema, vendorPanelSchema, mexicanStates, company, documentsEditor, legalDocuments, quoteDocuments, documentsApi, vendorQuotePage] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/LeadForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/contact/route.ts", import.meta.url), "utf8"),
@@ -24,6 +24,7 @@ test("contains the complete FG TOW commercial experience", async () => {
     readFile(new URL("../app/components/LegalDocuments.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/quoteDocuments.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/vendedor/quotes/[id]/documents/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/vendedor/clientes/[id]/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(home, /Tu proyecto/);
   assert.match(home, /name: "RZR Sport"/);
@@ -81,6 +82,12 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(documentsEditor, /Todo a meses/);
   assert.match(documentsEditor, /El cliente requiere factura \(CFDI\)/);
   assert.match(documentsEditor, /no captures número completo de tarjeta/i);
+  assert.equal((documentsEditor.match(/<details className="vendor-document-card">/g) || []).length, 2);
+  assert.match(documentsEditor, /Guardar contrato/);
+  assert.match(documentsEditor, /Ver contrato/);
+  assert.match(documentsEditor, /Guardar carta factura/);
+  assert.match(documentsEditor, /Ver carta factura/);
+  assert.ok(vendorQuotePage.indexOf("<TrailerConfigurator") < vendorQuotePage.indexOf("<VendorDocumentsEditor"));
   assert.match(legalDocuments, /Contrato de compraventa/);
   assert.match(legalDocuments, /Carta factura/);
   assert.doesNotMatch(legalDocuments, /Facebook/i);

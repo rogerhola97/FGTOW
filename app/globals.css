@@ -747,19 +747,27 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 }
 
 /* Editor de contrato y carta factura */
-.vendor-documents { margin-top:28px; border-top:6px solid var(--gold); background:#fff; box-shadow:0 14px 38px rgba(6,41,62,.08); }
+.vendor-documents-after-quote { width:100%; max-width:1180px; margin:0 auto; padding:0 6vw 90px; }
+.vendor-documents { margin-top:42px; border-top:6px solid var(--gold); background:#fff; box-shadow:0 14px 38px rgba(6,41,62,.08); }
 .vendor-documents-head { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding:26px 28px; border-bottom:1px solid var(--line); }
 .vendor-documents-head h2 { margin:12px 0 8px; font-size:27px; letter-spacing:-.035em; text-transform:uppercase; }
 .vendor-documents-head p { max-width:660px; margin:0; color:var(--muted); font-size:12px; line-height:1.65; }
-.vendor-document-preview-actions { display:flex; flex:0 0 250px; flex-direction:column; gap:8px; }
 .button-outline { border:1px solid var(--deep); background:#fff; color:var(--deep); }
 .button-outline:hover { border-color:var(--gold); }
-.vendor-documents-form { display:flex; flex-direction:column; }
-.vendor-documents-form details { border-bottom:1px solid var(--line); }
-.vendor-documents-form summary { position:relative; padding:18px 54px 18px 28px; color:var(--deep); font-size:11px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; list-style:none; }
-.vendor-documents-form summary::-webkit-details-marker { display:none; }
-.vendor-documents-form summary:after { content:"+"; position:absolute; right:28px; top:15px; color:var(--gold); font-size:20px; }
-.vendor-documents-form details[open] summary:after { content:"−"; }
+.vendor-document-cards { display:flex; flex-direction:column; }
+.vendor-document-card { border-bottom:1px solid var(--line); }
+.vendor-document-card>summary { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:22px 28px; color:var(--deep); cursor:pointer; list-style:none; transition:background-color .2s ease; }
+.vendor-document-card>summary::-webkit-details-marker { display:none; }
+.vendor-document-card>summary:hover,.vendor-document-card[open]>summary { background:#f5f7f6; }
+.vendor-document-card>summary span { display:flex; min-width:0; flex-direction:column; gap:5px; }
+.vendor-document-card>summary strong { font-size:13px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
+.vendor-document-card>summary small { color:var(--muted); font-size:11px; font-weight:600; line-height:1.45; }
+.vendor-document-card>summary b { flex:0 0 auto; color:var(--blue); font-size:9px; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
+.vendor-document-card>summary b:after { content:" +"; color:var(--gold); font-size:16px; }
+.vendor-document-card[open]>summary b:after { content:" −"; }
+.vendor-document-form { display:flex; flex-direction:column; border-top:1px solid var(--line); }
+.vendor-document-form-section { padding-top:24px; border-bottom:1px solid var(--line); }
+.vendor-document-form-section h3 { margin:0; padding:0 28px 17px; color:var(--blue); font-size:10px; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
 .vendor-document-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px 18px; padding:4px 28px 28px; }
 .vendor-document-grid label { display:flex; min-width:0; flex-direction:column; gap:7px; color:var(--deep); font-size:9px; font-weight:900; letter-spacing:.07em; text-transform:uppercase; }
 .vendor-document-grid input,.vendor-document-grid select,.vendor-document-grid textarea { width:100%; border:1px solid #cbd3d1; border-radius:0; background:#fafbf9; color:var(--deep); font:500 13px Arial,sans-serif; letter-spacing:0; text-transform:none; }
@@ -771,8 +779,9 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .vendor-document-check { flex-direction:row!important; align-items:center; justify-content:flex-start; padding:12px 14px; border:1px solid var(--line); background:#f5f7f6; }
 .vendor-document-check input { width:18px; height:18px; padding:0; accent-color:var(--blue); }
 .vendor-document-security { margin:0; padding:11px 13px; border-left:3px solid var(--gold); background:#f5f7f6; color:var(--muted); font-size:11px; line-height:1.55; }
-.vendor-documents-save { display:flex; align-items:center; gap:18px; padding:24px 28px; }
-.vendor-documents-save .form-status { margin:0; }
+.vendor-document-actions { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:24px 28px; background:#f5f7f6; }
+.vendor-document-actions .form-status { flex:1 1 100%; margin:0; }
+.vendor-document-shared-note { margin:0 28px 18px; padding:10px 12px; border-left:3px solid var(--gold); background:#f5f7f6; color:var(--muted); font-size:10px; line-height:1.5; }
 
 /* Vistas imprimibles FG TOW */
 .legal-document-preview { min-height:100vh; padding:26px 0 70px; background:#dfe4e3; }
@@ -846,8 +855,8 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .legal-letter-date { margin:18px 0 0; text-align:center; font-size:9px; font-weight:800; }
 
 @media (max-width:850px) {
+  .vendor-documents-after-quote { padding-right:24px; padding-left:24px; }
   .vendor-documents-head { flex-direction:column; }
-  .vendor-document-preview-actions { width:100%; flex:0 0 auto; }
   .vendor-document-grid { grid-template-columns:1fr; }
   .vendor-document-grid .span-2 { grid-column:auto; }
   .legal-preview-toolbar { position:static; align-items:flex-start; flex-direction:column; }
@@ -860,8 +869,13 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 }
 
 @media (max-width:560px) {
-  .vendor-documents-head,.vendor-document-grid,.vendor-documents-save { padding-left:18px; padding-right:18px; }
-  .vendor-documents-form summary { padding-left:18px; }
+  .vendor-documents-after-quote { padding:0 10px 60px; }
+  .vendor-documents-head,.vendor-document-grid,.vendor-document-actions { padding-left:18px; padding-right:18px; }
+  .vendor-document-card>summary { padding-left:18px; padding-right:18px; }
+  .vendor-document-card>summary b { font-size:0; }
+  .vendor-document-card>summary b:after { font-size:18px; }
+  .vendor-document-form-section h3 { padding-left:18px; padding-right:18px; }
+  .vendor-document-shared-note { margin-left:18px; margin-right:18px; }
   .legal-document,.legal-preview-toolbar { width:calc(100% - 20px); }
   .legal-document-header { grid-template-columns:1fr; }
   .legal-document-contact { align-items:flex-start; text-align:left; }
