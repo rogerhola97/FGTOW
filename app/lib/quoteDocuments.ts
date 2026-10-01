@@ -11,6 +11,7 @@ export type QuoteDocumentsData = {
     issueDate: string;
     deliveryDate: string;
     vehicleType: string;
+    invoiceTrailerType: string;
     brand: string;
     modelYear: string;
     serialNumber: string;
@@ -147,6 +148,7 @@ export function defaultQuoteDocumentsData(quote: QuoteForDocuments): QuoteDocume
       issueDate: todayIso(),
       deliveryDate: "",
       vehicleType: vehicleTypeFor(model),
+      invoiceTrailerType: "HECHIZO",
       brand: "FG TOW",
       modelYear: String(new Date().getFullYear()),
       serialNumber: "",
@@ -189,7 +191,7 @@ export function defaultQuoteDocumentsData(quote: QuoteForDocuments): QuoteDocume
       invoiceEmail: quote.email,
     },
     issuer: {
-      legalName: "FG TOW · De FG INV",
+      legalName: "",
       rfc: "",
       address: FABRICATION_ADDRESS,
       phone: WHATSAPP_NUMBER,
@@ -218,6 +220,7 @@ export function resolveQuoteDocumentsData(quote: QuoteForDocuments, candidate: u
   const issuer = object(root.issuer);
   const method = PAYMENT_METHODS.includes(payment.method as PaymentMethod) ? payment.method as PaymentMethod : defaults.payment.method;
   const schedule = PAYMENT_SCHEDULES.includes(payment.schedule as PaymentSchedule) ? payment.schedule as PaymentSchedule : defaults.payment.schedule;
+  const issuerLegalName = limited(issuer.legalName, defaults.issuer.legalName, 240);
 
   return {
     vehicle: {
@@ -226,6 +229,7 @@ export function resolveQuoteDocumentsData(quote: QuoteForDocuments, candidate: u
       issueDate: typeof vehicle.issueDate === "string" && ISO_DATE.test(vehicle.issueDate) ? vehicle.issueDate : defaults.vehicle.issueDate,
       deliveryDate: typeof vehicle.deliveryDate === "string" && (vehicle.deliveryDate === "" || ISO_DATE.test(vehicle.deliveryDate)) ? vehicle.deliveryDate : defaults.vehicle.deliveryDate,
       vehicleType: limited(vehicle.vehicleType, defaults.vehicle.vehicleType, 180),
+      invoiceTrailerType: limited(vehicle.invoiceTrailerType, defaults.vehicle.invoiceTrailerType, 80),
       brand: limited(vehicle.brand, defaults.vehicle.brand, 100),
       modelYear: limited(vehicle.modelYear, defaults.vehicle.modelYear, 20),
       serialNumber: limited(vehicle.serialNumber, defaults.vehicle.serialNumber, 100),
@@ -268,7 +272,7 @@ export function resolveQuoteDocumentsData(quote: QuoteForDocuments, candidate: u
       invoiceEmail: limited(fiscal.invoiceEmail, defaults.fiscal.invoiceEmail, 160),
     },
     issuer: {
-      legalName: limited(issuer.legalName, defaults.issuer.legalName, 240),
+      legalName: issuerLegalName === "FG TOW · De FG INV" ? "" : issuerLegalName,
       rfc: limited(issuer.rfc, defaults.issuer.rfc, 20).toUpperCase(),
       address: limited(issuer.address, defaults.issuer.address, 500),
       phone: limited(issuer.phone, defaults.issuer.phone, 80),

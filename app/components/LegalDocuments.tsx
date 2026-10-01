@@ -23,7 +23,7 @@ function Header({ data, title, quoteNumber }: { data: QuoteDocumentsData; title:
   return <header className="legal-document-header">
     <Image src="/fg-tow-logo.png" alt="FG TOW" width={210} height={66} priority unoptimized />
     <div className="legal-document-contact">
-      <strong>{data.issuer.legalName}</strong>
+      {data.issuer.legalName && <strong>{data.issuer.legalName}</strong>}
       {data.issuer.rfc && <span>RFC {data.issuer.rfc}</span>}
       <span>{data.issuer.phone} · {data.issuer.email}</span>
       <span>{data.issuer.website}</span>
@@ -208,11 +208,12 @@ export function InvoiceLetterDocument({ quote, data }: { quote: QuoteRow; data: 
     <section className="legal-document-page">
       <Header data={data} title="Carta factura" quoteNumber={quote.quote_number} />
       <CustomerStrip quote={quote} />
-      <p className="legal-letter-intro">Por medio de la presente, {data.issuer.legalName} hace constar la operación correspondiente a la unidad descrita a continuación.</p>
+      <p className="legal-letter-intro">{data.issuer.legalName ? `Por medio de la presente, ${data.issuer.legalName} hace constar la operación correspondiente a la unidad descrita a continuación.` : "Por medio de la presente se hace constar la operación correspondiente a la unidad descrita a continuación."}</p>
       <section className="legal-section">
         <h2>Datos de la unidad</h2>
         <dl className="legal-details-grid">
           <Detail label="Vehículo" value={data.vehicle.vehicleType} />
+          <Detail label="Remolque tipo" value={data.vehicle.invoiceTrailerType} />
           <Detail label="Marca" value={data.vehicle.brand} />
           <Detail label="Modelo / año" value={data.vehicle.modelYear} />
           <Detail label="Número de serie" value={data.vehicle.serialNumber || "Pendiente de asignación"} />

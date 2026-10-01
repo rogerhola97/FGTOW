@@ -194,6 +194,7 @@ export function VendorDocumentsEditor({ quoteId, quoteNumber, total, initialData
               <p className="vendor-document-shared-note">Estos datos se comparten con el contrato; cualquier cambio se reflejará en ambos documentos.</p>
               <div className="vendor-document-grid">
                 <label>Tipo de vehículo<input value={data.vehicle.vehicleType} maxLength={180} onChange={(event) => updateVehicle("vehicleType", event.target.value)} /></label>
+                <label>Tipo de remolque en carta factura<input value={data.vehicle.invoiceTrailerType} maxLength={80} onChange={(event) => updateVehicle("invoiceTrailerType", event.target.value.toUpperCase())} /></label>
                 <label>Marca<input value={data.vehicle.brand} maxLength={100} onChange={(event) => updateVehicle("brand", event.target.value)} /></label>
                 <label>Modelo / año<input value={data.vehicle.modelYear} maxLength={20} onChange={(event) => updateVehicle("modelYear", event.target.value)} /></label>
                 <label>Número de serie<input value={data.vehicle.serialNumber} maxLength={100} placeholder="Cuando esté asignado" onChange={(event) => updateVehicle("serialNumber", event.target.value)} /></label>

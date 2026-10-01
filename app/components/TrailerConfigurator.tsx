@@ -1844,6 +1844,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       </div>
       )}
 
+      <details className={`quote-preview-disclosure ${isVendor ? "vendor-quote-preview" : "public-quote-preview"}`} open={isVendor ? undefined : true}>
+      {isVendor && <summary className="no-print"><span><strong>Vista previa de la cotización</strong><small>Formato imprimible con datos del cliente, plano, conceptos y total.</small></span><b>Desplegar</b></summary>}
       <section className="quote-document" aria-label="Formato imprimible de cotización">
         <div className="document-head"><Image src="/fg-tow-logo.png" alt="FG TOW" width={220} height={68} unoptimized /><div><strong>COTIZACIÓN PRELIMINAR</strong><span>Folio {quoteNumber}</span><span>{new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(new Date())}</span></div></div>
         <div className="document-summary">
@@ -1860,6 +1862,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       </section>
 
       <div className="quote-actions no-print"><button type="button" className="button" onClick={() => window.print()}>Imprimir cotización</button><span>En la ventana de impresión selecciona “Guardar como PDF” si prefieres un archivo.</span></div>
+      </details>
       </>
       )}
     </>

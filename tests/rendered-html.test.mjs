@@ -51,6 +51,9 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(rzrConfiguratorPage, /TrailerConfigurator modelId="rzr" plano=\{false\}/);
   assert.match(configurator, /onPointerMove/);
   assert.match(configurator, /Imprimir cotización/);
+  assert.match(configurator, /vendor-quote-preview/);
+  assert.match(configurator, /Vista previa de la cotización/);
+  assert.match(configurator, /open=\{isVendor \? undefined : true\}/);
   assert.match(configurator, /name="state"/);
   assert.match(configurator, /quote-submit-address/);
   assert.match(configurator, /Elige la medida de tu remolque/);
@@ -92,6 +95,10 @@ test("contains the complete FG TOW commercial experience", async () => {
   assert.match(legalDocuments, /Carta factura/);
   assert.doesNotMatch(legalDocuments, /Facebook/i);
   assert.match(quoteDocuments, /paymentScheduleLabel/);
+  assert.match(quoteDocuments, /invoiceTrailerType: "HECHIZO"/);
+  assert.match(quoteDocuments, /legalName: ""/);
+  assert.match(quoteDocuments, /issuerLegalName === "FG TOW · De FG INV" \? "" : issuerLegalName/);
+  assert.match(legalDocuments, /label="Remolque tipo" value=\{data\.vehicle\.invoiceTrailerType\}/);
   assert.match(documentsApi, /document_data/);
   assert.doesNotMatch(home, /SkeletonPreview|codex-preview/);
 });
