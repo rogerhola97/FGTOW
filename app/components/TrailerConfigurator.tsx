@@ -20,6 +20,7 @@ import {
   FOOD_QUICK_MODELS,
   MODEL_META,
   ModelId,
+  OVERLAY_FILL_OPACITY,
   PERIMETER_TABLE_DEPTH_CM,
   PlacedEquipment,
   QuickModel,
@@ -33,9 +34,11 @@ import {
   calculateQuote,
   clampWindowHeightCm,
   clampWindowWidthCm,
+  counterGapCm,
   defaultDoor,
   defaultWindows,
   doorClearanceRect,
+  equipmentBlocks,
   equipmentPricingNote,
   getAllowedAxles,
   getAllowedWidths,
@@ -144,15 +147,19 @@ function rulerLabels(maxCm: number, step: number, minGap: number) {
 
 const SNAP_DISTANCE_CM = 8;
 
-function snapAlongWall(offset: number, alongCm: number, neighbors: { start: number; end: number }[]) {
+// Imanta la pieza al vecino más cercano en la misma pared. Con gap (equipos de mesa del Food
+// Trailer) queda exactamente a esa separación del vecino en lugar de pegada.
+function snapAlongWall(offset: number, alongCm: number, neighbors: { start: number; end: number; gap: number }[]) {
   let best = offset;
-  let bestGap = SNAP_DISTANCE_CM;
+  let bestDiff = SNAP_DISTANCE_CM;
   const end = offset + alongCm;
   for (const neighbor of neighbors) {
     const gapBefore = neighbor.start - end;
-    if (gapBefore > 0 && gapBefore < bestGap) { bestGap = gapBefore; best = neighbor.start - alongCm; }
+    const diffBefore = Math.abs(gapBefore - neighbor.gap);
+    if (gapBefore > -SNAP_DISTANCE_CM && diffBefore > 0 && diffBefore < bestDiff) { bestDiff = diffBefore; best = neighbor.start - alongCm - neighbor.gap; }
     const gapAfter = offset - neighbor.end;
-    if (gapAfter > 0 && gapAfter < bestGap) { bestGap = gapAfter; best = neighbor.end; }
+    const diffAfter = Math.abs(gapAfter - neighbor.gap);
+    if (gapAfter > -SNAP_DISTANCE_CM && diffAfter > 0 && diffAfter < bestDiff) { bestDiff = diffAfter; best = neighbor.end + neighbor.gap; }
   }
   return best;
 }
@@ -165,9 +172,25 @@ function doorGeometry(door: DoorConfig, preset: TrailerPreset) {
   return { x1: preset.widthCm, y1: offsetCm, x2: preset.widthCm, y2: offsetCm + widthCm, labelX: preset.widthCm - 18, labelY: offsetCm + widthCm / 2, rotate: 90 };
 }
 
-function makeItem(typeId: string, wall: Wall, offsetCm: number, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, mount: "inside" | "outside"): PlacedItem {
-  const rect = placeOnWall(wall, offsetCm, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount);
+function makeItem(typeId: string, wall: Wall, offsetCm: number, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, mount: "inside" | "outside", gapCm = 0): PlacedItem {
+  const rect = placeOnWall(wall, offsetCm, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount, gapCm);
   return { instanceId: uid(), typeId, wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
+}
+
+type PlanRect = { xCm: number; yCm: number; widthCm: number; depthCm: number };
+
+function gapForType(typeId: string, model: ModelId) {
+  return counterGapCm(getEquipment(typeId), model);
+}
+
+// Dos piezas chocan si se enciman o, cuando ambas van a la altura de la mesa del Food Trailer,
+// si quedan a menos de COUNTER_GAP_CM entre sí. Los sobrepuestos (campana, repisas) no chocan
+// salvo conflicto explícito (repisa alta sobre trompo).
+function piecesClash(a: PlanRect, aType: string, b: PlanRect, bType: string, model: ModelId) {
+  if (!equipmentBlocks(getEquipment(aType), getEquipment(bType))) return false;
+  const gap = Math.min(gapForType(aType, model), gapForType(bType, model));
+  const pad = gap > 0 ? gap - 0.5 : 0;
+  return rectsOverlap({ xCm: a.xCm - pad, yCm: a.yCm - pad, widthCm: a.widthCm + pad * 2, depthCm: a.depthCm + pad * 2 }, b);
 }
 
 function offsetOfItem(item: PlacedItem) {
@@ -257,6 +280,8 @@ type CollisionParams = {
   originWall: Wall;
   originOffsetCm: number;
   overlapExempt?: boolean;
+  typeId: string;
+  model: ModelId;
 };
 
 const OVERLAP_SWAP_RATIO = 0.6;
@@ -264,18 +289,18 @@ const OVERLAP_SWAP_RATIO = 0.6;
 // When a dragged item would overlap another, push it to the nearest free spot along
 // the same wall, then other walls, and only swap places with the blocking item as a last resort.
 function resolveCollision(params: CollisionParams): { wall: Wall; offsetCm: number; swapWith?: SwapTarget } {
-  const { wall, alongCm, depthCm, mount, trailerWidthCm, trailerLengthCm, door, originWall, originOffsetCm } = params;
-  const others = params.others.filter((o) => !getEquipment(o.typeId)?.overlapExempt);
+  const { wall, alongCm, depthCm, mount, trailerWidthCm, trailerLengthCm, door, originWall, originOffsetCm, typeId, model } = params;
+  const definition = getEquipment(typeId);
+  // Los sobrepuestos (campana, repisas) solo esquivan lo que tenga conflicto con ellos.
+  const others = params.others.filter((o) => equipmentBlocks(definition, getEquipment(o.typeId)));
+  const gapCm = gapForType(typeId, model);
 
   const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
   const maxOffset = Math.max(0, span - alongCm);
   const desired = clamp(params.offsetCm, 0, maxOffset);
 
-  // Items mounted above/below the counter (hood, low shelf) can sit anywhere without avoiding others.
-  if (params.overlapExempt) return { wall, offsetCm: desired };
-
-  function rectFor(w: Wall, offset: number, a: number, d: number, m: "inside" | "outside") {
-    const rect = placeOnWall(w, offset, a, d, trailerWidthCm, trailerLengthCm, m);
+  function rectFor(w: Wall, offset: number, a: number, d: number, m: "inside" | "outside", g = gapCm) {
+    const rect = placeOnWall(w, offset, a, d, trailerWidthCm, trailerLengthCm, m, g);
     return { xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm };
   }
 
@@ -283,7 +308,7 @@ function resolveCollision(params: CollisionParams): { wall: Wall; offsetCm: numb
     const candidate = rectFor(w, offset, alongCm, depthCm, mount);
     const clearance = mount === "inside" ? doorClearanceRect(door, trailerWidthCm, trailerLengthCm) : null;
     if (clearance && rectsOverlap(candidate, clearance)) return false;
-    return !others.some((o) => !exclude.includes(o.instanceId) && rectsOverlap(candidate, o));
+    return !others.some((o) => !exclude.includes(o.instanceId) && piecesClash(candidate, typeId, o, o.typeId, model));
   }
 
   if (isFree(wall, desired)) return { wall, offsetCm: desired };
@@ -292,7 +317,7 @@ function resolveCollision(params: CollisionParams): { wall: Wall; offsetCm: numb
   const desiredArea = alongCm * depthCm;
   const overlapping = others
     .map((other) => {
-      if (!rectsOverlap(desiredRect, other)) return null;
+      if (!piecesClash(desiredRect, typeId, other, other.typeId, model)) return null;
       const overlapWidth = Math.min(desiredRect.xCm + desiredRect.widthCm, other.xCm + other.widthCm) - Math.max(desiredRect.xCm, other.xCm);
       const overlapDepth = Math.min(desiredRect.yCm + desiredRect.depthCm, other.yCm + other.depthCm) - Math.max(desiredRect.yCm, other.yCm);
       const overlapArea = Math.max(0, overlapWidth) * Math.max(0, overlapDepth);
@@ -316,10 +341,10 @@ function resolveCollision(params: CollisionParams): { wall: Wall; offsetCm: numb
     const draggedNewOffset = clamp(offsetOfItem(target), 0, Math.max(0, targetWallSpan - alongCm));
     if (!isFree(target.wall, draggedNewOffset, [target.instanceId])) return null;
     const targetNewOffset = clamp(originOffsetCm, 0, Math.max(0, originSpan - targetAlong));
-    const targetCandidate = rectFor(originWall, targetNewOffset, targetAlong, targetDepth, targetMount);
+    const targetCandidate = rectFor(originWall, targetNewOffset, targetAlong, targetDepth, targetMount, gapForType(target.typeId, model));
     const targetClearance = targetMount === "inside" ? doorClearanceRect(door, trailerWidthCm, trailerLengthCm) : null;
     if (targetClearance && rectsOverlap(targetCandidate, targetClearance)) return null;
-    if (others.some((o) => o.instanceId !== target.instanceId && rectsOverlap(targetCandidate, o))) return null;
+    if (params.others.some((o) => o.instanceId !== target.instanceId && piecesClash(targetCandidate, target.typeId, o, o.typeId, model))) return null;
     return { instanceId: target.instanceId, wall: originWall, offsetCm: targetNewOffset };
   }
 
@@ -372,10 +397,11 @@ function applyPlacementResult(
   placement: { wall: Wall; offsetCm: number; swapWith?: SwapTarget },
   trailerWidthCm: number,
   trailerLengthCm: number,
+  model: ModelId,
 ): PlacedItem[] {
   return current.map((entry) => {
     if (entry.instanceId === instanceId) {
-      const rect = placeOnWall(placement.wall, placement.offsetCm, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount);
+      const rect = placeOnWall(placement.wall, placement.offsetCm, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount, gapForType(entry.typeId, model));
       return { ...entry, wall: placement.wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
     }
     if (placement.swapWith && entry.instanceId === placement.swapWith.instanceId) {
@@ -383,20 +409,20 @@ function applyPlacementResult(
       const swapMount = swapDef?.mount ?? "inside";
       const swapAlong = entry.rotation === 0 ? entry.widthCm : entry.depthCm;
       const swapDepth = entry.rotation === 0 ? entry.depthCm : entry.widthCm;
-      const rect = placeOnWall(placement.swapWith.wall, placement.swapWith.offsetCm, swapAlong, swapDepth, trailerWidthCm, trailerLengthCm, swapMount);
+      const rect = placeOnWall(placement.swapWith.wall, placement.swapWith.offsetCm, swapAlong, swapDepth, trailerWidthCm, trailerLengthCm, swapMount, gapForType(entry.typeId, model));
       return { ...entry, wall: placement.swapWith.wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
     }
     return entry;
   });
 }
 
-function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig): PlacedItem[] {
+function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLengthCm: number, door: DoorConfig, model: ModelId): PlacedItem[] {
   let working: PlacedItem[] = [];
   for (const typeId of typeIds) {
     const definition = getEquipment(typeId);
     if (!definition) continue;
-    const placement = findOpenPlacement(definition, trailerWidthCm, trailerLengthCm, working, door);
-    const next = makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, trailerWidthCm, trailerLengthCm, definition.mount ?? "inside");
+    const placement = findOpenPlacement(definition, trailerWidthCm, trailerLengthCm, working, door, model);
+    const next = makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, trailerWidthCm, trailerLengthCm, definition.mount ?? "inside", counterGapCm(definition, model));
     working = [...working, next];
   }
   return working;
@@ -404,15 +430,15 @@ function buildStarterLayout(typeIds: string[], trailerWidthCm: number, trailerLe
 
 // Pieza del plano de un aditamento especial: usa el tipo oculto "especial" (interior o exterior)
 // con la medida propia del especial, buscando un hueco libre igual que un equipo del catálogo.
-function placeSpecialPiece(specialId: string, mount: "inside" | "outside" | undefined, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig): PlacedItem | null {
+function placeSpecialPiece(specialId: string, mount: "inside" | "outside" | undefined, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig, model: ModelId): PlacedItem | null {
   const typeId = specialEquipmentId(mount);
   const base = getEquipment(typeId);
   if (!base) return null;
   const along = clamp(Math.round(alongCm), base.minWidthCm, base.maxWidthCm);
   const depth = clamp(Math.round(depthCm), base.minDepthCm, base.maxDepthCm);
   const sized = { ...base, widthCm: along, depthCm: depth, minWidthCm: along, maxWidthCm: along };
-  const placement = findOpenPlacement(sized, trailerWidthCm, trailerLengthCm, existing, door);
-  return { ...makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, trailerWidthCm, trailerLengthCm, base.mount ?? "inside"), specialId };
+  const placement = findOpenPlacement(sized, trailerWidthCm, trailerLengthCm, existing, door, model);
+  return { ...makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, trailerWidthCm, trailerLengthCm, base.mount ?? "inside", counterGapCm(base, model)), specialId };
 }
 
 // Coloca de entrada tantos aditamentos como el tamaño elegido incluya sin costo (2 o 5, ver
@@ -422,11 +448,12 @@ function starterLayout(modelId: ModelId, trailerWidthCm: number, trailerLengthCm
   if (modelId === "cargo" || modelId === "rzr") return [];
   // La base para gas va siempre por fuera y sin costo (alwaysFree), aparte de los incluidos.
   const typeIds = [...["plancha", "bano-maria", "freidora", "parrilla", "tarja"].slice(0, Math.max(0, includedCount)), "base-gas"];
-  return buildStarterLayout(typeIds, trailerWidthCm, trailerLengthCm, door);
+  return buildStarterLayout(typeIds, trailerWidthCm, trailerLengthCm, door, modelId);
 }
 
-function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig) {
+function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerWidthCm: number, trailerLengthCm: number, existing: PlacedItem[], door: DoorConfig, model: ModelId) {
   const mount = definition!.mount ?? "inside";
+  const gapCm = counterGapCm(definition, model);
   const walls: Wall[] = mount === "outside" ? ["back", "front", "left", "right"] : ["back", "left", "right", "front"];
   const clearance = mount === "inside" ? doorClearanceRect(door, trailerWidthCm, trailerLengthCm) : null;
   for (const wall of walls) {
@@ -435,10 +462,10 @@ function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerW
     if (alongCm > span) continue;
     const depthCm = definition!.depthCm;
     for (let offset = 0; offset <= span - alongCm + 0.01; offset += 5) {
-      const rect = placeOnWall(wall, offset, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount);
+      const rect = placeOnWall(wall, offset, alongCm, depthCm, trailerWidthCm, trailerLengthCm, mount, gapCm);
       const candidate = { xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm };
       const blockedByDoor = clearance ? rectsOverlap(candidate, clearance) : false;
-      const blockedByItem = definition!.overlapExempt ? false : existing.some((item) => !getEquipment(item.typeId)?.overlapExempt && rectsOverlap(candidate, item));
+      const blockedByItem = existing.some((item) => piecesClash(candidate, definition!.id, item, item.typeId, model));
       if (!blockedByDoor && !blockedByItem) return { wall, offsetCm: rect.offset, alongCm, depthCm };
     }
   }
@@ -448,6 +475,47 @@ function findOpenPlacement(definition: ReturnType<typeof getEquipment>, trailerW
 }
 
 const WALL_ORDER: Wall[] = ["front", "right", "back", "left"];
+
+const TABLE_LABEL = "ÁREA DE MESA DE TRABAJO";
+const TABLE_LABEL_MIN_SPACE_CM = 60;
+
+type WorkTableSide = { wall: Wall; lineX: number; centerX: number; labels: { y: number; fontSize: number }[] };
+
+// Mesa de trabajo del Food Trailer: solo en las paredes laterales (nunca del lado de la puerta),
+// con el fondo del equipo de mesa más profundo (incluida su separación de la pared). En cada tramo
+// libre de la mesa se escribe una leyenda tenue que se ajusta al espacio disponible.
+function computeWorkTable(items: PlacedItem[], preset: TrailerPreset, door: DoorConfig, model: ModelId): { depthCm: number; sides: WorkTableSide[] } | null {
+  if (model !== "food") return null;
+  let depthCm = 0;
+  for (const item of items) {
+    const gap = gapForType(item.typeId, model);
+    if (!gap) continue;
+    const perpendicular = item.wall === "left" || item.wall === "right" ? item.widthCm : item.depthCm;
+    depthCm = Math.max(depthCm, perpendicular + gap);
+  }
+  if (!depthCm) depthCm = PERIMETER_TABLE_DEPTH_CM;
+  if (depthCm * 2 >= preset.widthCm) return null;
+  const sides = (["left", "right"] as Wall[]).filter((wall) => wall !== door.wall).map((wall): WorkTableSide => {
+    const stripX = wall === "left" ? 0 : preset.widthCm - depthCm;
+    const occupied = items
+      .filter((item) => (getEquipment(item.typeId)?.mount ?? "inside") === "inside" && item.xCm < stripX + depthCm && item.xCm + item.widthCm > stripX)
+      .map((item) => ({ start: Math.max(0, item.yCm), end: Math.min(preset.lengthCm, item.yCm + item.depthCm) }))
+      .sort((a, b) => a.start - b.start);
+    const labels: WorkTableSide["labels"] = [];
+    let cursor = 0;
+    for (const segment of [...occupied, { start: preset.lengthCm, end: preset.lengthCm }]) {
+      const free = segment.start - cursor;
+      if (free >= TABLE_LABEL_MIN_SPACE_CM) {
+        // Ancho aproximado de cada carácter ≈ 0.62 × tamaño; se limita también por el fondo de la mesa.
+        const fontSize = Math.min(9, depthCm * 0.3, (free - 10) / (TABLE_LABEL.length * 0.62));
+        if (fontSize >= 4) labels.push({ y: cursor + free / 2, fontSize: Math.round(fontSize * 10) / 10 });
+      }
+      cursor = Math.max(cursor, segment.end);
+    }
+    return { wall, lineX: wall === "left" ? depthCm : preset.widthCm - depthCm, centerX: wall === "left" ? depthCm / 2 : preset.widthCm - depthCm / 2, labels };
+  });
+  return { depthCm, sides };
+}
 
 export function TrailerConfigurator({ modelId, plano = true, initialQuote, turnstileSiteKey, isVendor = false }: { modelId: ModelId; plano?: boolean; initialQuote?: InitialQuoteData; turnstileSiteKey?: string; isVendor?: boolean }) {
   const meta = MODEL_META[modelId];
@@ -487,7 +555,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     let working = base;
     for (const special of specialItems) {
       if (working.some((item) => item.specialId === special.id)) continue;
-      const piece = placeSpecialPiece(special.id, special.mount, special.widthCm, special.depthCm, preset.widthCm, preset.lengthCm, working, door);
+      const piece = placeSpecialPiece(special.id, special.mount, special.widthCm, special.depthCm, preset.widthCm, preset.lengthCm, working, door, modelId);
       if (piece) working = [...working, piece];
     }
     return working;
@@ -630,6 +698,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const combinedIva = quote.iva;
   const combinedTotal = quote.total;
   const layoutErrors = useMemo(() => validateLayout(preset, items, door), [preset, items, door]);
+  const workTable = useMemo(() => computeWorkTable(items, preset, door, modelId), [items, preset, door, modelId]);
+  // Los sobrepuestos (semitransparentes) se dibujan al final para dejar ver los equipos de abajo;
+  // la numeración conserva el orden en que se agregaron.
+  const planDrawOrder = useMemo(() => items.map((item, index) => ({ item, index })).sort((a, b) => Number(Boolean(getEquipment(a.item.typeId)?.overlapExempt)) - Number(Boolean(getEquipment(b.item.typeId)?.overlapExempt))), [items]);
   const selected = items.find((item) => item.instanceId === selectedId) ?? null;
   const selectedDefinition = selected ? getEquipment(selected.typeId) : null;
   const selectedAlongLimits = selectedDefinition ? { min: selectedDefinition.minWidthCm, max: selectedDefinition.maxWidthCm } : null;
@@ -638,7 +710,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const collisionIds = useMemo(() => {
     const ids = new Set<string>();
     for (let i = 0; i < items.length; i += 1) for (let j = i + 1; j < items.length; j += 1) {
-      if (getEquipment(items[i].typeId)?.overlapExempt || getEquipment(items[j].typeId)?.overlapExempt) continue;
+      if (!equipmentBlocks(getEquipment(items[i].typeId), getEquipment(items[j].typeId))) continue;
       if (rectsOverlap(items[i], items[j])) { ids.add(items[i].instanceId); ids.add(items[j].instanceId); }
     }
     const clearance = doorClearanceRect(door, preset.widthCm, preset.lengthCm);
@@ -657,7 +729,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       const mount = definition?.mount ?? "inside";
       const alongCm = item.rotation === 0 ? item.widthCm : item.depthCm;
       const depthCm = item.rotation === 0 ? item.depthCm : item.widthCm;
-      const rect = placeOnWall(item.wall, offsetOfItem(item), alongCm, depthCm, next.widthCm, next.lengthCm, mount);
+      const rect = placeOnWall(item.wall, offsetOfItem(item), alongCm, depthCm, next.widthCm, next.lengthCm, mount, gapForType(item.typeId, modelId));
       return { ...item, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
     }));
     setDoor((current) => {
@@ -709,8 +781,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     let working = items;
     let lastId: string | null = null;
     for (let i = 0; i < quantity; i += 1) {
-      const placement = findOpenPlacement(definition, preset.widthCm, preset.lengthCm, working, door);
-      const next = makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, preset.widthCm, preset.lengthCm, definition.mount ?? "inside");
+      const placement = findOpenPlacement(definition, preset.widthCm, preset.lengthCm, working, door, modelId);
+      const next = makeItem(typeId, placement.wall, placement.offsetCm, placement.alongCm, placement.depthCm, preset.widthCm, preset.lengthCm, definition.mount ?? "inside", counterGapCm(definition, modelId));
       working = [...working, next];
       lastId = next.instanceId;
     }
@@ -737,7 +809,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     const special = isVendor
       ? { id, name, widthCm, depthCm, heightCm, price: 0, comment: "", mount: specialForm.mount, customPrice }
       : { id, name, widthCm, depthCm, heightCm, price: 0, mount: specialForm.mount };
-    const piece = placeSpecialPiece(id, special.mount, widthCm, depthCm, preset.widthCm, preset.lengthCm, items, door);
+    const piece = placeSpecialPiece(id, special.mount, widthCm, depthCm, preset.widthCm, preset.lengthCm, items, door, modelId);
     setSpecialItems((current) => [...current, special]);
     if (piece) { setItems((current) => [...current, piece]); setSelectedId(piece.instanceId); setDoorSelected(false); }
     setSpecialForm(emptySpecialForm);
@@ -758,7 +830,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         const special = specialById.get(id);
         const along = piece ? (piece.rotation === 0 ? piece.widthCm : piece.depthCm) : special?.widthCm ?? 60;
         const depth = piece ? (piece.rotation === 0 ? piece.depthCm : piece.widthCm) : special?.depthCm ?? 40;
-        const next = placeSpecialPiece(id, nextMount, along, depth, preset.widthCm, preset.lengthCm, others, door);
+        const next = placeSpecialPiece(id, nextMount, along, depth, preset.widthCm, preset.lengthCm, others, door, modelId);
         return next ? [...others, next] : others;
       });
     }
@@ -798,8 +870,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         originWall: item.wall,
         originOffsetCm,
         overlapExempt: definition?.overlapExempt,
+        typeId: item.typeId,
+        model: modelId,
       });
-      return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
+      return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm, modelId);
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
@@ -831,8 +905,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         originWall: item.wall,
         originOffsetCm: offsetOfItem(item),
         overlapExempt: definition?.overlapExempt,
+        typeId: item.typeId,
+        model: modelId,
       });
-      return applyPlacementResult(current, instanceId, clampedAlong, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
+      return applyPlacementResult(current, instanceId, clampedAlong, depthCm, mount, placement, preset.widthCm, preset.lengthCm, modelId);
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
@@ -867,13 +943,14 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       const span = wallLengthCm(wall, preset.widthCm, preset.lengthCm);
       const desired = clamp((wall === "front" || wall === "back" ? pointX : pointY) - alongCm / 2, 0, Math.max(0, span - alongCm));
       const afterDoor = avoidDoor(wall, desired, alongCm, mount, door, span);
-      const neighbors = current.filter((other) => other.instanceId !== instanceId && other.wall === wall).map((other) => {
+      const ownGap = gapForType(item.typeId, modelId);
+      const neighbors = current.filter((other) => other.instanceId !== instanceId && other.wall === wall && equipmentBlocks(definition, getEquipment(other.typeId))).map((other) => {
         const otherAlong = other.rotation === 0 ? other.widthCm : other.depthCm;
         const otherOffset = offsetOfItem(other);
-        return { start: otherOffset, end: otherOffset + otherAlong };
+        return { start: otherOffset, end: otherOffset + otherAlong, gap: Math.min(ownGap, gapForType(other.typeId, modelId)) };
       });
       const offset = clamp(snapAlongWall(afterDoor, alongCm, neighbors), 0, Math.max(0, span - alongCm));
-      const rect = placeOnWall(wall, offset, alongCm, depthCm, preset.widthCm, preset.lengthCm, mount);
+      const rect = placeOnWall(wall, offset, alongCm, depthCm, preset.widthCm, preset.lengthCm, mount, ownGap);
       return { ...item, wall, xCm: rect.xCm, yCm: rect.yCm, widthCm: rect.widthCm, depthCm: rect.depthCm, rotation: rect.rotation };
     }));
   }
@@ -903,8 +980,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         originWall,
         originOffsetCm,
         overlapExempt: definition?.overlapExempt,
+        typeId: item.typeId,
+        model: modelId,
       });
-      return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm);
+      return applyPlacementResult(current, instanceId, alongCm, depthCm, mount, placement, preset.widthCm, preset.lengthCm, modelId);
     });
     setSendState("idle"); setQuoteNumber("BORRADOR");
   }
@@ -1415,10 +1494,12 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           depthLabelCm: item.rotation === 0 ? item.depthCm : item.widthCm,
           wallLabel: WALL_LABEL[item.wall],
           exterior: (definition.mount ?? "inside") === "outside",
+          overlay: Boolean(definition.overlapExempt),
         }];
       }),
       door: { ...door, wallLabel: WALL_LABEL[door.wall] },
       windows,
+      workTable: workTable ? { label: TABLE_LABEL, sides: workTable.sides } : null,
     });
   }
   const planFileBase = `plano-${(quoteNumber && quoteNumber !== "BORRADOR" ? quoteNumber : `${modelId}-${preset.widthCm}x${preset.lengthCm}`).replace(/[^\w-]+/g, "-")}`;
@@ -1649,23 +1730,28 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                   <path d={`M ${preset.widthCm / 2 - 45} 0 L ${preset.widthCm / 2} -60 L ${preset.widthCm / 2 + 45} 0`} fill="none" stroke="#0a3550" strokeWidth="4" pointerEvents="none" />
                   <circle cx={preset.widthCm / 2} cy="-61" r="6" fill="#fff" stroke="#0a3550" strokeWidth="3" pointerEvents="none" />
                   <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} rx="3" fill="url(#grid)" stroke="#0a3550" strokeWidth="5" />
-                  {modelId === "food" && preset.widthCm > PERIMETER_TABLE_DEPTH_CM * 2 && preset.lengthCm > PERIMETER_TABLE_DEPTH_CM * 2 && (
-                    <rect x={PERIMETER_TABLE_DEPTH_CM} y={PERIMETER_TABLE_DEPTH_CM} width={preset.widthCm - PERIMETER_TABLE_DEPTH_CM * 2} height={preset.lengthCm - PERIMETER_TABLE_DEPTH_CM * 2} fill="none" stroke="#5f7481" strokeDasharray="7 6" strokeWidth="1.5" opacity=".65" />
-                  )}
+                  {workTable && workTable.sides.map((side) => (
+                    <g key={`table-${side.wall}`} pointerEvents="none">
+                      <line x1={side.lineX} x2={side.lineX} y1={0} y2={preset.lengthCm} stroke="#5f7481" strokeDasharray="7 6" strokeWidth="1.5" opacity=".65" />
+                      {side.labels.map((label) => (
+                        <text key={`${side.wall}-${label.y}`} x={side.centerX} y={label.y} textAnchor="middle" dominantBaseline="middle" className="plan-table-label" fontSize={label.fontSize} transform={`rotate(-90 ${side.centerX} ${label.y})`}>{TABLE_LABEL}</text>
+                      ))}
+                    </g>
+                  ))}
                   {axleWheelYs.map((y, i) => <rect key={`axle-left-${i}`} x="-23" y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
                   {axleWheelYs.map((y, i) => <rect key={`axle-right-${i}`} x={preset.widthCm} y={y} width="23" height={axleWheelHeight} rx="6" fill="#092f46" />)}
 
                   {doorSelected && <rect x={doorClearance.xCm} y={doorClearance.yCm} width={doorClearance.widthCm} height={doorClearance.depthCm} fill="rgba(214,162,41,.14)" stroke="#d6a229" strokeDasharray="6 5" strokeWidth="1.2" />}
 
-                  {items.map((item, index) => {
+                  {planDrawOrder.map(({ item, index }) => {
                     const definition = getEquipment(item.typeId);
                     if (!definition) return null;
                     const bad = collisionIds.has(item.instanceId);
                     const active = selectedId === item.instanceId;
                     const faint = definition.overlapExempt ?? false;
                     return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`} className={`plan-item ${bad ? "collision" : ""} ${active ? "selected" : ""} ${faint ? "faint" : ""}`} onPointerDown={(event) => startItemDrag(event, item)}>
-                      <rect width={item.widthCm} height={item.depthCm} rx="3" fill={faint ? "#9aa4a7" : definition.color} fillOpacity={faint ? ".16" : ".92"} />
-                      <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : faint ? "#b7c0c2" : "#0a3550"} strokeWidth={active ? 4 : faint ? 1.2 : 2} strokeDasharray={faint ? "4 3" : undefined} />
+                      <rect width={item.widthCm} height={item.depthCm} rx="3" fill={definition.color} fillOpacity={faint ? OVERLAY_FILL_OPACITY : ".92"} />
+                      <rect width={item.widthCm} height={item.depthCm} rx="3" fill="none" stroke={bad ? "#b3261e" : active ? "#fff" : faint ? definition.color : "#0a3550"} strokeOpacity={faint && !bad && !active ? ".75" : undefined} strokeWidth={active ? 4 : faint ? 1.4 : 2} strokeDasharray={faint ? "4 3" : undefined} />
                       <text x={item.widthCm / 2} y={item.depthCm / 2 - 4} textAnchor="middle" className={`item-label ${faint ? "faint" : ""}`}><tspan x={item.widthCm / 2}>{index + 1}. {itemName(item, definition, true)}</tspan><tspan x={item.widthCm / 2} dy="13">{item.widthCm} × {item.depthCm} cm</tspan></text>
                     </g>;
                   })}
@@ -1789,7 +1875,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />
                 {items.map((item) => {
                   const definition = getEquipment(item.typeId);
-                  return definition ? <rect key={item.instanceId} x={item.xCm} y={item.yCm} width={item.widthCm} height={item.depthCm} fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /> : null;
+                  return definition ? <rect key={item.instanceId} x={item.xCm} y={item.yCm} width={item.widthCm} height={item.depthCm} fill={definition.color} fillOpacity={definition.overlapExempt ? OVERLAY_FILL_OPACITY : 1} stroke="#0a3550" strokeWidth="1.5" strokeDasharray={definition.overlapExempt ? "4 3" : undefined} /> : null;
                 })}
                 <line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="7" />
               </svg>
@@ -1912,7 +1998,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           <div className="document-banner"><div><small>MODELO</small><strong>{meta.shortLabel} {preset.widthCm / 100} × {preset.lengthCm / 100} m</strong></div><div><small>TREN RODANTE</small><strong>{axleLabel(preset.axles)}</strong></div><div><small>TOTAL ESTIMADO</small><strong>{money(combinedTotal)}</strong></div></div>
           <div className="document-customer"><div><small>CLIENTE</small><strong>{customer.name || "Por completar"}</strong></div><div><small>CONTACTO</small><strong>{customer.phone || customer.email || "Por completar"}</strong></div><div><small>CIUDAD</small><strong>{customer.city || "Por completar"}</strong></div><div><small>ESTADO</small><strong>{customer.state || "Por completar"}</strong></div></div>
         </div>
-        {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-PLAN_EXTERIOR_CM} ${-PLAN_EXTERIOR_CM} ${preset.widthCm + PLAN_EXTERIOR_CM * 2} ${preset.lengthCm + PLAN_EXTERIOR_CM * 2}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -60 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
+        {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-PLAN_EXTERIOR_CM} ${-PLAN_EXTERIOR_CM} ${preset.widthCm + PLAN_EXTERIOR_CM * 2} ${preset.lengthCm + PLAN_EXTERIOR_CM * 2}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -60 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} fillOpacity={definition.overlapExempt ? OVERLAY_FILL_OPACITY : 1} stroke="#0a3550" strokeWidth="1.5" strokeDasharray={definition.overlapExempt ? "4 3" : undefined} /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
         <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}{line.item.note ? <small className="document-line-note">{line.item.note}</small> : null}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.free ? "Sin costo" : line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial{entry.mount ? ` · ${entry.mount === "outside" ? "exterior" : "interior"}` : ""}){entry.comment ? <small className="document-line-note">{entry.comment}</small> : null}</td><td>{entry.widthCm} × {entry.depthCm}{entry.heightCm ? ` × ${entry.heightCm}` : ""} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(combinedSubtotal)}</strong></div><div><span>IVA</span><strong>{money(combinedIva)}</strong></div><div><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>

@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { QuoteRow } from "../lib/quotesDb";
 import { DocumentSignature, QuoteDocumentsData, paymentMethodLabel, paymentScheduleLabel } from "../lib/quoteDocuments";
-import { DoorConfig, PlacedEquipment, WALL_LABEL, WindowConfig, getEquipment, getPreset } from "../lib/quoteCatalog";
+import { DoorConfig, OVERLAY_FILL_OPACITY, PlacedEquipment, WALL_LABEL, WindowConfig, getEquipment, getPreset } from "../lib/quoteCatalog";
 
 type DocumentSpecialItem = { id?: string; name: string; widthCm: number; depthCm: number; comment?: string; mount?: "inside" | "outside" };
 type StoredConfiguration = { items?: PlacedEquipment[]; door?: DoorConfig; windows?: WindowConfig[]; specialItems?: DocumentSpecialItem[] };
@@ -123,11 +123,11 @@ function Plan({ quote }: { quote: QuoteRow }) {
         <path d={`M ${preset.widthCm / 2 - 42} 0 L ${preset.widthCm / 2} -66 L ${preset.widthCm / 2 + 42} 0`} fill="none" stroke="#0a3550" strokeWidth="4" />
         <rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />
         {windows.map((window) => <line key={window.id} {...windowLine(window)} stroke="#2885a6" strokeWidth="9" strokeLinecap="round" />)}
-        {items.map((item, index) => {
+        {items.map((item, index) => ({ item, index })).sort((a, b) => Number(Boolean(getEquipment(a.item.typeId)?.overlapExempt)) - Number(Boolean(getEquipment(b.item.typeId)?.overlapExempt))).map(({ item, index }) => {
           const definition = getEquipment(item.typeId);
           if (!definition) return null;
           return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}>
-            <rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" />
+            <rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} fillOpacity={definition.overlapExempt ? OVERLAY_FILL_OPACITY : 1} stroke="#0a3550" strokeWidth="1.5" strokeDasharray={definition.overlapExempt ? "4 3" : undefined} />
             <text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle">{index + 1}</text>
           </g>;
         })}

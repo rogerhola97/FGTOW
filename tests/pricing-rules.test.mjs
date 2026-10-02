@@ -19,8 +19,13 @@ import {
   getMaxHeightCm,
   getReferenceTwoAxlePrice,
   getSuggestedOneAxlePrice,
+  COUNTER_GAP_CM,
+  counterGapCm,
+  getEquipment,
   isValidPresetId,
+  placeOnWall,
   priceEquipmentLines,
+  validateLayout,
   resolveCustomTrailerPrice,
   validateStandardTrailerPrices,
 } from "../app/lib/quoteCatalog.ts";
@@ -174,6 +179,30 @@ test("prices shelves at 1500 without using included slots and lets the vendor ov
   const foldingBar = { instanceId: "fold", typeId: "barra-abatible", xCm: 0, yCm: 0, widthCm: 220, depthCm: 25, rotation: 0, customPrice: 3200 };
   assert.equal(priceEquipmentLines([foldingBar], 2, vendorPricing).extras, 3200);
   assert.equal(calculateQuote(compactId, [foldingBar], [], false).includedUsed, 1);
+});
+
+test("does not allow a high shelf over the trompo but allows it over other counter equipment", () => {
+  const preset = buildCustomPreset("food", 200, 300, 210, 1);
+  const trompo = { instanceId: "trompo", typeId: "trompo", xCm: 5, yCm: 100, widthCm: 55, depthCm: 40, rotation: 90 };
+  const plancha = { instanceId: "plancha", typeId: "plancha", xCm: 5, yCm: 10, widthCm: 50, depthCm: 90, rotation: 90 };
+  const highShelfOverTrompo = { instanceId: "shelf", typeId: "repisa-alta", xCm: 0, yCm: 90, widthCm: 30, depthCm: 120, rotation: 90 };
+  const highShelfOverPlancha = { ...highShelfOverTrompo, yCm: 0, depthCm: 95 };
+  assert.ok(validateLayout(preset, [trompo, highShelfOverTrompo]).some((error) => /trompo/i.test(error)));
+  assert.deepEqual(validateLayout(preset, [plancha, highShelfOverPlancha]), []);
+});
+
+test("keeps counter equipment 5 cm away from the walls in the food trailer only", () => {
+  assert.equal(COUNTER_GAP_CM, 5);
+  assert.equal(counterGapCm(getEquipment("plancha"), "food"), 5);
+  assert.equal(counterGapCm(getEquipment("repisa-alta"), "food"), 0);
+  assert.equal(counterGapCm(getEquipment("base-gas"), "food"), 0);
+  assert.equal(counterGapCm(getEquipment("rampa"), "cargo"), 0);
+  const left = placeOnWall("left", 0, 90, 50, 200, 300, "inside", 5);
+  assert.deepEqual({ x: left.xCm, y: left.yCm }, { x: 5, y: 5 });
+  const right = placeOnWall("right", 999, 90, 50, 200, 300, "inside", 5);
+  assert.deepEqual({ x: right.xCm, y: right.yCm }, { x: 145, y: 205 });
+  const flush = placeOnWall("left", 0, 90, 50, 200, 300, "inside");
+  assert.deepEqual({ x: flush.xCm, y: flush.yCm }, { x: 0, y: 0 });
 });
 
 test("charges a special add-on once even though it also has a piece on the plan", () => {

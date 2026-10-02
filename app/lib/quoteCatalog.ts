@@ -166,17 +166,19 @@ export function wallForPoint(xCm: number, yCm: number, trailerWidthCm: number, t
   return "back";
 }
 
-export function placeOnWall(wall: Wall, offsetCm: number, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, mount: "inside" | "outside" = "inside") {
+// gapCm (solo interior): separa la pieza esa distancia de su pared y de las paredes de las esquinas.
+export function placeOnWall(wall: Wall, offsetCm: number, alongCm: number, depthCm: number, trailerWidthCm: number, trailerLengthCm: number, mount: "inside" | "outside" = "inside", gapCm = 0) {
   const rotation: 0 | 90 = wall === "front" || wall === "back" ? 0 : 90;
   const span = wallLengthCm(wall, trailerWidthCm, trailerLengthCm);
-  const maxOffset = Math.max(0, span - alongCm);
-  const offset = Math.min(Math.max(offsetCm, 0), maxOffset);
+  const gap = mount === "inside" && span >= alongCm + gapCm * 2 ? gapCm : 0;
+  const maxOffset = Math.max(gap, span - alongCm - gap);
+  const offset = Math.min(Math.max(offsetCm, gap), maxOffset);
   let xCm = 0;
   let yCm = 0;
-  if (wall === "front") { xCm = offset; yCm = mount === "outside" ? -depthCm : 0; }
-  else if (wall === "back") { xCm = offset; yCm = mount === "outside" ? trailerLengthCm : trailerLengthCm - depthCm; }
-  else if (wall === "left") { yCm = offset; xCm = mount === "outside" ? -depthCm : 0; }
-  else { yCm = offset; xCm = mount === "outside" ? trailerWidthCm : trailerWidthCm - depthCm; }
+  if (wall === "front") { xCm = offset; yCm = mount === "outside" ? -depthCm : gap; }
+  else if (wall === "back") { xCm = offset; yCm = mount === "outside" ? trailerLengthCm : trailerLengthCm - depthCm - gap; }
+  else if (wall === "left") { yCm = offset; xCm = mount === "outside" ? -depthCm : gap; }
+  else { yCm = offset; xCm = mount === "outside" ? trailerWidthCm : trailerWidthCm - depthCm - gap; }
   return {
     xCm,
     yCm,
@@ -209,6 +211,29 @@ export function doorOverlapsAxleBand(door: DoorConfig, preset: { lengthCm: numbe
   if (door.wall !== "left" && door.wall !== "right") return false;
   const band = axleBandCm(preset);
   return door.offsetCm < band.end && door.offsetCm + door.widthCm > band.start;
+}
+
+// Opacidad de relleno de los elementos sobrepuestos (campana, repisas) en todos los planos, para
+// que se vean los equipos que quedan debajo.
+export const OVERLAY_FILL_OPACITY = 0.3;
+
+// En el Food Trailer los equipos a la altura de la mesa de trabajo se fabrican con 5 cm de
+// separación entre sí y respecto a las paredes; el plano los acomoda con esa holgura.
+export const COUNTER_GAP_CM = 5;
+
+type GapDefinition = { mount?: "inside" | "outside"; overlapExempt?: boolean } | undefined;
+
+export function counterGapCm(definition: GapDefinition, trailerModel: ModelId) {
+  if (trailerModel !== "food" || !definition) return 0;
+  return (definition.mount ?? "inside") === "inside" && !definition.overlapExempt ? COUNTER_GAP_CM : 0;
+}
+
+// Si dos equipos no pueden ocupar el mismo espacio: los sobrepuestos (campana, repisas) sí pueden,
+// salvo que alguno declare un conflicto explícito con el otro.
+export function equipmentBlocks(a: { id: string; overlapExempt?: boolean; conflictsWith?: string[] } | undefined, b: { id: string; overlapExempt?: boolean; conflictsWith?: string[] } | undefined) {
+  if (!a || !b) return true;
+  if (a.conflictsWith?.includes(b.id) || b.conflictsWith?.includes(a.id)) return true;
+  return !a.overlapExempt && !b.overlapExempt;
 }
 
 export function rectsOverlap(a: { xCm: number; yCm: number; widthCm: number; depthCm: number }, b: { xCm: number; yCm: number; widthCm: number; depthCm: number }) {
@@ -336,6 +361,9 @@ export type EquipmentDefinition = {
   vendorPriceEditable?: boolean;
   // Muestra el campo de largo directamente en la lista de aditamentos agregados.
   inlineLength?: boolean;
+  // Equipos que no pueden compartir espacio con este aunque alguno sea overlapExempt
+  // (p. ej. el trompo mide 65 cm sobre la mesa y no deja poner repisa alta encima).
+  conflictsWith?: string[];
 };
 
 export type PlacedEquipment = {
@@ -372,6 +400,7 @@ export const EQUIPMENT: EquipmentDefinition[] = [
   { id: "asador", model: "food", name: "Asador", shortName: "Asador", category: "coccion", widthCm: 90, depthCm: 50, minWidthCm: 80, maxWidthCm: 490, minDepthCm: 45, maxDepthCm: 70, color: "#8d3c31", description: "Asador seccionado; el crecimiento de longitud se revisa por proyecto." },
   { id: "tarja", model: "food", name: "Tarja con tanque de agua", shortName: "Tarja", category: "agua", widthCm: 50, depthCm: 45, minWidthCm: 35, maxWidthCm: 80, minDepthCm: 35, maxDepthCm: 60, color: "#2f7f99", description: "Tarja chica, mezcladora y preparación para tanque de agua." },
   { id: "lavamanos", model: "food", name: "Tarja exterior", shortName: "Tarja ext.", category: "agua", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, color: "#4f94aa", description: "Módulo exterior encajonado de aproximadamente 40 × 40 × 70 cm; va montado por fuera del remolque.", mount: "outside" },
+  { id: "trompo", model: "food", name: "Trompo", shortName: "Trompo", category: "coccion", widthCm: 40, depthCm: 55, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 45, maxDepthCm: 70, color: "#a8462f", description: "Trompo de 40 × 55 cm y 65 cm de alto a partir de la mesa de trabajo; por su altura no admite repisa alta encima.", conflictsWith: ["repisa-alta"] },
   { id: "barra-fria", model: "food", name: "Barra fría con insertos", shortName: "Barra fría", category: "trabajo", widthCm: 90, depthCm: 40, minWidthCm: 60, maxWidthCm: 160, minDepthCm: 40, maxDepthCm: 65, color: "#3c8f84", description: "Barra para insertos con cajón para hielo." },
   { id: "panera", model: "food", name: "Panera", shortName: "Panera", category: "trabajo", widthCm: 60, depthCm: 50, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 40, maxDepthCm: 120, color: "#788f57", description: "Panera con tapas y división interior." },
   { id: "refrigerador", model: "food", name: "Espacio para refrigerador", shortName: "Refrigerador", category: "trabajo", widthCm: 75, depthCm: 70, minWidthCm: 50, maxWidthCm: 180, minDepthCm: 50, maxDepthCm: 90, color: "#546ab1", description: "Reserva de espacio sin costo; no cuenta como accesorio. El refrigerador no se incluye.", alwaysFree: true },
@@ -896,8 +925,10 @@ export function validateLayout(preset: TrailerPreset, items: PlacedEquipment[], 
       const b = items[j];
       const defA = getEquipment(a.typeId);
       const defB = getEquipment(b.typeId);
-      if (defA?.overlapExempt || defB?.overlapExempt) continue;
-      if (rectsOverlap(a, b)) errors.push(`${defA?.name ?? "Equipo"} se cruza con ${defB?.name ?? "otro equipo"}.`);
+      if (!equipmentBlocks(defA, defB) || !rectsOverlap(a, b)) continue;
+      const conflict = defA?.conflictsWith?.includes(defB?.id ?? "") ? defA : defB?.conflictsWith?.includes(defA?.id ?? "") ? defB : null;
+      const other = conflict === defA ? defB : defA;
+      errors.push(conflict ? `${other?.name ?? "Equipo"} no puede ir sobre ${conflict.name.toLowerCase()}.` : `${defA?.name ?? "Equipo"} se cruza con ${defB?.name ?? "otro equipo"}.`);
     }
   }
   return [...new Set(errors)];

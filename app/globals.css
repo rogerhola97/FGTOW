@@ -373,8 +373,9 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .plan-item.collision rect:last-of-type { stroke:#b3261e; stroke-width:5; }
 .plan-item.selected { filter:drop-shadow(0 0 4px rgba(6,41,62,.8)); }
 .item-label { fill:#fff; font:800 7px Arial,sans-serif; pointer-events:none; text-shadow:0 1px 1px rgba(0,0,0,.4); }
-.item-label.faint { fill:#98a2a5; text-shadow:none; }
-.plan-item.faint { opacity:.85; }
+.item-label.faint { fill:#06293e; text-shadow:0 0 2px #fff,0 0 2px #fff; }
+.plan-item.faint { opacity:1; }
+.plan-table-label { fill:#7b8a90; font-family:Arial,sans-serif; font-weight:800; letter-spacing:.08em; opacity:.55; pointer-events:none; }
 .plan-item.faint:hover { opacity:1; }
 .layout-status { min-height:64px; display:flex; align-items:center; justify-content:space-between; gap:18px; padding:15px 20px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .layout-status strong { font-size:12px; }
@@ -927,6 +928,37 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .contract-signature-hint { margin:0; color:var(--muted); font-size:12px; }
 .contract-signature-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .contract-signature-pad .form-status { margin:0; font-size:12px; }
+
+/* Tipografía más grande y con más contraste para contrato y carta factura. */
+.legal-document { --legal-text:#132f40; --legal-soft:#2f4652; }
+.legal-document-contact { gap:4px; color:var(--legal-soft); font-size:10px; }
+.legal-document-contact strong { font-size:11.5px; }
+.legal-document-title span { font-size:28px; }
+.legal-document-title strong { font-size:11px; }
+.legal-customer-strip small { font-size:8.5px; }
+.legal-customer-strip strong { font-size:11px; }
+.legal-kicker-row { color:var(--legal-soft); font-size:10px; }
+.legal-section h2,.legal-payment-card h2 { font-size:12px; }
+.legal-detail { padding:5px 0; font-size:10.5px; color:var(--legal-text); }
+.legal-detail dt { color:var(--legal-soft); font-weight:600; }
+.legal-description p,.legal-warranty p,.legal-letter-intro,.legal-fiscal-block p { color:var(--legal-text); font-size:10.5px; line-height:1.5; }
+.legal-payment-summary small { font-size:8px; }
+.legal-payment-summary strong { font-size:12px; }
+.legal-delivery { font-size:10.5px; }
+.legal-delivery span { color:var(--legal-soft); }
+.legal-signatures strong { font-size:9.5px; }
+.legal-page-footer { color:var(--legal-soft); font-size:9px; }
+.legal-plan-title small { font-size:8.5px; }
+.legal-plan-title strong { font-size:12px; }
+.legal-plan-legend div { font-size:10px; color:var(--legal-text); }
+.legal-plan-legend b { width:18px; height:18px; font-size:8.5px; }
+.legal-plan-note { color:var(--legal-soft); font-size:9.5px; }
+.legal-preline { color:var(--legal-soft); font-size:10px; }
+.legal-clauses li { margin-bottom:6px; color:var(--legal-text); font-size:10.5px; line-height:1.5; }
+.legal-review-note { font-size:9.5px; }
+.legal-letter-intro { font-size:11.5px; }
+.legal-letter-note p { color:#3a382f; font-size:10px; }
+.legal-letter-date { font-size:10.5px; }
 
 @media (max-width:850px) {
   .vendor-documents-after-quote { padding-right:24px; padding-left:24px; }

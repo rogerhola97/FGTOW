@@ -2,7 +2,7 @@
 // luego se imprime (iframe oculto), se rasteriza a PNG o se envuelve en un PDF de una sola página.
 // Sin dependencias: el PDF es un contenedor mínimo con la imagen JPEG embebida (DCTDecode).
 
-import type { Wall } from "./quoteCatalog";
+import { OVERLAY_FILL_OPACITY, type Wall } from "./quoteCatalog";
 
 export type PlanExportItem = {
   number: number;
@@ -17,7 +17,11 @@ export type PlanExportItem = {
   depthLabelCm: number;
   wallLabel: string;
   exterior: boolean;
+  // Elemento sobrepuesto (campana, repisas): semitransparente y dibujado encima de los demás.
+  overlay?: boolean;
 };
+
+export type PlanExportTableSide = { lineX: number; centerX: number; labels: { y: number; fontSize: number }[] };
 
 export type PlanExportLine = { wall: Wall; offsetCm: number; widthCm: number };
 
@@ -35,6 +39,7 @@ export type PlanExportData = {
   items: PlanExportItem[];
   door: PlanExportLine & { wallLabel: string };
   windows: PlanExportLine[];
+  workTable?: { label: string; sides: PlanExportTableSide[] } | null;
 };
 
 const PAGE_W = 1240;
@@ -105,10 +110,18 @@ export function buildPlanSvg(data: PlanExportData) {
   out.push(`<rect x="${fmt(X(0))}" y="${fmt(Y(0))}" width="${fmt(widthCm * s)}" height="${fmt(lengthCm * s)}" fill="none" stroke="#0a3550" stroke-width="4"/>`);
   out.push(`<text x="${fmt(X(widthCm / 2))}" y="${fmt(Y(-tongue) - 12)}" fill="#0a3550" font-size="12" font-weight="700" text-anchor="middle" letter-spacing="1.5">FRENTE</text>`);
 
-  // Aditamentos
-  for (const item of data.items) {
+  // Mesa de trabajo (solo laterales) con su leyenda en los tramos libres
+  for (const side of data.workTable?.sides ?? []) {
+    out.push(`<line x1="${fmt(X(side.lineX))}" y1="${fmt(Y(0))}" x2="${fmt(X(side.lineX))}" y2="${fmt(Y(lengthCm))}" stroke="#5f7481" stroke-width="1.5" stroke-dasharray="7 6" opacity=".65"/>`);
+    for (const label of side.labels) {
+      out.push(`<text x="${fmt(X(side.centerX))}" y="${fmt(Y(label.y))}" fill="#7b8a90" opacity=".7" font-size="${fmt(label.fontSize * s)}" font-weight="700" letter-spacing="1" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 ${fmt(X(side.centerX))} ${fmt(Y(label.y))})">${esc(data.workTable?.label ?? "")}</text>`);
+    }
+  }
+
+  // Aditamentos (los sobrepuestos al final, semitransparentes)
+  for (const item of [...data.items].sort((a, b) => Number(Boolean(a.overlay)) - Number(Boolean(b.overlay)))) {
     const x = X(item.xCm), y = Y(item.yCm), w = item.widthCm * s, h = item.depthCm * s;
-    out.push(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="3" fill="${esc(item.color)}" fill-opacity=".92" stroke="#0a3550" stroke-width="1.5"${item.exterior ? ` stroke-dasharray="5 3"` : ""}/>`);
+    out.push(`<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="3" fill="${esc(item.color)}" fill-opacity="${item.overlay ? OVERLAY_FILL_OPACITY : 0.92}" stroke="#0a3550" stroke-width="1.5"${item.exterior || item.overlay ? ` stroke-dasharray="5 3"` : ""}/>`);
     const fontSize = Math.max(11, Math.min(20, Math.min(w, h) * 0.45));
     const label = w > item.shortName.length * fontSize * 0.62 + 34 && h > fontSize * 2.4 ? `${item.number}. ${item.shortName}` : String(item.number);
     out.push(`<text x="${fmt(x + w / 2)}" y="${fmt(y + h / 2)}" fill="#ffffff" stroke="#06293e" stroke-width="3" paint-order="stroke" font-size="${fmt(fontSize)}" font-weight="700" text-anchor="middle" dominant-baseline="central">${esc(label)}</text>`);
