@@ -50,7 +50,7 @@ export default function Home() {
       <div className="topbar">
         <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer" className="topbar-location"><LocationIcon className="topbar-icon" />{FABRICATION_ADDRESS}</a>
         <div className="topbar-social" aria-label="Redes sociales de FG TOW">
-          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" aria-label="WhatsApp"><WhatsAppIcon className="topbar-icon" /></a>
+          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="topbar-whatsapp" aria-label={`WhatsApp ${WHATSAPP_NUMBER}`}><WhatsAppIcon className="topbar-icon" /><span>{WHATSAPP_NUMBER}</span></a>
           <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="Instagram"><InstagramIcon className="topbar-icon" /></a>
           <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="Facebook"><FacebookIcon className="topbar-icon" /></a>
         </div>
@@ -74,6 +74,17 @@ export default function Home() {
           <p>Remolques para negocio, aventura y trabajo. Diseñamos cada solución alrededor de lo que necesitas mover.</p>
           <div className="hero-actions">
             <a className="button" href="#modelos">Ver modelos</a>
+            <a className="button button-whatsapp" href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />Escríbenos por WhatsApp</a>
+          </div>
+          <div className="hero-contact" aria-label="Contacto directo">
+            <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="hero-contact-card is-whatsapp">
+              <WhatsAppIcon className="hero-contact-icon" />
+              <span><small>WhatsApp · atención directa</small><strong>{WHATSAPP_NUMBER}</strong></span>
+            </a>
+            <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer" className="hero-contact-card">
+              <LocationIcon className="hero-contact-icon" />
+              <span><small>Visítanos en planta · Cómo llegar →</small><strong>{FABRICATION_ADDRESS}</strong></span>
+            </a>
           </div>
           <div className="trust-row">
             <span>Hecho en México</span><span>Proyecto a medida</span><span>Atención directa</span>
@@ -135,6 +146,8 @@ export default function Home() {
           <p className="quote-cta-note">Entra a nuestro cotizador y compártenos tu idea — ahí armas tu configuración y nos dejas tus datos para darle seguimiento.</p>
         </div>
       </section>
+
+      <a className="whatsapp-float" href={WHATSAPP_URL} target="_blank" rel="noreferrer" aria-label={`Escríbenos por WhatsApp al ${WHATSAPP_NUMBER}`}><WhatsAppIcon className="whatsapp-float-icon" /><span>{WHATSAPP_NUMBER}</span></a>
 
       <footer className="home-footer"><Link href="/" className="footer-brand"><Image src="/fg-tow-logo.png" alt="FG TOW" width={170} height={54} unoptimized /></Link><p>Remolques para negocio, aventura y trabajo.</p><div className="footer-links"><a href="#modelos">Modelos</a><a href="#cotizar">Cotizar</a></div><div className="footer-social" aria-label="Redes sociales de FG TOW"><a href={INSTAGRAM_URL} target="_blank" rel="noreferrer"><InstagramIcon className="inline-icon" />Instagram</a><a href={FACEBOOK_URL} target="_blank" rel="noreferrer"><FacebookIcon className="inline-icon" />Facebook</a><a href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />WhatsApp</a></div><small>© 2026 FG TOW · De FG INV · <Link href="/vendedor" className="vendor-link">Acceso vendedores</Link></small></footer>
     </main>
