@@ -23,7 +23,16 @@ export const escapeHtml = (value: string) =>
   value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 export const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function parseItems(value: unknown): PlacedEquipment[] {
+function vendorItemFields(item: Record<string, unknown>): Pick<PlacedEquipment, "customPrice" | "note"> {
+  const rawPrice = item.customPrice === null || item.customPrice === undefined || item.customPrice === "" ? null : Number(item.customPrice);
+  const customPrice = rawPrice !== null && Number.isFinite(rawPrice) && rawPrice >= 0 ? Math.round(Math.min(rawPrice, 1_000_000)) : null;
+  const note = clean(item.note, 500);
+  return { ...(customPrice !== null ? { customPrice } : {}), ...(note ? { note } : {}) };
+}
+
+// customPrice y note (barras y repisas) solo los conserva el vendedor; el envío público los
+// descarta igual que en los aditamentos especiales.
+export function parseItems(value: unknown, options: { vendor?: boolean } = {}): PlacedEquipment[] {
   if (!Array.isArray(value) || value.length > 40) return [];
   return value.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object") return [];
@@ -42,6 +51,7 @@ export function parseItems(value: unknown): PlacedEquipment[] {
       depthCm: Math.round(numbers[3]),
       rotation: Number(item.rotation) === 90 ? 90 as const : 0 as const,
       ...(definition.special && clean(item.specialId, 80) ? { specialId: clean(item.specialId, 80) } : {}),
+      ...(options.vendor && definition.vendorPriceEditable ? vendorItemFields(item) : {}),
     }];
   });
 }

@@ -15,7 +15,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!quote) return Response.json({ error: "La cotización no existe." }, { status: 404 });
 
     const payload = await request.json() as unknown;
-    const documentData = resolveQuoteDocumentsData(quote, payload);
+    const documentData = resolveQuoteDocumentsData(quote, payload, { sellerName: vendor.name });
+    // Las firmas solo se modifican desde su propio endpoint; el editor nunca las sobrescribe.
+    documentData.signatures = resolveQuoteDocumentsData(quote).signatures;
     documentData.updatedAt = new Date().toISOString();
 
     const result = await patchQuoteById(id, {

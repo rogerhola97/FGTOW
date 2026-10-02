@@ -292,6 +292,11 @@ footer { padding:42px 5vw 28px; display:grid; grid-template-columns:220px 1fr au
 .addons-row span,.addons-row strong,.addons-row small { display:block; }
 .addons-row strong { font-size:12px; }
 .addons-row small { margin-top:4px; color:var(--muted); font-size:9px; }
+.addons-row-fields { grid-column:2/-1; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; cursor:auto; }
+.addons-row-fields label { color:var(--deep); font-size:9px; font-weight:900; letter-spacing:.06em; text-transform:uppercase; }
+.addons-row-fields input,.addons-row-fields textarea { display:block; width:100%; margin-top:6px; padding:9px 8px; border:1px solid #c7d0ce; background:#fff; color:var(--deep); font:500 12px Arial; }
+.addons-row-fields textarea { resize:vertical; }
+.addons-row-fields .addons-row-note { grid-column:1/-1; }
 
 /* Lista de aditamentos agregados al fondo del plano 2D (además del editor del elemento
    seleccionado) — con tope de altura y scroll propio para que no empuje el resto de la página
@@ -815,6 +820,10 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .legal-issue-locked { padding:9px 11px; border:1px solid rgba(255,255,255,.22); color:rgba(255,255,255,.72); font-size:9px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 .legal-document { width:min(210mm,calc(100% - 32px)); margin:0 auto; color:var(--deep); }
 .legal-document-page { position:relative; min-height:297mm; margin:0 0 18px; padding:15mm 15mm 12mm; display:flex; flex-direction:column; overflow:hidden; background:#fff; border-top:6px solid var(--gold); box-shadow:0 16px 45px rgba(6,41,62,.16); }
+/* Logo tenue en cada hoja. Se dibuja encima con multiply y opacidad muy baja para que se vea como
+   impreso en el papel, también a través de los recuadros con fondo, sin tapar el texto. */
+.legal-logo-watermark { position:absolute; top:50%; left:50%; z-index:5; width:72%; transform:translate(-50%,-50%); opacity:.06; mix-blend-mode:multiply; pointer-events:none; user-select:none; }
+.legal-logo-watermark img { display:block; width:100%; height:auto; }
 .legal-preview-watermark { position:absolute; top:49%; left:50%; z-index:10; width:125%; padding:13px 0; transform:translate(-50%,-50%) rotate(-27deg); border:4px solid rgba(172,70,38,.15); color:rgba(172,70,38,.18); font-size:34px; font-weight:900; letter-spacing:.12em; text-align:center; text-transform:uppercase; pointer-events:none; }
 .legal-document-header { display:grid; grid-template-columns:190px 1fr; align-items:start; gap:22px; padding-bottom:14px; border-bottom:2px solid var(--deep); }
 .legal-document-header img { width:185px; height:auto; object-fit:contain; }
@@ -875,6 +884,22 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .legal-letter-note { margin-top:2px; padding:12px 14px; border-left:4px solid var(--gold); background:#fff8e6; }
 .legal-letter-note p { margin:0; color:#4d4b42; font-size:8.5px; line-height:1.5; }
 .legal-letter-date { margin:18px 0 0; text-align:center; font-size:9px; font-weight:800; }
+.legal-fiscal-blank { min-height:64px; }
+/* La firma se superpone al espacio sobre la línea (alto neto 0) para no alterar la paginación. */
+.legal-signature-image { height:40px; margin:-34px 0 -6px; display:flex; align-items:flex-end; justify-content:center; }
+.legal-signature-image img { max-width:100%; max-height:100%; object-fit:contain; }
+.contract-signature-panel { width:min(210mm,calc(100% - 32px)); margin:0 auto 18px; padding:18px; background:#fff; box-shadow:0 12px 30px rgba(6,41,62,.12); }
+.contract-signature-panel-head h2 { margin:0; color:var(--deep); font-size:18px; }
+.contract-signature-panel-head p { margin:4px 0 14px; color:var(--muted); font-size:13px; }
+.contract-signature-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.contract-signature-pad { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.contract-signature-pad-head { display:flex; justify-content:space-between; gap:10px; font-size:13px; }
+.contract-signature-pad-head span { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.contract-signature-canvas { display:block; width:100%; border:2px dashed #9fb4bd; border-radius:6px; background:#fbfcfb; cursor:crosshair; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+.contract-signature-saved { display:block; width:100%; height:180px; object-fit:contain; border:1px solid var(--line); border-radius:6px; background:#fbfcfb; }
+.contract-signature-hint { margin:0; color:var(--muted); font-size:12px; }
+.contract-signature-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.contract-signature-pad .form-status { margin:0; font-size:12px; }
 
 @media (max-width:850px) {
   .vendor-documents-after-quote { padding-right:24px; padding-left:24px; }
@@ -908,6 +933,8 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
   .legal-detail dd { text-align:left; }
   .legal-payment-summary { grid-template-columns:1fr 1fr; }
   .legal-signatures { grid-template-columns:1fr; }
+  .contract-signature-grid { grid-template-columns:1fr; }
+  .contract-signature-panel { padding:14px; }
 }
 
 @media print {

@@ -328,6 +328,14 @@ export type EquipmentDefinition = {
   // Pieza del plano que representa un aditamento especial (specialItems). No aparece en la lista
   // del catálogo y no genera línea de precio propia: se cobra como aditamento especial.
   special?: boolean;
+  // Precio propio por pieza: no usa uno de los incluidos ni la tarifa general de adicionales.
+  fixedPrice?: number;
+  // Las primeras N piezas de este tipo van sin costo (sin usar incluidos); las demás pagan fixedPrice.
+  freeQuantity?: number;
+  // El vendedor puede fijar el precio de cada pieza y agregarle una nota de fabricación.
+  vendorPriceEditable?: boolean;
+  // Muestra el campo de largo directamente en la lista de aditamentos agregados.
+  inlineLength?: boolean;
 };
 
 export type PlacedEquipment = {
@@ -340,7 +348,14 @@ export type PlacedEquipment = {
   rotation: 0 | 90;
   // Enlaza la pieza del plano con su aditamento especial (specialItems[].id).
   specialId?: string;
+  // Solo vendedor y solo en equipos vendorPriceEditable: precio de esta pieza y nota de fabricación.
+  customPrice?: number | null;
+  note?: string;
 };
+
+export const SHELF_PRICE = 1500;
+export const FIXED_BAR_PRICE = 1500;
+export const FIXED_BAR_FREE_QUANTITY = 2;
 
 export const TRAILER_PRESETS: TrailerPreset[] = [
   { id: "rz-150-305", model: "rzr", label: "1.50 × 3.05 m · 1 eje", widthCm: 150, lengthCm: 305, heightCm: 55, axles: 1, basePrice: 42000, includedEquipment: 5, estimatedWeightKg: 400, estimatedCapacityKg: 900 },
@@ -359,10 +374,12 @@ export const EQUIPMENT: EquipmentDefinition[] = [
   { id: "lavamanos", model: "food", name: "Tarja exterior", shortName: "Tarja ext.", category: "agua", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, color: "#4f94aa", description: "Módulo exterior encajonado de aproximadamente 40 × 40 × 70 cm; va montado por fuera del remolque.", mount: "outside" },
   { id: "barra-fria", model: "food", name: "Barra fría con insertos", shortName: "Barra fría", category: "trabajo", widthCm: 90, depthCm: 40, minWidthCm: 60, maxWidthCm: 160, minDepthCm: 40, maxDepthCm: 65, color: "#3c8f84", description: "Barra para insertos con cajón para hielo." },
   { id: "panera", model: "food", name: "Panera", shortName: "Panera", category: "trabajo", widthCm: 60, depthCm: 50, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 40, maxDepthCm: 120, color: "#788f57", description: "Panera con tapas y división interior." },
-  { id: "refrigerador", model: "food", name: "Espacio para refrigerador", shortName: "Refrigerador", category: "trabajo", widthCm: 75, depthCm: 70, minWidthCm: 50, maxWidthCm: 180, minDepthCm: 50, maxDepthCm: 90, color: "#546ab1", description: "Reserva de espacio; el equipo no se incluye en el precio." },
+  { id: "refrigerador", model: "food", name: "Espacio para refrigerador", shortName: "Refrigerador", category: "trabajo", widthCm: 75, depthCm: 70, minWidthCm: 50, maxWidthCm: 180, minDepthCm: 50, maxDepthCm: 90, color: "#546ab1", description: "Reserva de espacio sin costo; no cuenta como accesorio. El refrigerador no se incluye.", alwaysFree: true },
   { id: "campana", model: "food", name: "Campana con extractor", shortName: "Campana", category: "especial", widthCm: 100, depthCm: 60, minWidthCm: 90, maxWidthCm: 450, minDepthCm: 45, maxDepthCm: 75, color: "#714d82", description: "Campana con extractores; va montada en alto y puede sobreponerse a otros equipos.", overlapExempt: true },
-  { id: "repisa", model: "food", name: "Repisa baja", shortName: "Repisa", category: "especial", widthCm: 120, depthCm: 35, minWidthCm: 50, maxWidthCm: 300, minDepthCm: 25, maxDepthCm: 50, color: "#7d6a4c", description: "Repisa bajo mesa de trabajo; puede sobreponerse a otros equipos.", overlapExempt: true },
-  { id: "barra-abatible", model: "food", name: "Barra abatible", shortName: "Barra", category: "especial", widthCm: 220, depthCm: 25, minWidthCm: 100, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, color: "#2f5d70", description: "Barra cromada o antiderrapante abatible para servicio; va montada por fuera del remolque.", mount: "outside" },
+  { id: "repisa", model: "food", name: "Repisa baja", shortName: "Repisa baja", category: "especial", widthCm: 120, depthCm: 35, minWidthCm: 30, maxWidthCm: 450, minDepthCm: 20, maxDepthCm: 50, color: "#7d6a4c", description: "Repisa bajo mesa de trabajo; puede sobreponerse a otros equipos. Precio y material a confirmar con el vendedor.", overlapExempt: true, fixedPrice: SHELF_PRICE, vendorPriceEditable: true, inlineLength: true },
+  { id: "repisa-alta", model: "food", name: "Repisa alta", shortName: "Repisa alta", category: "especial", widthCm: 120, depthCm: 30, minWidthCm: 30, maxWidthCm: 450, minDepthCm: 20, maxDepthCm: 50, color: "#9a7b4f", description: "Repisa montada en alto sobre la pared; puede sobreponerse a otros equipos. Precio y material a confirmar con el vendedor.", overlapExempt: true, fixedPrice: SHELF_PRICE, vendorPriceEditable: true, inlineLength: true },
+  { id: "barra-abatible", model: "food", name: "Barra abatible", shortName: "Barra abat.", category: "especial", widthCm: 220, depthCm: 25, minWidthCm: 100, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, color: "#2f5d70", description: "Barra cromada o antiderrapante abatible para servicio; va montada por fuera del remolque.", mount: "outside", vendorPriceEditable: true },
+  { id: "barra-fija", model: "food", name: "Barra fija", shortName: "Barra fija", category: "especial", widthCm: 200, depthCm: 25, minWidthCm: 50, maxWidthCm: 500, minDepthCm: 20, maxDepthCm: 45, color: "#3f7a8f", description: "Barra fija exterior para servicio. Las primeras 2 van sin costo; a partir de la tercera cada una cuesta $1,500.", mount: "outside", freeQuantity: FIXED_BAR_FREE_QUANTITY, fixedPrice: FIXED_BAR_PRICE, vendorPriceEditable: true },
   { id: "base-gas", model: "food", name: "Base para gas", shortName: "Base gas", category: "especial", widthCm: 40, depthCm: 40, minWidthCm: 35, maxWidthCm: 60, minDepthCm: 35, maxDepthCm: 60, color: "#6f6f6f", description: "Base exterior para cilindro; va montada por fuera y no afecta el interior. Siempre sin costo.", mount: "outside", alwaysFree: true },
 
   { id: "rampa", model: "cargo", name: "Rampa de acceso", shortName: "Rampa", category: "acceso", widthCm: 150, depthCm: 45, minWidthCm: 100, maxWidthCm: 220, minDepthCm: 35, maxDepthCm: 60, color: "#c45d35", description: "Rampa abatible para carga y descarga por la parte trasera." },
@@ -781,20 +798,61 @@ export function isValidPresetId(id: string) {
 // mismo conteo y en la misma tarifa plana, en el orden en que se agregaron: primero los del plano
 // (items) y luego los especiales (specialItems). Los equipos alwaysFree (base para gas) no cuentan
 // ni se cobran nunca.
-export function calculateQuote<T extends { name: string; widthCm: number; depthCm: number }>(presetId: string, items: PlacedEquipment[], specialItems: T[], includeIva: boolean) {
-  const preset = getPreset(presetId);
+export type EquipmentQuoteLine = { item: PlacedEquipment; definition: EquipmentDefinition; linePrice: number; included: boolean; free: boolean; custom: boolean };
+
+export function isValidCustomPrice(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+// Reglas por pieza, en el orden en que se agregaron:
+// - alwaysFree (base para gas, espacio para refrigerador): nunca cuenta ni se cobra.
+// - Precio fijado por el vendedor (solo equipos vendorPriceEditable): se usa tal cual y no consume incluidos.
+// - freeQuantity (barra fija): las primeras N de ese tipo van sin costo y sin consumir incluidos.
+// - fixedPrice (repisas, barra fija desde la 3.ª): precio propio, no consume incluidos.
+// - El resto consume los incluidos del remolque y después paga la tarifa de adicionales.
+export function priceEquipmentLines(items: PlacedEquipment[], includedCount: number, options: { unitPrice: (definition: EquipmentDefinition) => number; allowCustomPrice: boolean }) {
   let includedUsed = 0;
   let extras = 0;
-  const lines = items.flatMap((item) => {
+  const seenByType = new Map<string, number>();
+  const lines = items.flatMap((item): EquipmentQuoteLine[] => {
     const definition = getEquipment(item.typeId);
     if (!definition || definition.special) return [];
-    if (definition.alwaysFree) return [{ item, definition, linePrice: 0, included: false, free: true }];
-    const included = includedUsed < preset.includedEquipment;
+    const position = seenByType.get(definition.id) ?? 0;
+    seenByType.set(definition.id, position + 1);
+    const base = { item, definition, included: false, free: false, custom: false };
+    if (definition.alwaysFree) return [{ ...base, linePrice: 0, free: true }];
+    if (options.allowCustomPrice && definition.vendorPriceEditable && isValidCustomPrice(item.customPrice)) {
+      extras += item.customPrice;
+      return [{ ...base, linePrice: item.customPrice, free: item.customPrice === 0, custom: true }];
+    }
+    if (definition.freeQuantity && position < definition.freeQuantity) return [{ ...base, linePrice: 0, free: true }];
+    if (definition.fixedPrice != null) {
+      const linePrice = options.unitPrice(definition);
+      extras += linePrice;
+      return [{ ...base, linePrice, free: linePrice === 0 }];
+    }
+    const included = includedUsed < includedCount;
     if (included) includedUsed += 1;
-    const linePrice = included ? 0 : EXTRA_EQUIPMENT_PRICE;
+    const linePrice = included ? 0 : options.unitPrice(definition);
     extras += linePrice;
-    return [{ item, definition, linePrice, included, free: false }];
+    return [{ ...base, linePrice, included }];
   });
+  return { lines, includedUsed, extras };
+}
+
+// Texto corto con la regla de precio de un equipo del catálogo (vacío si usa la regla general).
+export function equipmentPricingNote(definition: EquipmentDefinition) {
+  if (definition.alwaysFree) return "sin costo";
+  if (definition.freeQuantity && definition.fixedPrice != null) return `${definition.freeQuantity} sin costo · desde la ${definition.freeQuantity + 1}.ª ${money(definition.fixedPrice)} c/u`;
+  if (definition.fixedPrice != null) return `${money(definition.fixedPrice)} c/u · a confirmar con el vendedor`;
+  return "";
+}
+
+export function calculateQuote<T extends { name: string; widthCm: number; depthCm: number }>(presetId: string, items: PlacedEquipment[], specialItems: T[], includeIva: boolean) {
+  const preset = getPreset(presetId);
+  const priced = priceEquipmentLines(items, preset.includedEquipment, { unitPrice: (definition) => definition.fixedPrice ?? EXTRA_EQUIPMENT_PRICE, allowCustomPrice: false });
+  const { lines } = priced;
+  let { includedUsed, extras } = priced;
   const specialLines = specialItems.map((entry) => {
     const included = includedUsed < preset.includedEquipment;
     if (included) includedUsed += 1;

@@ -16,6 +16,7 @@ import {
   DOOR_MIN_WIDTH_CM,
   DoorConfig,
   EXTRA_EQUIPMENT_PRICE,
+  EquipmentDefinition,
   FOOD_QUICK_MODELS,
   MODEL_META,
   ModelId,
@@ -35,6 +36,7 @@ import {
   defaultDoor,
   defaultWindows,
   doorClearanceRect,
+  equipmentPricingNote,
   getAllowedAxles,
   getAllowedWidths,
   getCustomHeightOptions,
@@ -88,6 +90,39 @@ type DragState = { kind: "item"; instanceId: string; pointerId: number; originWa
 
 const uid = () => typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+// Campo de medida en cm: mientras se escribe solo cambia el texto; la medida se aplica al salir del
+// campo, con Enter o con las flechas, acotada al rango permitido. Así un valor a medio escribir
+// (p. ej. "1" camino a "150") nunca mueve ni redimensiona la pieza en el plano.
+function MeasureInput({ value, min, max, onCommit, ariaLabel }: { value: number; min: number; max: number; onCommit: (value: number) => void; ariaLabel?: string }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const upper = Math.max(min, max);
+  function commit(raw: string | null = draft) {
+    setDraft(null);
+    if (raw === null || raw.trim() === "") return;
+    const parsed = Number(raw.replace(",", "."));
+    if (!Number.isFinite(parsed)) return;
+    const next = Math.round(clamp(parsed, min, upper));
+    if (next !== value) onCommit(next);
+  }
+  return <input
+    type="number"
+    inputMode="numeric"
+    min={min}
+    max={upper}
+    step={1}
+    aria-label={ariaLabel}
+    title={`Entre ${min} y ${upper} cm`}
+    value={draft ?? value}
+    onChange={(event) => setDraft(event.target.value)}
+    onBlur={() => commit()}
+    onKeyDown={(event) => {
+      if (event.key === "Enter") { event.preventDefault(); commit(event.currentTarget.value); }
+      if (event.key === "Escape") setDraft(null);
+    }}
+    onKeyUp={(event) => { if (event.key === "ArrowUp" || event.key === "ArrowDown") commit(event.currentTarget.value); }}
+  />;
+}
 
 function ticksFor(maxCm: number, step: number) {
   const values: number[] = [];
@@ -458,10 +493,6 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     return working;
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Lets the Ancho/Fondo fields be cleared to blank while retyping instead of snapping back to the
-  // last committed number on every keystroke; null means "show the committed value as usual".
-  const [alongDraft, setAlongDraft] = useState<string | null>(null);
-  const [depthDraft, setDepthDraft] = useState<string | null>(null);
   const [windowWidthDraft, setWindowWidthDraft] = useState<string | null>(null);
   const [windowHeightDraft, setWindowHeightDraft] = useState<string | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
@@ -550,7 +581,6 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     if (sendState === "sent") sentBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [sendState]);
 
-  useEffect(() => { setAlongDraft(null); setDepthDraft(null); }, [selectedId]);
   useEffect(() => { setWindowWidthDraft(null); setWindowHeightDraft(null); }, [windowSelectedId]);
 
   useEffect(() => {
@@ -813,6 +843,12 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     setItems((current) => current.filter((item) => item.instanceId !== instanceId));
     if (selectedId === instanceId) setSelectedId(null);
     setSendState("idle"); setQuoteNumber("BORRADOR");
+  }
+
+  // Precio y nota de fabricación por pieza (barras y repisas); solo los edita el vendedor.
+  function updateItemMeta(instanceId: string, patch: Pick<PlacedEquipment, "customPrice"> | Pick<PlacedEquipment, "note">) {
+    setItems((current) => current.map((item) => (item.instanceId === instanceId ? { ...item, ...patch } : item)));
+    setSendState("idle");
   }
 
   function removeSelected() {
@@ -1271,7 +1307,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           return (
             <div className={`equipment-row ${justAdded ? "equipment-row-added" : ""}`} key={equipment.id}>
               <i style={{ background: equipment.color }} />
-              <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm{equipment.alwaysFree ? " · sin costo" : ""}</small></span>
+              <span><strong>{equipment.name}{equipment.mount === "outside" && !/exterior/i.test(equipment.name) ? " (exterior)" : ""}</strong><small>{equipment.widthCm} × {equipment.depthCm} cm{equipmentPricingNote(equipment) ? ` · ${equipmentPricingNote(equipment)}` : ""}</small></span>
               <div className="qty-stepper">
                 <button type="button" aria-label="Quitar uno" onClick={() => setQuantities((current) => ({ ...current, [equipment.id]: Math.max(1, (current[equipment.id] ?? 1) - 1) }))}>−</button>
                 <span>{qty}</span>
@@ -1408,6 +1444,28 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
       {planExportError && <small role="alert">{planExportError}</small>}
     </div>
   );
+  // Campos extra en la lista de aditamentos agregados: largo de las repisas (cualquiera) y, solo para
+  // el vendedor, precio y nota de fabricación de barras y repisas.
+  const itemExtraFields = (item: PlacedItem, definition: EquipmentDefinition) => {
+    const showLength = Boolean(definition.inlineLength);
+    const showVendorFields = isVendor && Boolean(definition.vendorPriceEditable);
+    if (!showLength && !showVendorFields) return null;
+    const line = quote.lines.find((entry) => entry.item.instanceId === item.instanceId);
+    const pricePlaceholder = !line || line.custom ? "" : line.free ? "Sin costo" : line.included ? "Incluido" : String(line.linePrice);
+    return (
+      <div className="addons-row-fields" onClick={(event) => event.stopPropagation()}>
+        {showLength && <label>Largo cm<MeasureInput ariaLabel={`Largo de ${definition.name}`} value={item.rotation === 0 ? item.widthCm : item.depthCm} min={definition.minWidthCm} max={Math.min(definition.maxWidthCm, wallLengthCm(item.wall, preset.widthCm, preset.lengthCm))} onCommit={(value) => updateItemSize(item.instanceId, "along", value)} /></label>}
+        {showVendorFields && <label>Precio<input type="number" min={0} step="any" placeholder={pricePlaceholder} value={item.customPrice ?? ""} onChange={(event) => { const raw = event.target.value; const parsed = Number(raw); updateItemMeta(item.instanceId, { customPrice: raw === "" || !Number.isFinite(parsed) || parsed < 0 ? null : parsed }); }} /></label>}
+        {showVendorFields && <label className="addons-row-note">Nota de fabricación<textarea rows={2} maxLength={500} placeholder="Material, acabado o especificación del cliente…" value={item.note ?? ""} onChange={(event) => updateItemMeta(item.instanceId, { note: event.target.value })} /></label>}
+      </div>
+    );
+  };
+  const itemPriceLabel = (item: PlacedItem) => {
+    const line = quote.lines.find((entry) => entry.item.instanceId === item.instanceId);
+    if (!line) return "";
+    return line.free ? " · Sin costo" : line.included ? " · Incluido" : ` · ${money(line.linePrice)}`;
+  };
+
   const planAddedItems = items.length > 0 ? (
     <div className="plan-added-list-wrap">
       <div className="workspace-head plan-added-list-head"><div><span>ADITAMENTOS AGREGADOS</span><strong>{items.length} en el plano</strong></div></div>
@@ -1418,8 +1476,9 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           return (
             <li key={item.instanceId} className={`addons-row ${selectedId === item.instanceId ? "is-selected" : ""}`} onClick={() => { setSelectedId(item.instanceId); setDoorSelected(false); setWindowSelectedId(null); }}>
               <i style={{ background: definition.color }} />
-              <span><strong>{index + 1}. {itemName(item, definition)}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm · {(definition.mount ?? "inside") === "outside" ? "Exterior" : WALL_LABEL[item.wall]}</small></span>
+              <span><strong>{index + 1}. {itemName(item, definition)}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm · {(definition.mount ?? "inside") === "outside" ? "Exterior" : WALL_LABEL[item.wall]}{itemPriceLabel(item)}</small></span>
               <button type="button" className="danger-button" onClick={(event) => { event.stopPropagation(); removeItem(item.instanceId); }}>Quitar</button>
+              {itemExtraFields(item, definition)}
             </li>
           );
         })}
@@ -1664,8 +1723,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           {selected && selectedDefinition && selectedAlongLimits && selectedDepthLimits ? (
             <div className="item-editor">
               <div><span>{selectedSpecial ? "ADITAMENTO ESPECIAL" : "ELEMENTO SELECCIONADO"}</span><strong>{itemName(selected, selectedDefinition)}</strong><small>{selectedSpecial ? (selectedSpecial.comment || "Fuera del catálogo, con medida propia.") : selectedDefinition.description} {(selectedDefinition.mount ?? "inside") === "outside" ? "Va montado por fuera del remolque." : `Pared actual: ${WALL_LABEL[selected.wall]}.`}</small></div>
-              <label>Ancho<input type="number" min={selectedAlongLimits.min} max={Math.min(selectedAlongLimits.max, wallLengthCm(selected.wall, preset.widthCm, preset.lengthCm))} value={alongDraft ?? (selected.rotation === 0 ? selected.widthCm : selected.depthCm)} onChange={(event) => { const raw = event.target.value; setAlongDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateItemSize(selected.instanceId, "along", parsed); }} onBlur={() => setAlongDraft(null)} /><b>cm</b></label>
-              <label>Fondo<input type="number" min={selectedDepthLimits.min} max={selectedDepthLimits.max} value={depthDraft ?? (selected.rotation === 0 ? selected.depthCm : selected.widthCm)} onChange={(event) => { const raw = event.target.value; setDepthDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateItemSize(selected.instanceId, "depth", parsed); }} onBlur={() => setDepthDraft(null)} /><b>cm</b></label>
+              <label>{selectedDefinition.inlineLength ? "Largo" : "Ancho"}<MeasureInput key={`along-${selected.instanceId}`} value={selected.rotation === 0 ? selected.widthCm : selected.depthCm} min={selectedAlongLimits.min} max={Math.min(selectedAlongLimits.max, wallLengthCm(selected.wall, preset.widthCm, preset.lengthCm))} onCommit={(value) => updateItemSize(selected.instanceId, "along", value)} /><b>cm</b></label>
+              <label>Fondo<MeasureInput key={`depth-${selected.instanceId}`} value={selected.rotation === 0 ? selected.depthCm : selected.widthCm} min={selectedDepthLimits.min} max={selectedDepthLimits.max} onCommit={(value) => updateItemSize(selected.instanceId, "depth", value)} /><b>cm</b></label>
               {selectedSpecial && (selectedSpecial.heightCm != null ? (
                 <>
                   <label>Alto<input key={selectedSpecial.id} type="number" min={1} defaultValue={selectedSpecial.heightCm} onChange={(event) => { const parsed = Number(event.target.value); if (event.target.value !== "" && Number.isFinite(parsed) && parsed > 0) updateSpecialItem(selectedSpecial.id, { heightCm: parsed }); }} /><b>cm</b></label>
@@ -1706,8 +1765,9 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
                 return (
                   <li key={item.instanceId} className="addons-row">
                     <i style={{ background: definition.color }} />
-                    <span><strong>{index + 1}. {itemName(item, definition)}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm</small></span>
+                    <span><strong>{index + 1}. {itemName(item, definition)}</strong><small>{item.rotation === 0 ? item.widthCm : item.depthCm} × {item.rotation === 0 ? item.depthCm : item.widthCm} cm{itemPriceLabel(item)}</small></span>
                     <button type="button" className="danger-button" onClick={() => removeItem(item.instanceId)}>Quitar</button>
+                    {itemExtraFields(item, definition)}
                   </li>
                 );
               })}
@@ -1854,7 +1914,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
         </div>
         {plano && <div className="document-plan-wrap"><div><small>PLANO / VISTA SUPERIOR</small><strong>Distribución propuesta por el cliente</strong><span>Las posiciones se revisarán para confirmar circulación, ventilación, instalaciones y balance de peso. Puerta: {WALL_LABEL[door.wall]}, {door.widthCm} cm.</span></div><svg className="document-plan" viewBox={`${-PLAN_EXTERIOR_CM} ${-PLAN_EXTERIOR_CM} ${preset.widthCm + PLAN_EXTERIOR_CM * 2} ${preset.lengthCm + PLAN_EXTERIOR_CM * 2}`} aria-label="Plano incluido en la cotización"><path d={`M ${preset.widthCm / 2 - 38} 0 L ${preset.widthCm / 2} -60 L ${preset.widthCm / 2 + 38} 0`} fill="none" stroke="#0a3550" strokeWidth="4" /><rect x="0" y="0" width={preset.widthCm} height={preset.lengthCm} fill="#f7f8f6" stroke="#0a3550" strokeWidth="5" />{items.map((item, index) => { const definition = getEquipment(item.typeId); if (!definition) return null; return <g key={item.instanceId} transform={`translate(${item.xCm} ${item.yCm})`}><rect width={item.widthCm} height={item.depthCm} rx="2" fill={definition.color} stroke="#0a3550" strokeWidth="1.5" /><text x={item.widthCm / 2} y={item.depthCm / 2} textAnchor="middle" dominantBaseline="middle" className="document-plan-label">{index + 1}</text></g>; })}<line x1={doorGeo.x1} y1={doorGeo.y1} x2={doorGeo.x2} y2={doorGeo.y2} stroke="#d6a229" strokeWidth="6" /></svg></div>}
         <div className="document-grid"><div><h3>Especificación base</h3><dl><div><dt>Medidas interiores</dt><dd>{(preset.widthCm / 100).toFixed(2)} × {(preset.lengthCm / 100).toFixed(2)} × {(preset.heightCm / 100).toFixed(2)} m</dd></div><div><dt>Peso estimado</dt><dd>{preset.estimatedWeightKg} kg</dd></div><div><dt>Capacidad de referencia</dt><dd>{preset.estimatedCapacityKg.toLocaleString("es-MX")} kg</dd></div>{plano && <div><dt>Puerta</dt><dd>{WALL_LABEL[door.wall]} · {door.widthCm} cm</dd></div>}<div><dt>Elementos colocados</dt><dd>{items.length}</dd></div></dl></div><div><h3>Incluye de base</h3><p>Incluye {meta.includesNote} y hasta {preset.includedEquipment} {meta.equipmentLabel}.</p></div></div>
-        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.free ? "Sin costo" : line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial{entry.mount ? ` · ${entry.mount === "outside" ? "exterior" : "interior"}` : ""}){entry.comment ? <small className="document-line-note">{entry.comment}</small> : null}</td><td>{entry.widthCm} × {entry.depthCm}{entry.heightCm ? ` × ${entry.heightCm}` : ""} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>#</th><th>Equipo / concepto</th><th>Medida</th><th>Importe</th></tr></thead><tbody><tr><td>01</td><td>Remolque base {preset.label}</td><td>{preset.widthCm} × {preset.lengthCm} cm</td><td>{money(preset.basePrice)}</td></tr>{quote.lines.map((line, index) => <tr key={line.item.instanceId}><td>{String(index + 2).padStart(2, "0")}</td><td>{line.definition.name}{line.item.note ? <small className="document-line-note">{line.item.note}</small> : null}</td><td>{line.item.widthCm} × {line.item.depthCm} cm</td><td>{line.free ? "Sin costo" : line.included ? "Incluido" : line.linePrice ? money(line.linePrice) : "$0"}</td></tr>)}{quote.specialLines.map((entry, index) => <tr key={entry.id}><td>{String(quote.lines.length + index + 2).padStart(2, "0")}</td><td>{entry.name} (especial{entry.mount ? ` · ${entry.mount === "outside" ? "exterior" : "interior"}` : ""}){entry.comment ? <small className="document-line-note">{entry.comment}</small> : null}</td><td>{entry.widthCm} × {entry.depthCm}{entry.heightCm ? ` × ${entry.heightCm}` : ""} cm</td><td>{entry.included ? "Incluido" : money(entry.linePrice)}</td></tr>)}</tbody></table>
         <div className="document-total"><div><span>Subtotal</span><strong>{money(combinedSubtotal)}</strong></div><div><span>IVA</span><strong>{money(combinedIva)}</strong></div><div><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
         <div className="document-terms"><strong>Alcance de esta estimación</strong><p>Importes en pesos mexicanos. Esta propuesta es orientativa y está sujeta a revisión técnica, distribución de peso, capacidad requerida, especificaciones sanitarias, materiales, acabados, impuestos y disponibilidad. El precio final será confirmado por FG TOW después de revisar el plano.</p></div>
         {customer.notes && <div className="document-notes"><strong>Notas del proyecto</strong><p>{customer.notes}</p></div>}

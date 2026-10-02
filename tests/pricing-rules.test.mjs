@@ -20,6 +20,7 @@ import {
   getReferenceTwoAxlePrice,
   getSuggestedOneAxlePrice,
   isValidPresetId,
+  priceEquipmentLines,
   resolveCustomTrailerPrice,
   validateStandardTrailerPrices,
 } from "../app/lib/quoteCatalog.ts";
@@ -134,6 +135,45 @@ test("never charges the gas base nor lets it use an included slot", () => {
   assert.equal(quote.includedUsed, 2);
   assert.equal(quote.lines[0].free, true);
   assert.equal(quote.lines[0].linePrice, 0);
+});
+
+test("keeps the refrigerator space free and outside the included count", () => {
+  const compactId = buildCustomPresetId("food", 200, 250, 210, 1);
+  const fridge = { instanceId: "fridge", typeId: "refrigerador", xCm: 0, yCm: 150, widthCm: 75, depthCm: 70, rotation: 0 };
+  const planchas = [0, 1].map((index) => ({ instanceId: `item-${index}`, typeId: "plancha", xCm: 0, yCm: index * 50, widthCm: 90, depthCm: 50, rotation: 0 }));
+  const quote = calculateQuote(compactId, [fridge, ...planchas], [], false);
+  assert.equal(quote.lines[0].free, true);
+  assert.equal(quote.includedUsed, 2);
+  assert.equal(quote.extras, 0);
+});
+
+test("gives two fixed bars for free and charges from the third one", () => {
+  const compactId = buildCustomPresetId("food", 200, 250, 210, 1);
+  const bars = [0, 1, 2].map((index) => ({ instanceId: `bar-${index}`, typeId: "barra-fija", xCm: 0, yCm: index * 30, widthCm: 200, depthCm: 25, rotation: 0 }));
+  const quote = calculateQuote(compactId, bars, [], false);
+  assert.deepEqual(quote.lines.map((line) => line.linePrice), [0, 0, 1500]);
+  assert.equal(quote.includedUsed, 0);
+  assert.equal(quote.extras, 1500);
+});
+
+test("prices shelves at 1500 without using included slots and lets the vendor override bars and shelves", () => {
+  const compactId = buildCustomPresetId("food", 200, 250, 210, 1);
+  const shelves = [
+    { instanceId: "low", typeId: "repisa", xCm: 0, yCm: 0, widthCm: 120, depthCm: 35, rotation: 0 },
+    { instanceId: "high", typeId: "repisa-alta", xCm: 0, yCm: 0, widthCm: 180, depthCm: 30, rotation: 0, customPrice: 0, note: "Acero inoxidable" },
+  ];
+  const publicQuote = calculateQuote(compactId, shelves, [], false);
+  assert.deepEqual(publicQuote.lines.map((line) => line.linePrice), [1500, 1500]);
+  assert.equal(publicQuote.includedUsed, 0);
+
+  const vendorPricing = { unitPrice: (definition) => definition.fixedPrice ?? 2500, allowCustomPrice: true };
+  const vendorQuote = priceEquipmentLines(shelves, 2, vendorPricing);
+  assert.deepEqual(vendorQuote.lines.map((line) => line.linePrice), [1500, 0]);
+  assert.equal(vendorQuote.lines[1].free, true);
+
+  const foldingBar = { instanceId: "fold", typeId: "barra-abatible", xCm: 0, yCm: 0, widthCm: 220, depthCm: 25, rotation: 0, customPrice: 3200 };
+  assert.equal(priceEquipmentLines([foldingBar], 2, vendorPricing).extras, 3200);
+  assert.equal(calculateQuote(compactId, [foldingBar], [], false).includedUsed, 1);
 });
 
 test("charges a special add-on once even though it also has a piece on the plan", () => {

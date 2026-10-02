@@ -13,10 +13,10 @@ export default async function InvoiceLetterPreviewPage({ params }: { params: Pro
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isInteger(id) || id <= 0) notFound();
-  await requireVendor(`/vendedor/clientes/${id}/documentos/carta-factura`);
+  const vendor = await requireVendor(`/vendedor/clientes/${id}/documentos/carta-factura`);
   const quote = await getQuoteById(id);
   if (!quote) notFound();
-  const data = resolveQuoteDocumentsData(quote);
+  const data = resolveQuoteDocumentsData(quote, quote.document_data, { sellerName: vendor.name });
   const canIssue = canIssueInvoiceLetter(quote.pipeline_stage);
 
   return <main className="legal-document-preview">

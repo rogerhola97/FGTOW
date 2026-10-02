@@ -23,7 +23,7 @@ const moneyFormatter = new Intl.NumberFormat("es-MX", { style: "currency", curre
 type StoredConfiguration = { items?: PlacedEquipment[]; door?: DoorConfig; windows?: WindowConfig[]; specialItems?: InitialQuoteData["specialItems"] };
 
 export default async function VendedorClienteDetallePage({ params }: { params: Promise<{ id: string }> }) {
-  await requireVendor("/vendedor/clientes");
+  const vendor = await requireVendor("/vendedor/clientes");
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isInteger(id) || id <= 0) notFound();
@@ -36,7 +36,7 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
     getPricingSettings().catch(() => DEFAULT_PRICING_SETTINGS),
   ]);
   const configuration = (quote.configuration ?? {}) as StoredConfiguration;
-  const documentData = resolveQuoteDocumentsData(quote);
+  const documentData = resolveQuoteDocumentsData(quote, quote.document_data, { sellerName: vendor.name });
 
   const [referenceImages, invoiceFiles, deliveryPhotos] = await Promise.all([
     signQuoteFileUrls("reference", quote.reference_image_files ?? []),

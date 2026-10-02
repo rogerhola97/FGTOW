@@ -73,7 +73,7 @@ export function PricingSettingsForm({ initialSettings, equipment }: {
           <h2>{MODEL_META[model].shortLabel} · aditamentos</h2>
           <div className="pricing-settings-equipment-grid">
             {equipmentByModel[model].map((item) => (
-              <label key={item.id}>{item.name}<input type="number" min={0} placeholder="tarifa plana" value={equipmentPrices[item.id] ?? ""} onChange={(event) => setEquipmentPrices((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
+              <label key={item.id}>{item.name}<input type="number" min={0} placeholder={item.fixedPrice != null ? `${item.fixedPrice} (precio propio)` : "tarifa plana"} value={equipmentPrices[item.id] ?? ""} onChange={(event) => setEquipmentPrices((current) => ({ ...current, [item.id]: event.target.value }))} /></label>
             ))}
           </div>
         </div>

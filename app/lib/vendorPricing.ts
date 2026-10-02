@@ -2,10 +2,11 @@
 // la misma matriz canónica del cotizador público; aquí sólo se aplican tarifas de aditamentos y el
 // descuento propio de la cotización.
 import {
+  EquipmentDefinition,
   PlacedEquipment,
   TrailerPreset,
-  getEquipment,
   getPreset,
+  priceEquipmentLines,
 } from "./quoteCatalog";
 import { PricingSettings } from "./pricingSettingsShape";
 
@@ -19,13 +20,14 @@ export function getPresetWithSettings(id: string, settings: PricingSettings): Tr
   return getPreset(id);
 }
 
-function equipmentPrice(typeId: string, settings: PricingSettings) {
-  const override = settings.equipment_price_overrides[typeId];
+function equipmentPrice(definition: EquipmentDefinition, settings: PricingSettings) {
+  const override = settings.equipment_price_overrides[definition.id];
   if (typeof override === "number" && Number.isFinite(override) && override >= 0) return override;
-  return settings.extra_equipment_price;
+  return definition.fixedPrice ?? settings.extra_equipment_price;
 }
 
-// Base para gas (alwaysFree) nunca cuenta ni se cobra. Un aditamento especial con customPrice usa
+// Las reglas por pieza viven en priceEquipmentLines (catálogo). Aquí además se respeta el precio
+// que el vendedor fija por pieza (barras y repisas). Un aditamento especial con customPrice usa
 // el precio que el vendedor le puso y no consume uno de los incluidos.
 export function calculateVendorQuote<T extends { name: string; widthCm: number; depthCm: number; customPrice?: number | null }>(
   presetId: string,
@@ -37,18 +39,9 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
 ) {
   const preset = getPresetWithSettings(presetId, settings);
   const includedCount = preset.includedEquipment;
-  let includedUsed = 0;
-  let extras = 0;
-  const lines = items.flatMap((item) => {
-    const definition = getEquipment(item.typeId);
-    if (!definition || definition.special) return [];
-    if (definition.alwaysFree) return [{ item, definition, linePrice: 0, included: false, free: true }];
-    const included = includedUsed < includedCount;
-    if (included) includedUsed += 1;
-    const linePrice = included ? 0 : equipmentPrice(item.typeId, settings);
-    extras += linePrice;
-    return [{ item, definition, linePrice, included, free: false }];
-  });
+  const priced = priceEquipmentLines(items, includedCount, { unitPrice: (definition) => equipmentPrice(definition, settings), allowCustomPrice: true });
+  const { lines } = priced;
+  let { includedUsed, extras } = priced;
   const specialLines = specialItems.map((entry) => {
     if (typeof entry.customPrice === "number" && Number.isFinite(entry.customPrice) && entry.customPrice >= 0) {
       extras += entry.customPrice;

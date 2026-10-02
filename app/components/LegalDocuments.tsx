@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { QuoteRow } from "../lib/quotesDb";
-import { QuoteDocumentsData, paymentMethodLabel, paymentScheduleLabel } from "../lib/quoteDocuments";
+import { DocumentSignature, QuoteDocumentsData, paymentMethodLabel, paymentScheduleLabel } from "../lib/quoteDocuments";
 import { DoorConfig, PlacedEquipment, WALL_LABEL, WindowConfig, getEquipment, getPreset } from "../lib/quoteCatalog";
 
 type DocumentSpecialItem = { id?: string; name: string; widthCm: number; depthCm: number; comment?: string; mount?: "inside" | "outside" };
@@ -17,6 +17,10 @@ function longDate(value: string) {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("es-MX", { dateStyle: "long" }).format(date);
+}
+
+function LogoWatermark() {
+  return <div className="legal-logo-watermark" aria-hidden="true"><Image src="/fg-tow-logo.png" alt="" width={630} height={198} unoptimized /></div>;
 }
 
 function Header({ data, title, quoteNumber }: { data: QuoteDocumentsData; title: string; quoteNumber: string }) {
@@ -80,10 +84,16 @@ function PaymentInstructions({ data }: { data: QuoteDocumentsData }) {
   </section>;
 }
 
-function Signatures({ sellerName }: { sellerName: string }) {
+function SignatureImage({ signature, label }: { signature?: DocumentSignature | null; label: string }) {
+  // eslint-disable-next-line @next/next/no-img-element -- firma en data URL, no pasa por el optimizador de imágenes.
+  return <figure className="legal-signature-image">{signature && <img src={signature.image} alt={`Firma digital: ${label}`} />}</figure>;
+}
+
+function Signatures({ sellerName, customerName, signatures }: { sellerName: string; customerName?: string; signatures?: QuoteDocumentsData["signatures"] }) {
+  const sellerLabel = `FG TOW / ${sellerName || "Representante autorizado"}`;
   return <div className="legal-signatures">
-    <div><span /><strong>Firma del cliente</strong></div>
-    <div><span /><strong>FG TOW / {sellerName || "Representante autorizado"}</strong></div>
+    <div><SignatureImage signature={signatures?.customer} label={customerName || "cliente"} /><span /><strong>Firma del cliente{customerName ? ` / ${customerName}` : ""}</strong></div>
+    <div><SignatureImage signature={signatures?.seller} label={sellerLabel} /><span /><strong>{sellerLabel}</strong></div>
   </div>;
 }
 
@@ -143,6 +153,7 @@ export function ContractDocument({ quote, data }: { quote: QuoteRow; data: Quote
 
   return <article className="legal-document legal-contract">
     <section className="legal-document-page">
+      <LogoWatermark />
       <Header data={data} title="Contrato de compraventa" quoteNumber={quote.quote_number} />
       <CustomerStrip quote={quote} />
       <div className="legal-kicker-row"><span>Atendido por {data.vehicle.sellerName || "FG TOW"}</span><span>{data.vehicle.issuePlace}, {longDate(data.vehicle.issueDate)}</span></div>
@@ -172,20 +183,22 @@ export function ContractDocument({ quote, data }: { quote: QuoteRow; data: Quote
 
       <PaymentSummary data={data} total={total} />
       <div className="legal-delivery"><span>Fecha de entrega acordada</span><strong>{longDate(data.vehicle.deliveryDate)}</strong></div>
-      <Signatures sellerName={data.vehicle.sellerName} />
+      <Signatures sellerName={data.vehicle.sellerName} customerName={quote.name} signatures={data.signatures} />
       <footer className="legal-page-footer"><span>FG TOW · De FG INV</span><span>Página 1 de 3</span></footer>
     </section>
 
     <section className="legal-document-page legal-contract-plan-page">
+      <LogoWatermark />
       <Header data={data} title="Anexo técnico · plano" quoteNumber={quote.quote_number} />
       <div className="legal-plan-title"><div><small>UNIDAD</small><strong>{preset.label}</strong></div><div><small>CLIENTE</small><strong>{quote.name}</strong></div><div><small>ELEMENTOS</small><strong>{configuration.items?.length ?? 0}</strong></div></div>
       <Plan quote={quote} />
       <div className="legal-plan-note">Este plano forma parte de la especificación comercial. Las instalaciones, circulaciones, ventilación y distribución de peso quedan sujetas a la revisión final de fabricación.</div>
-      <Signatures sellerName={data.vehicle.sellerName} />
+      <Signatures sellerName={data.vehicle.sellerName} customerName={quote.name} signatures={data.signatures} />
       <footer className="legal-page-footer"><span>FG TOW · De FG INV</span><span>Página 2 de 3</span></footer>
     </section>
 
     <section className="legal-document-page">
+      <LogoWatermark />
       <Header data={data} title="Condiciones comerciales" quoteNumber={quote.quote_number} />
       <PaymentSummary data={data} total={total} />
       <PaymentInstructions data={data} />
@@ -195,7 +208,7 @@ export function ContractDocument({ quote, data }: { quote: QuoteRow; data: Quote
       </section>
       <section className="legal-section legal-warranty"><h2>Garantía, servicio y reparaciones</h2><p>{data.warrantyTerms}</p></section>
       <p className="legal-review-note">Plantilla editable preparada con los datos de la cotización. FG TOW debe revisar las condiciones comerciales y legales antes de recabar firmas.</p>
-      <Signatures sellerName={data.vehicle.sellerName} />
+      <Signatures sellerName={data.vehicle.sellerName} customerName={quote.name} signatures={data.signatures} />
       <footer className="legal-page-footer"><span>FG TOW · De FG INV</span><span>Página 3 de 3</span></footer>
     </section>
   </article>;
@@ -207,6 +220,7 @@ export function InvoiceLetterDocument({ quote, data, isPreview = false }: { quot
   return <article className={`legal-document legal-invoice-letter ${isPreview ? "is-preview" : "is-issued"}`}>
     <section className="legal-document-page">
       {isPreview && <div className="legal-preview-watermark" aria-hidden="true">VISTA PREVIA · PAGO PENDIENTE</div>}
+      <LogoWatermark />
       <Header data={data} title="Carta factura" quoteNumber={quote.quote_number} />
       <CustomerStrip quote={quote} />
       <p className="legal-letter-intro">{data.issuer.legalName ? `Por medio de la presente, ${data.issuer.legalName} hace constar la operación correspondiente a la unidad descrita a continuación.` : "Por medio de la presente se hace constar la operación correspondiente a la unidad descrita a continuación."}</p>
@@ -241,7 +255,7 @@ export function InvoiceLetterDocument({ quote, data, isPreview = false }: { quot
           <Detail label="Código postal fiscal" value={data.fiscal.fiscalPostalCode} />
           <Detail label="Correo de facturación" value={data.fiscal.invoiceEmail} />
           <Detail label="Domicilio fiscal" value={data.fiscal.fiscalAddress} />
-        </dl> : <p>El cliente no solicitó CFDI en esta operación.</p>}
+        </dl> : <div className="legal-fiscal-blank" aria-hidden="true" />}
       </section>
 
       <section className="legal-letter-note"><p>{data.invoiceLetterNotes}</p></section>

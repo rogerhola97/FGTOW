@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const presetId = clean(payload.presetId, 60);
     const includeIva = payload.includeIva === true;
     const rawItems = Array.isArray(payload.items) ? payload.items : [];
-    const items = parseItems(rawItems);
+    const items = parseItems(rawItems, { vendor: true });
     const specialItems = parseSpecialItems(payload.specialItems, { vendor: true });
     const windows = parseWindows(payload.windows);
 

@@ -3,6 +3,11 @@ import { MODEL_META, ModelId, getEquipment, getPreset } from "./quoteCatalog";
 
 export type PaymentMethod = "cash" | "transfer" | "credit_card";
 export type PaymentSchedule = "full" | "deposit_balance" | "deposit_installments" | "installments";
+export type SignatureRole = "customer" | "seller";
+export type DocumentSignature = { image: string; signerName: string; signedAt: string };
+
+export const SIGNATURE_IMAGE_PREFIX = "data:image/png;base64,";
+export const SIGNATURE_IMAGE_MAX_LENGTH = 400_000;
 
 export type QuoteDocumentsData = {
   vehicle: {
@@ -64,8 +69,11 @@ export type QuoteDocumentsData = {
   contractClauses: string;
   warrantyTerms: string;
   invoiceLetterNotes: string;
+  signatures: Record<SignatureRole, DocumentSignature | null>;
   updatedAt: string | null;
 };
+
+type ResolveOptions = { sellerName?: string };
 
 type QuoteForDocuments = {
   quote_number: string;
@@ -84,7 +92,7 @@ type QuoteForDocuments = {
 };
 
 type StoredConfiguration = {
-  items?: Array<{ typeId?: string }>;
+  items?: Array<{ typeId?: string; note?: unknown }>;
   windows?: unknown[];
   specialItems?: Array<{ name?: string }>;
 };
@@ -129,21 +137,39 @@ function defaultDescription(quote: QuoteForDocuments) {
   const configuration = object(quote.configuration) as StoredConfiguration;
   const equipment = (configuration.items ?? []).flatMap((item) => {
     const definition = item.typeId ? getEquipment(item.typeId) : null;
-    return definition?.alwaysFree ? [] : definition ? [definition.name] : [];
+    // La base para gas va en todos los remolques; no se enumera como concepto del contrato.
+    if (!definition || definition.id === "base-gas") return [];
+    const note = typeof item.note === "string" ? item.note.trim() : "";
+    return [note ? `${definition.name} (${note})` : definition.name];
   });
   const specials = (configuration.specialItems ?? []).flatMap((item) => item.name ? [item.name] : []);
   const concepts = [...equipment, ...specials];
   return concepts.length ? concepts.join(", ") : "Configuración y acabados conforme a la cotización y al plano autorizados.";
 }
 
-export function defaultQuoteDocumentsData(quote: QuoteForDocuments): QuoteDocumentsData {
+export function isValidSignatureImage(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith(SIGNATURE_IMAGE_PREFIX) && value.length <= SIGNATURE_IMAGE_MAX_LENGTH
+    && /^[A-Za-z0-9+/]+=*$/.test(value.slice(SIGNATURE_IMAGE_PREFIX.length));
+}
+
+function signature(value: unknown): DocumentSignature | null {
+  const candidate = object(value);
+  if (!isValidSignatureImage(candidate.image)) return null;
+  return {
+    image: candidate.image,
+    signerName: limited(candidate.signerName, "", 160),
+    signedAt: typeof candidate.signedAt === "string" ? candidate.signedAt.slice(0, 40) : "",
+  };
+}
+
+export function defaultQuoteDocumentsData(quote: QuoteForDocuments, options: ResolveOptions = {}): QuoteDocumentsData {
   const preset = getPreset(quote.trailer_preset);
   const model = (quote.model in MODEL_META ? quote.model : preset.model) as ModelId;
   const configuration = object(quote.configuration) as StoredConfiguration;
   const total = numeric(quote.total, 0);
   return {
     vehicle: {
-      sellerName: quote.vendor_email ?? "",
+      sellerName: options.sellerName?.trim() ?? "",
       issuePlace: "Monterrey, Nuevo León",
       issueDate: todayIso(),
       deliveryDate: "",
@@ -207,24 +233,29 @@ export function defaultQuoteDocumentsData(quote: QuoteForDocuments): QuoteDocume
     ].join("\n"),
     warrantyTerms: "Servicios, garantía y reparaciones se atienden directamente en el taller de FG TOW, con cita previa y conforme a las condiciones entregadas con la unidad.",
     invoiceLetterNotes: "La presente carta identifica la unidad descrita y deja constancia de la operación. No sustituye al CFDI ni a la documentación oficial que resulte aplicable.",
+    signatures: { customer: null, seller: null },
     updatedAt: null,
   };
 }
 
-export function resolveQuoteDocumentsData(quote: QuoteForDocuments, candidate: unknown = quote.document_data): QuoteDocumentsData {
-  const defaults = defaultQuoteDocumentsData(quote);
+export function resolveQuoteDocumentsData(quote: QuoteForDocuments, candidate: unknown = quote.document_data, options: ResolveOptions = {}): QuoteDocumentsData {
+  const defaults = defaultQuoteDocumentsData(quote, options);
   const root = object(candidate);
   const vehicle = object(root.vehicle);
   const payment = object(root.payment);
   const fiscal = object(root.fiscal);
   const issuer = object(root.issuer);
+  const signatures = object(root.signatures);
+  // Documentos guardados antes usaban el correo del vendedor como nombre; se reemplaza por su nombre.
+  const storedSellerName = limited(vehicle.sellerName, defaults.vehicle.sellerName, 120);
+  const sellerName = storedSellerName.includes("@") ? defaults.vehicle.sellerName : storedSellerName;
   const method = PAYMENT_METHODS.includes(payment.method as PaymentMethod) ? payment.method as PaymentMethod : defaults.payment.method;
   const schedule = PAYMENT_SCHEDULES.includes(payment.schedule as PaymentSchedule) ? payment.schedule as PaymentSchedule : defaults.payment.schedule;
   const issuerLegalName = limited(issuer.legalName, defaults.issuer.legalName, 240);
 
   return {
     vehicle: {
-      sellerName: limited(vehicle.sellerName, defaults.vehicle.sellerName, 120),
+      sellerName,
       issuePlace: limited(vehicle.issuePlace, defaults.vehicle.issuePlace, 160),
       issueDate: typeof vehicle.issueDate === "string" && ISO_DATE.test(vehicle.issueDate) ? vehicle.issueDate : defaults.vehicle.issueDate,
       deliveryDate: typeof vehicle.deliveryDate === "string" && (vehicle.deliveryDate === "" || ISO_DATE.test(vehicle.deliveryDate)) ? vehicle.deliveryDate : defaults.vehicle.deliveryDate,
@@ -282,6 +313,7 @@ export function resolveQuoteDocumentsData(quote: QuoteForDocuments, candidate: u
     contractClauses: limited(root.contractClauses, defaults.contractClauses, 8000),
     warrantyTerms: limited(root.warrantyTerms, defaults.warrantyTerms, 3000),
     invoiceLetterNotes: limited(root.invoiceLetterNotes, defaults.invoiceLetterNotes, 3000),
+    signatures: { customer: signature(signatures.customer), seller: signature(signatures.seller) },
     updatedAt: typeof root.updatedAt === "string" ? root.updatedAt.slice(0, 40) : defaults.updatedAt,
   };
 }
