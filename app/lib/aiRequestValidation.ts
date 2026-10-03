@@ -46,7 +46,7 @@ function arrayArg(value: unknown, max: number): unknown[] {
 export type CurrentPriceInput = {
   model: ModelId; presetId: string; items: PlacedEquipment[]; specialItems: SpecialItem[];
   includeIva: boolean; discount: VendorDiscount; charges: VendorCharge[];
-  payment?: Pick<QuoteDocumentsData["payment"], "schedule" | "depositPercent" | "installmentCount">;
+  payment?: "default_deposit" | Pick<QuoteDocumentsData["payment"], "schedule" | "depositPercent" | "installmentCount">;
 };
 export function currentPriceArgs(value: unknown): CurrentPriceInput {
   const raw = objectArgs(value, ["model", "presetId", "items", "specialItems", "includeIva", "discount", "charges", "payment", "door"]);
@@ -103,7 +103,8 @@ export function currentPriceArgs(value: unknown): CurrentPriceInput {
     if (discount.reason != null) textArg(discount.reason, 300);
   }
   let payment: CurrentPriceInput["payment"];
-  if (raw.payment !== undefined) {
+  if (raw.payment === "default_deposit") payment = "default_deposit";
+  else if (raw.payment !== undefined) {
     const pay = objectArgs(raw.payment, ["schedule", "depositPercent", "installmentCount"]);
     if (pay.schedule !== "full" && pay.schedule !== "deposit_balance" && pay.schedule !== "deposit_installments" && pay.schedule !== "installments") throw new AiValidationError("Esquema de pago inválido.");
     payment = { schedule: pay.schedule, depositPercent: numberArg(pay.depositPercent, 0, 100), installmentCount: numberArg(pay.installmentCount, 1, 100, true) };

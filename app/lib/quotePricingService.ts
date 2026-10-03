@@ -2,13 +2,20 @@ import { getPricingSettings } from "./pricingSettingsDb";
 import { getQuoteById } from "./quotesDb";
 import { calculateVendorQuote, pricingSnapshot } from "./vendorPricing";
 import { PRICING_VERSION } from "./quoteCatalog";
-import { calculatePaymentPlan, resolveQuoteDocumentsData, storedPricingBreakdown } from "./quoteDocuments";
-import { currentPriceArgs, quoteIdArgs } from "./aiRequestValidation";
+import { calculatePaymentPlan, DEFAULT_DEPOSIT_PERCENT, resolveQuoteDocumentsData, storedPricingBreakdown } from "./quoteDocuments";
+import { AiValidationError, currentPriceArgs, quoteIdArgs } from "./aiRequestValidation";
 import { authorizeSalesOperation } from "./vendorAuthorization";
 
 export async function calculateCurrentVendorTrailerPrice(args: unknown) {
   await authorizeSalesOperation("calculate_trailer_price");
   const input = currentPriceArgs(args);
+  if (input.payment === "default_deposit" && (!Number.isFinite(DEFAULT_DEPOSIT_PERCENT) || DEFAULT_DEPOSIT_PERCENT < 0 || DEFAULT_DEPOSIT_PERCENT > 100)) {
+    throw new AiValidationError("No hay un porcentaje de anticipo predeterminado disponible. Solicita el porcentaje al vendedor.");
+  }
+  // This selector requests the existing deposit percentage; it does not change document defaults.
+  const payment = input.payment === "default_deposit"
+    ? { schedule: "deposit_balance" as const, depositPercent: DEFAULT_DEPOSIT_PERCENT, installmentCount: 1 }
+    : input.payment;
   const settings = await getPricingSettings(); // Fail closed: never silently substitute defaults on fetch errors.
   const quote = calculateVendorQuote(input.presetId, input.items, input.specialItems, input.includeIva, settings, input.discount, input.charges);
   return {
@@ -16,7 +23,7 @@ export async function calculateCurrentVendorTrailerPrice(args: unknown) {
     ...pricingSnapshot(quote),
     accessories: [...quote.lines.map(line => ({ id: line.definition.id, price: line.linePrice, included: line.included, free: line.free })), ...quote.specialLines.map(line => ({ id: line.id, price: line.linePrice, included: line.included }))],
     charges: quote.chargeLines.map(line => ({ id: line.id, name: line.name, price: line.price })),
-    payment: input.payment ? calculatePaymentPlan(quote.total, input.payment) : null,
+    payment: payment ? calculatePaymentPlan(quote.total, payment) : null,
   };
 }
 

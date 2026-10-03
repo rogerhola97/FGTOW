@@ -19,9 +19,14 @@ const hook = registerHooks({ load(url, context, nextLoad) {
   if (url.endsWith("/vendorAuth.ts")) source = prelude + "export async function getVendor(){return state.session;} export async function findVendorByEmail(){return state.account;}";
   if (url.endsWith("/pricingSettingsDb.ts")) source = prelude + "export async function getPricingSettings(){state.settingsCalls++; if(state.failSettings) throw new Error('unavailable'); return state.settings;}";
   if (url.endsWith("/quotesDb.ts")) source = prelude + "export async function getQuoteById(){state.quoteCalls++; return state.quote;}";
+  if (url.endsWith("/quoteDocuments.ts")) {
+    const actual = JSON.stringify(`${url}?actual-payment-rules`);
+    source = `export * from ${actual}; import { DEFAULT_DEPOSIT_PERCENT as actualDefault } from ${actual}; export let DEFAULT_DEPOSIT_PERCENT = actualDefault; export function setTestDefault(value){DEFAULT_DEPOSIT_PERCENT=value;}`;
+  }
   return source ? { format: "module", source, shortCircuit: true } : nextLoad(url, context);
 } });
 const tools = await import("../app/lib/aiSalesTools.ts");
+const paymentRules = await import("../app/lib/quoteDocuments.ts");
 const { authorizeSalesOperation } = await import("../app/lib/vendorAuthorization.ts");
 const input = () => ({ model: "food", presetId: "custom-food-200-300-210-1", items: [{ instanceId: "shelf", typeId: "repisa-alta", xCm: 10, yCm: 10, widthCm: 90, depthCm: 30, rotation: 0 }], includeIva: true, charges: [{ id: "paint", name: "Paint", price: 1000 }], discount: { type: "percent", value: 10 }, payment: { schedule: "deposit_balance", depositPercent: 50, installmentCount: 1 } });
 
@@ -115,4 +120,69 @@ test("Cargo and RZR calculation tools match the same vendor engine", async () =>
     assert.equal(result.total, calculateVendorQuote(presetId, [], [], false, state.settings).total);
   }
 });
+const compactInput = () => ({ model: "food", presetId: "custom-food-180-250-210-1", items: [], specialItems: [], includeIva: true, charges: [] });
+
+test("Compact 250 price remains 63220 with IVA and no requested payment plan", async () => {
+  const result = await tools.calculate_trailer_price(compactInput());
+  assert.equal(result.basePrice, 54500);
+  assert.equal(result.subtotal, 54500);
+  assert.equal(result.iva, 8720);
+  assert.equal(result.total, 63220);
+  assert.equal(result.payment, null);
+});
+
+test("requested default deposit uses the official percentage and real payment calculator", async () => {
+  const result = await tools.calculate_trailer_price({ ...compactInput(), payment: "default_deposit" });
+  const expected = paymentRules.calculatePaymentPlan(63220, { schedule: "deposit_balance", depositPercent: paymentRules.DEFAULT_DEPOSIT_PERCENT, installmentCount: 1 });
+  assert.deepEqual(result.payment, expected);
+  assert.equal(result.payment.deposit, 31610);
+  assert.equal(result.payment.balance, 31610);
+  assert.equal(result.payment.depositPercent, paymentRules.DEFAULT_DEPOSIT_PERCENT);
+  assert.equal(result.payment.hasInstallments, false);
+  assert.equal(result.payment.deposit + result.payment.balance, result.total);
+});
+
+test("explicit deposit and installments continue to use existing payment rules", async () => {
+  const payment = { schedule: "deposit_installments", depositPercent: 30, installmentCount: 4 };
+  const result = await tools.calculate_trailer_price({ ...compactInput(), payment });
+  assert.deepEqual(result.payment, paymentRules.calculatePaymentPlan(result.total, payment));
+  assert.equal(result.payment.deposit, 18966);
+  assert.equal(result.payment.balance, 44254);
+  assert.equal(result.payment.installmentAmount, 11063.5);
+});
+
+test("AI cannot override base price or invent a missing explicit payment percentage", async () => {
+  const before = state.settingsCalls;
+  for (const field of ["basePrice", "price", "total"]) await assert.rejects(tools.calculate_trailer_price({ ...compactInput(), [field]: 1 }), /campos/);
+  await assert.rejects(tools.calculate_trailer_price({ ...compactInput(), payment: { schedule: "deposit_balance", installmentCount: 1 } }), /Número/);
+  assert.equal(state.settingsCalls, before);
+});
+
+test("missing official deposit default fails closed without inventing a percentage", async () => {
+  const original = paymentRules.DEFAULT_DEPOSIT_PERCENT;
+  const before = state.settingsCalls;
+  paymentRules.setTestDefault(undefined);
+  try {
+    await assert.rejects(tools.calculate_trailer_price({ ...compactInput(), payment: "default_deposit" }), /Solicita el porcentaje al vendedor/);
+    assert.equal(state.settingsCalls, before);
+    const explicit = { schedule: "deposit_balance", depositPercent: 30, installmentCount: 1 };
+    const result = await tools.calculate_trailer_price({ ...compactInput(), payment: explicit });
+    assert.deepEqual(result.payment, paymentRules.calculatePaymentPlan(result.total, explicit));
+  } finally { paymentRules.setTestDefault(original); }
+});
+
+test("historical payment percentage and amounts stay saved rather than using current default", async () => {
+  const original = state.quote.document_data.payment;
+  const before = state.settingsCalls;
+  state.quote.document_data.payment = { schedule: "deposit_balance", depositPercent: 25, installmentCount: 1 };
+  try {
+    const result = await tools.get_quote_summary({ quoteId: 7 });
+    assert.equal(result.total, 111);
+    assert.equal(result.payment.depositPercent, 25);
+    assert.equal(result.payment.deposit, 27.75);
+    assert.equal(result.payment.balance, 83.25);
+    assert.equal(state.settingsCalls, before);
+  } finally { state.quote.document_data.payment = original; }
+});
+
 test.after(() => { hook.deregister(); delete globalThis.__salesTestState; });

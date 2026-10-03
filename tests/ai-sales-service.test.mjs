@@ -332,4 +332,29 @@ test("endpoint never makes more than five Responses requests or four tool rounds
   } finally { globalThis.fetch = originalFetch; }
 });
 
+test("deposit request returns server-calculated payment through the existing tool loop", async () => {
+  const before = state.pricingReads;
+  let rounds = 0;
+  const args = { model: "food", presetId: "custom-food-180-250-210-1", items: [], specialItems: [], charges: [], includeIva: true, discount: null, payment: "default_deposit", door: null };
+  const response = await runSalesAssistant({ message: "Dame precio base, subtotal, IVA, total, anticipo y saldo" }, async payload => {
+    assert.equal(payload.instructions, SALES_AI_INSTRUCTIONS);
+    assert.deepEqual(payload.tools.map(tool => tool.name), ["calculate_trailer_price", "get_quote", "get_quote_summary", "get_trailer_catalog", "get_accessories"]);
+    if (++rounds === 1) return result([call("calculate_trailer_price", args, "payment_call")]);
+    const output = payload.input.find(item => item.type === "function_call_output");
+    assert.equal(output.call_id, "payment_call");
+    const calculated = JSON.parse(output.output);
+    assert.equal(calculated.basePrice, 54500);
+    assert.equal(calculated.subtotal, 54500);
+    assert.equal(calculated.iva, 8720);
+    assert.equal(calculated.total, 63220);
+    assert.equal(calculated.payment.depositPercent, 50);
+    assert.equal(calculated.payment.deposit, 31610);
+    assert.equal(calculated.payment.balance, 31610);
+    return result([message("Total: $63,220. Anticipo: $31,610. Saldo: $31,610.")]);
+  });
+  assert.equal(rounds, 2);
+  assert.equal(state.pricingReads, before + 1);
+  assert.equal(response.message, "Total: $63,220. Anticipo: $31,610. Saldo: $31,610.");
+});
+
 test.after(() => { hook.deregister(); delete globalThis.__salesServiceTests; });
