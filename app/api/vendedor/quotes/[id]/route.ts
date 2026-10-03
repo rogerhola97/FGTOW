@@ -3,8 +3,8 @@ import { clean, emailPattern, parseDoor, parseItems, parseSpecialItems, parseWin
 import { deleteQuoteById, getQuoteById, patchQuoteById } from "../../../../lib/quotesDb";
 import { getVendor } from "../../../../lib/vendorAuth";
 import { getPricingSettings } from "../../../../lib/pricingSettingsDb";
-import { calculateVendorQuote } from "../../../../lib/vendorPricing";
-import { parseDiscount } from "../../../../lib/quoteSubmissionVendor";
+import { calculateVendorQuote, pricingSnapshot } from "../../../../lib/vendorPricing";
+import { parseCharges, parseDiscount } from "../../../../lib/quoteSubmissionVendor";
 
 // "Guardar cambios" en el editor de vendedor: actualiza la MISMA cotización (mismo folio y
 // versión) en vez de crear una nueva — el folio/versión nueva es responsabilidad de
@@ -41,8 +41,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (email && !emailPattern.test(email)) return Response.json({ error: "El correo electrónico no es válido." }, { status: 400 });
 
     const discount = parseDiscount(payload.discount);
+    const charges = parseCharges(payload.charges);
     const pricingSettings = await getPricingSettings();
-    const quote = calculateVendorQuote(presetId, items, specialItems, includeIva, pricingSettings, discount);
+    const quote = calculateVendorQuote(presetId, items, specialItems, includeIva, pricingSettings, discount, charges);
     const door = parseDoor(payload.door, quote.preset.widthCm, quote.preset.lengthCm);
     const layoutErrors = validateLayout(quote.preset, items, door);
     if (layoutErrors.length) return Response.json({ error: `El plano requiere ajustes: ${layoutErrors[0]}` }, { status: 400 });
@@ -63,7 +64,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       trailer_width_cm: quote.preset.widthCm,
       trailer_length_cm: quote.preset.lengthCm,
       axles: quote.preset.axles,
-      configuration: { version: 3, pricingVersion: PRICING_VERSION, items, door, windows, specialItems },
+      configuration: { version: 3, pricingVersion: PRICING_VERSION, items, door, windows, specialItems, charges, pricing: pricingSnapshot(quote) },
       subtotal: combinedSubtotal,
       iva: combinedIva,
       total: combinedTotal,

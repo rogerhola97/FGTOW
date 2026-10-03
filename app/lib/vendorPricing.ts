@@ -2,15 +2,31 @@
 // la misma matriz canónica del cotizador público; aquí sólo se aplican tarifas de aditamentos y el
 // descuento propio de la cotización.
 import {
-  EquipmentDefinition,
-  PlacedEquipment,
-  TrailerPreset,
+  type EquipmentDefinition,
+  type PlacedEquipment,
+  type TrailerPreset,
   getPreset,
   priceEquipmentLines,
 } from "./quoteCatalog";
-import { PricingSettings } from "./pricingSettingsShape";
+import type { PricingSettings } from "./pricingSettingsShape";
 
 export type VendorDiscount = { type: "percent" | "amount"; value: number; reason: string | null } | null;
+// Cargo cobrable que no ocupa lugar en el plano (pintura, rotulado, flete…). Suma a los extras
+// igual que cualquier aditamento con precio.
+export type VendorCharge = { id: string; name: string; price: number };
+
+// Desglose que se guarda junto con la cotización (configuration.pricing) para que el contrato
+// lo muestre tal como se calculó al guardar, sin volver a calcular precios.
+export type QuotePricingSnapshot = {
+  basePrice: number;
+  lines: Array<{ name: string; price: number }>;
+  extras: number;
+  preDiscountSubtotal: number;
+  discountAmount: number;
+  subtotal: number;
+  iva: number;
+  total: number;
+};
 
 export function getPresetWithSettings(id: string, settings: PricingSettings): TrailerPreset {
   void settings;
@@ -36,6 +52,7 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
   includeIva: boolean,
   settings: PricingSettings,
   discount: VendorDiscount = null,
+  charges: VendorCharge[] = [],
 ) {
   const preset = getPresetWithSettings(presetId, settings);
   const includedCount = preset.includedEquipment;
@@ -53,6 +70,8 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
     extras += linePrice;
     return { ...entry, linePrice, included };
   });
+  const chargeLines = charges.filter((charge) => Number.isFinite(charge.price) && charge.price >= 0);
+  extras += chargeLines.reduce((sum, charge) => sum + charge.price, 0);
   const preDiscountSubtotal = preset.basePrice + extras;
   let discountAmount = 0;
   if (discount && discount.value > 0) {
@@ -62,7 +81,25 @@ export function calculateVendorQuote<T extends { name: string; widthCm: number; 
   }
   const subtotal = Math.max(0, preDiscountSubtotal - discountAmount);
   const iva = includeIva ? Math.round(subtotal * 0.16) : 0;
-  return { preset, lines, specialLines, includedUsed, extras, preDiscountSubtotal, discountAmount, subtotal, iva, total: subtotal + iva };
+  return { preset, lines, specialLines, chargeLines, includedUsed, extras, preDiscountSubtotal, discountAmount, subtotal, iva, total: subtotal + iva };
+}
+
+export function pricingSnapshot(quote: ReturnType<typeof calculateVendorQuote>): QuotePricingSnapshot {
+  const lines = [
+    ...quote.lines.filter((line) => line.linePrice > 0).map((line) => ({ name: line.definition.name, price: line.linePrice })),
+    ...quote.specialLines.filter((line) => line.linePrice > 0).map((line) => ({ name: line.name, price: line.linePrice })),
+    ...quote.chargeLines.filter((charge) => charge.price > 0).map((charge) => ({ name: charge.name, price: charge.price })),
+  ];
+  return {
+    basePrice: quote.preset.basePrice,
+    lines,
+    extras: quote.extras,
+    preDiscountSubtotal: quote.preDiscountSubtotal,
+    discountAmount: quote.discountAmount,
+    subtotal: quote.subtotal,
+    iva: quote.iva,
+    total: quote.total,
+  };
 }
 
 type StoredQuoteForPricing = {

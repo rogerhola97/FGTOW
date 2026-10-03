@@ -20,7 +20,7 @@ export const metadata = { title: "Editar cotización", robots: { index: false, f
 const dateFormatter = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 const moneyFormatter = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 
-type StoredConfiguration = { items?: PlacedEquipment[]; door?: DoorConfig; windows?: WindowConfig[]; specialItems?: InitialQuoteData["specialItems"] };
+type StoredConfiguration = { items?: PlacedEquipment[]; door?: DoorConfig; windows?: WindowConfig[]; specialItems?: InitialQuoteData["specialItems"]; charges?: InitialQuoteData["charges"] };
 
 export default async function VendedorClienteDetallePage({ params }: { params: Promise<{ id: string }> }) {
   const vendor = await requireVendor("/vendedor/clientes");
@@ -58,6 +58,7 @@ export default async function VendedorClienteDetallePage({ params }: { params: P
     discountType: quote.discount_type ?? null,
     discountValue: quote.discount_value ?? null,
     discountReason: quote.discount_reason ?? null,
+    charges: configuration.charges ?? [],
     referenceImages,
   };
 

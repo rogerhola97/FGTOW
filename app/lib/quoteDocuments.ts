@@ -1,5 +1,6 @@
 import { FABRICATION_ADDRESS, SALES_EMAIL, WHATSAPP_NUMBER } from "./company";
-import { MODEL_META, ModelId, getEquipment, getPreset } from "./quoteCatalog";
+import { MODEL_META, type ModelId, getEquipment, getPreset } from "./quoteCatalog";
+import type { QuotePricingSnapshot } from "./vendorPricing";
 
 export type PaymentMethod = "cash" | "transfer" | "credit_card";
 export type PaymentSchedule = "full" | "deposit_balance" | "deposit_installments" | "installments";
@@ -35,10 +36,10 @@ export type QuoteDocumentsData = {
   payment: {
     method: PaymentMethod;
     schedule: PaymentSchedule;
-    depositAmount: number;
-    balanceAmount: number;
+    // Sólo se guarda el porcentaje: los importes salen siempre del total de la cotización
+    // (calculatePaymentPlan) para que no puedan quedar desfasados.
+    depositPercent: number;
     installmentCount: number;
-    monthlyAmount: number;
     beneficiary: string;
     bankName: string;
     accountNumber: string;
@@ -95,7 +96,62 @@ type StoredConfiguration = {
   items?: Array<{ typeId?: string; note?: unknown }>;
   windows?: unknown[];
   specialItems?: Array<{ name?: string }>;
+  charges?: Array<{ name?: string }>;
+  pricing?: unknown;
 };
+
+export const DEFAULT_DEPOSIT_PERCENT = 50;
+
+function roundCents(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+// Única regla para anticipo, saldo y mensualidades. El total que recibe es quote.total, que ya
+// incluye descuento e IVA cuando aplica. El saldo se obtiene por resta para que
+// anticipo + saldo sea siempre exactamente el total.
+export function calculatePaymentPlan(total: number, payment: Pick<QuoteDocumentsData["payment"], "schedule" | "depositPercent" | "installmentCount">) {
+  const hasDeposit = payment.schedule === "deposit_balance" || payment.schedule === "deposit_installments";
+  const hasInstallments = payment.schedule === "deposit_installments" || payment.schedule === "installments";
+  const percent = Math.min(100, Math.max(0, payment.depositPercent));
+  const deposit = hasDeposit ? roundCents((total * percent) / 100) : 0;
+  const balance = roundCents(total - deposit);
+  const installmentCount = Math.max(1, Math.round(payment.installmentCount));
+  const installmentAmount = hasInstallments ? roundCents(balance / installmentCount) : 0;
+  return { total, hasDeposit, hasInstallments, depositPercent: percent, deposit, balance, installmentCount, installmentAmount };
+}
+
+// Desglose guardado al calcular la cotización. Sólo se usa si coincide con el total vigente; si
+// no (cotización anterior a este desglose), el documento muestra únicamente el total.
+export function storedPricingBreakdown(configuration: unknown, total: number): QuotePricingSnapshot | null {
+  const pricing = object(object(configuration).pricing);
+  const amounts = ["basePrice", "extras", "preDiscountSubtotal", "discountAmount", "subtotal", "iva", "total"] as const;
+  if (!amounts.every((key) => typeof pricing[key] === "number" && Number.isFinite(pricing[key]))) return null;
+  if (Math.abs((pricing.total as number) - total) > 0.005) return null;
+  const lines = Array.isArray(pricing.lines) ? pricing.lines.flatMap((line) => {
+    const entry = object(line);
+    return typeof entry.name === "string" && typeof entry.price === "number" && Number.isFinite(entry.price) ? [{ name: entry.name, price: entry.price }] : [];
+  }) : [];
+  return {
+    basePrice: pricing.basePrice as number,
+    lines,
+    extras: pricing.extras as number,
+    preDiscountSubtotal: pricing.preDiscountSubtotal as number,
+    discountAmount: pricing.discountAmount as number,
+    subtotal: pricing.subtotal as number,
+    iva: pricing.iva as number,
+    total: pricing.total as number,
+  };
+}
+
+// Documentos guardados antes del porcentaje traen importes capturados a mano; se conserva la
+// proporción que eligió el vendedor (p. ej. 35,250 / 70,500 = 50 %).
+function resolveDepositPercent(payment: Record<string, unknown>, fallback: number) {
+  if (payment.depositPercent !== undefined) return roundCents(numeric(payment.depositPercent, fallback, 0, 100));
+  const deposit = Number(payment.depositAmount);
+  const balance = Number(payment.balanceAmount);
+  if (Number.isFinite(deposit) && Number.isFinite(balance) && deposit > 0 && balance >= 0) return roundCents((deposit / (deposit + balance)) * 100);
+  return fallback;
+}
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PAYMENT_METHODS: PaymentMethod[] = ["cash", "transfer", "credit_card"];
@@ -143,7 +199,8 @@ function defaultDescription(quote: QuoteForDocuments) {
     return [note ? `${definition.name} (${note})` : definition.name];
   });
   const specials = (configuration.specialItems ?? []).flatMap((item) => item.name ? [item.name] : []);
-  const concepts = [...equipment, ...specials];
+  const charges = (configuration.charges ?? []).flatMap((item) => item.name ? [item.name] : []);
+  const concepts = [...equipment, ...specials, ...charges];
   return concepts.length ? concepts.join(", ") : "Configuración y acabados conforme a la cotización y al plano autorizados.";
 }
 
@@ -166,7 +223,6 @@ export function defaultQuoteDocumentsData(quote: QuoteForDocuments, options: Res
   const preset = getPreset(quote.trailer_preset);
   const model = (quote.model in MODEL_META ? quote.model : preset.model) as ModelId;
   const configuration = object(quote.configuration) as StoredConfiguration;
-  const total = numeric(quote.total, 0);
   return {
     vehicle: {
       sellerName: options.sellerName?.trim() ?? "",
@@ -193,10 +249,8 @@ export function defaultQuoteDocumentsData(quote: QuoteForDocuments, options: Res
     payment: {
       method: "transfer",
       schedule: "full",
-      depositAmount: 0,
-      balanceAmount: total,
+      depositPercent: DEFAULT_DEPOSIT_PERCENT,
       installmentCount: 1,
-      monthlyAmount: total,
       beneficiary: "",
       bankName: "",
       accountNumber: "",
@@ -279,10 +333,8 @@ export function resolveQuoteDocumentsData(quote: QuoteForDocuments, candidate: u
     payment: {
       method,
       schedule,
-      depositAmount: numeric(payment.depositAmount, defaults.payment.depositAmount),
-      balanceAmount: numeric(payment.balanceAmount, defaults.payment.balanceAmount),
+      depositPercent: resolveDepositPercent(payment, defaults.payment.depositPercent),
       installmentCount: integer(payment.installmentCount, defaults.payment.installmentCount, 1, 60),
-      monthlyAmount: numeric(payment.monthlyAmount, defaults.payment.monthlyAmount),
       beneficiary: limited(payment.beneficiary, defaults.payment.beneficiary, 160),
       bankName: limited(payment.bankName, defaults.payment.bankName, 120),
       accountNumber: limited(payment.accountNumber, defaults.payment.accountNumber, 80),

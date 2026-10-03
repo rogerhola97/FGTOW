@@ -8,7 +8,7 @@ import { DEFAULT_STATE, MEXICAN_STATES } from "../lib/mexicanStates";
 import { FABRICATION_ADDRESS, FABRICATION_MAPS_URL, WHATSAPP_NUMBER, WHATSAPP_URL } from "../lib/company";
 import { WhatsAppIcon } from "./SocialIcons";
 import { DEFAULT_PRICING_SETTINGS, PricingSettings } from "../lib/pricingSettingsShape";
-import { calculateVendorQuote, VendorDiscount } from "../lib/vendorPricing";
+import { calculateVendorQuote, VendorCharge, VendorDiscount } from "../lib/vendorPricing";
 import {
   CUSTOM_WIDTH_OPTIONS_CM,
   DOOR_CLEARANCE_CM,
@@ -87,6 +87,7 @@ export type InitialQuoteData = {
   discountType: "percent" | "amount" | null;
   discountValue: number | null;
   discountReason: string | null;
+  charges?: VendorCharge[];
   referenceImages: InitialQuoteFile[];
 };
 type DragState = { kind: "item"; instanceId: string; pointerId: number; originWall: Wall; originOffsetCm: number } | { kind: "door"; pointerId: number } | { kind: "window"; id: string; pointerId: number; originWall: Wall; originOffsetCm: number } | null;
@@ -561,8 +562,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     return working;
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [windowWidthDraft, setWindowWidthDraft] = useState<string | null>(null);
-  const [windowHeightDraft, setWindowHeightDraft] = useState<string | null>(null);
+  // Texto a medio escribir del ancho/alto, ligado a su ventana: al cambiar de ventana el borrador
+  // de la anterior simplemente deja de aplicar.
+  const [windowWidthDraft, setWindowWidthDraft] = useState<{ id: string; value: string } | null>(null);
+  const [windowHeightDraft, setWindowHeightDraft] = useState<{ id: string; value: string } | null>(null);
   const [doorSelected, setDoorSelected] = useState(false);
   // Las ventanas son fijas por default en los dos cotizadores (cliente y vendedor). Solo el
   // vendedor tiene el botón "Ajustar ventanas" para activar temporalmente el arrastre/redimensión;
@@ -624,6 +627,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   const [discountType, setDiscountType] = useState<"none" | "percent" | "amount">(initialQuote?.discountType ?? "none");
   const [discountValue, setDiscountValue] = useState(initialQuote?.discountValue != null ? String(initialQuote.discountValue) : "");
   const [discountReason, setDiscountReason] = useState(initialQuote?.discountReason ?? "");
+  const [chargeDrafts, setChargeDrafts] = useState<Array<{ id: string; name: string; price: string }>>(() => (initialQuote?.charges ?? []).map((charge) => ({ id: charge.id || uid(), name: charge.name, price: String(charge.price) })));
   const [referenceImages, setReferenceImages] = useState<InitialQuoteFile[]>(initialQuote?.referenceImages ?? []);
   const [referenceUploading, setReferenceUploading] = useState(false);
   const [referenceError, setReferenceError] = useState("");
@@ -649,8 +653,6 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     if (sendState === "sent") sentBannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [sendState]);
 
-  useEffect(() => { setWindowWidthDraft(null); setWindowHeightDraft(null); }, [windowSelectedId]);
-
   useEffect(() => {
     if (!isVendor) return;
     let cancelled = false;
@@ -674,6 +676,16 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     return { type: discountType, value, reason: discountReason.trim() || null };
   }, [isVendor, discountType, discountValue, discountReason]);
 
+  // Solo cuentan los cargos con concepto y precio válidos; es la misma regla que aplica el servidor.
+  const charges: VendorCharge[] = useMemo(() => {
+    if (!isVendor) return [];
+    return chargeDrafts.flatMap((draft) => {
+      const name = draft.name.trim();
+      const price = Number(draft.price);
+      return name && draft.price !== "" && Number.isFinite(price) && price >= 0 ? [{ id: draft.id, name, price }] : [];
+    });
+  }, [isVendor, chargeDrafts]);
+
   // Ambas ramas regresan exactamente las mismas llaves (discountAmount/preDiscountSubtotal
   // incluidas, en 0 para el público) para que el resto del componente no necesite distinguir cuál
   // función se usó.
@@ -690,10 +702,10 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
     return short ? definition.shortName : definition.name;
   };
   const quote = useMemo(() => {
-    if (isVendor) return calculateVendorQuote(presetId, items, resolvedSpecials, includeIva, pricingSettings, discount);
+    if (isVendor) return calculateVendorQuote(presetId, items, resolvedSpecials, includeIva, pricingSettings, discount, charges);
     const base = calculateQuote(presetId, items, resolvedSpecials, includeIva);
-    return { ...base, preDiscountSubtotal: base.subtotal, discountAmount: 0 };
-  }, [isVendor, presetId, items, resolvedSpecials, includeIva, pricingSettings, discount]);
+    return { ...base, chargeLines: [] as VendorCharge[], preDiscountSubtotal: base.subtotal, discountAmount: 0 };
+  }, [isVendor, presetId, items, resolvedSpecials, includeIva, pricingSettings, discount, charges]);
   const combinedSubtotal = quote.subtotal;
   const combinedIva = quote.iva;
   const combinedTotal = quote.total;
@@ -1270,7 +1282,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
   }
 
   function vendorQuotePayload() {
-    return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems: resolvedSpecials, discount };
+    return { name: customer.name, phone: customer.phone, email: customer.email, city: customer.city, state: customer.state, notes: customer.notes, presetId, items, door, windows, includeIva, specialItems: resolvedSpecials, discount, charges };
   }
 
   // "Guardar cambios": actualiza la MISMA cotización que se precargó (mismo folio y versión).
@@ -1680,8 +1692,8 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
             return (
               <div className="item-editor door-editor window-editor-top">
                 <div><span>VENTANA SELECCIONADA</span><strong>{WALL_LABEL[win.wall]}</strong><small>Ajusta sus medidas o cambia la pared antes de continuar con el plano.</small></div>
-                <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={windowWidthDraft ?? win.widthCm} onChange={(event) => { const raw = event.target.value; setWindowWidthDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "width", parsed); }} onBlur={() => setWindowWidthDraft(null)} /><b>cm</b></label>
-                <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={windowHeightDraft ?? win.heightCm} onChange={(event) => { const raw = event.target.value; setWindowHeightDraft(raw); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "height", parsed); }} onBlur={() => setWindowHeightDraft(null)} /><b>cm</b></label>
+                <label>Ancho<input type="number" min={WINDOW_WIDTH_MIN_CM} max={Math.min(WINDOW_WIDTH_MAX_CM, wallLengthCm(win.wall, preset.widthCm, preset.lengthCm))} value={windowWidthDraft?.id === win.id ? windowWidthDraft.value : win.widthCm} onChange={(event) => { const raw = event.target.value; setWindowWidthDraft({ id: win.id, value: raw }); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "width", parsed); }} onBlur={() => setWindowWidthDraft(null)} /><b>cm</b></label>
+                <label>Alto<input type="number" min={WINDOW_HEIGHT_MIN_CM} max={WINDOW_HEIGHT_MAX_CM} value={windowHeightDraft?.id === win.id ? windowHeightDraft.value : win.heightCm} onChange={(event) => { const raw = event.target.value; setWindowHeightDraft({ id: win.id, value: raw }); const parsed = Number(raw); if (raw !== "" && Number.isFinite(parsed) && parsed > 0) updateWindowSize(win.id, "height", parsed); }} onBlur={() => setWindowHeightDraft(null)} /><b>cm</b></label>
                 <button type="button" onClick={() => cycleWindowWall(win.id)}>Cambiar de pared ↻</button>
                 <button type="button" className="danger-button" onClick={() => removeWindow(win.id)}>Quitar ventana</button>
               </div>
@@ -1893,8 +1905,21 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
           {stepHeader(3, "Paso 3 · Revisa tu cotización", "Después pasamos a tus datos")}
           <div className={`step-panel ${activeStep === 3 ? "is-open" : ""}`}>
           <div className="price-base"><small>Remolque base</small><strong>{money(quote.preset.basePrice)}</strong><span>Incluye {meta.includesNote} y hasta {quote.preset.includedEquipment} {meta.equipmentLabel}.</span></div>
-          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.free ? "Sin costo" : line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}{entry.mount === "outside" ? " (ext.)" : ""}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}</ol>
+          <ol className="price-lines">{quote.lines.map((line, index) => <li key={line.item.instanceId}><span><i style={{ background: line.definition.color }} />{index + 1}. {line.definition.shortName}</span><strong>{line.free ? "Sin costo" : line.included ? "Incluido" : money(line.linePrice)}</strong></li>)}{quote.specialLines.map((entry) => <li key={entry.id}><span><i style={{ background: "#a8324a" }} />{entry.name}{entry.mount === "outside" ? " (ext.)" : ""}</span><strong>{entry.included ? "Incluido" : money(entry.linePrice)}</strong></li>)}{quote.chargeLines.map((charge) => <li key={charge.id}><span><i style={{ background: "#d6a229" }} />{charge.name}</span><strong>{money(charge.price)}</strong></li>)}</ol>
           {!items.length && !specialItems.length && <p className="empty-price">Agrega equipos para construir tu distribución.</p>}
+          {isVendor && (
+            <div className="vendor-discount-box vendor-charges-box">
+              <span className="vendor-discount-label">Cargos adicionales (pintura, rotulado, flete…)</span>
+              {chargeDrafts.map((draft) => (
+                <div key={draft.id} className="vendor-charge-row">
+                  <input type="text" maxLength={120} placeholder="Concepto" value={draft.name} onChange={(event) => setChargeDrafts((current) => current.map((entry) => entry.id === draft.id ? { ...entry, name: event.target.value } : entry))} />
+                  <input type="number" min={0} step="any" placeholder="$0" value={draft.price} onChange={(event) => setChargeDrafts((current) => current.map((entry) => entry.id === draft.id ? { ...entry, price: event.target.value } : entry))} />
+                  <button type="button" aria-label={`Quitar ${draft.name || "cargo"}`} onClick={() => setChargeDrafts((current) => current.filter((entry) => entry.id !== draft.id))}>×</button>
+                </div>
+              ))}
+              <button type="button" className="vendor-charge-add" onClick={() => setChargeDrafts((current) => [...current, { id: uid(), name: "", price: "" }])}>+ Agregar cargo</button>
+            </div>
+          )}
           {isVendor && (
             <div className="vendor-discount-box">
               <span className="vendor-discount-label">Descuento (solo interno)</span>
@@ -1910,7 +1935,7 @@ export function TrailerConfigurator({ modelId, plano = true, initialQuote, turns
               {quote.discountAmount > 0 && <span className="vendor-discount-applied">-{money(quote.discountAmount)} aplicado sobre {money(quote.preDiscountSubtotal)}</span>}
             </div>
           )}
-          <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras)}</strong></div><label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(combinedIva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
+          <div className="price-totals"><div><span>Base</span><strong>{money(quote.preset.basePrice)}</strong></div><div><span>Extras</span><strong>{money(quote.extras)}</strong></div>{quote.discountAmount > 0 && <><div><span>Subtotal</span><strong>{money(quote.preDiscountSubtotal)}</strong></div><div><span>Descuento</span><strong>-{money(quote.discountAmount)}</strong></div></>}<label><span><input type="checkbox" checked={includeIva} onChange={(event) => setIncludeIva(event.target.checked)} /> Incluir IVA (16%)</span><strong>{money(combinedIva)}</strong></label><div className="grand-total"><span>Total estimado</span><strong>{money(combinedTotal)}</strong></div></div>
           <p className="estimate-note">Estimación comercial basada en medidas y equipamiento. Requiere validación de ingeniería, capacidad, instalaciones, acabados y disponibilidad.</p>
           {isVendor && initialQuote && (
             <div className="vendor-reference-box">

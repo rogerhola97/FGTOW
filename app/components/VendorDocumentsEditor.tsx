@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { canIssueInvoiceLetter, type PipelineStage } from "../lib/pipelineStages";
-import { QuoteDocumentsData } from "../lib/quoteDocuments";
+import { QuoteDocumentsData, calculatePaymentPlan } from "../lib/quoteDocuments";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 type DocumentKind = "contrato" | "carta-factura";
@@ -94,8 +94,9 @@ export function VendorDocumentsEditor({ quoteId, quoteNumber, total, pipelineSta
     void persist(kind);
   }
 
-  const showDeposit = data.payment.schedule === "deposit_balance" || data.payment.schedule === "deposit_installments";
-  const showInstallments = data.payment.schedule === "deposit_installments" || data.payment.schedule === "installments";
+  const plan = calculatePaymentPlan(total, data.payment);
+  const showDeposit = plan.hasDeposit;
+  const showInstallments = plan.hasInstallments;
   const canIssueInvoice = canIssueInvoiceLetter(pipelineStage);
 
   const issuerFields = <div className="vendor-document-grid">
@@ -151,10 +152,11 @@ export function VendorDocumentsEditor({ quoteId, quoteNumber, total, pipelineSta
               <div className="vendor-document-grid">
                 <label>Método de pago<select value={data.payment.method} onChange={(event) => updatePayment("method", event.target.value as QuoteDocumentsData["payment"]["method"])}><option value="cash">Efectivo</option><option value="transfer">Transferencia</option><option value="credit_card">Tarjeta de crédito</option></select></label>
                 <label>Plan de pago<select value={data.payment.schedule} onChange={(event) => updatePayment("schedule", event.target.value as QuoteDocumentsData["payment"]["schedule"])}><option value="full">Pago total</option><option value="deposit_balance">Anticipo y saldo a la entrega</option><option value="deposit_installments">Anticipo y resto a meses</option><option value="installments">Todo a meses</option></select></label>
-                {showDeposit && <label>Anticipo<input type="number" min={0} step="0.01" value={data.payment.depositAmount} onChange={(event) => updatePayment("depositAmount", Number(event.target.value))} /><small>Referencia: {money(total)}</small></label>}
-                {showDeposit && <label>Saldo restante<input type="number" min={0} step="0.01" value={data.payment.balanceAmount} onChange={(event) => updatePayment("balanceAmount", Number(event.target.value))} /></label>}
+                <p className="vendor-document-shared-note span-2">Total de la cotización: <strong>{money(plan.total)}</strong>. Los importes se calculan solos a partir de este total; para cambiarlo, edita y guarda la cotización.</p>
+                {showDeposit && <label>Anticipo (%)<input type="number" min={0} max={100} step="0.01" value={data.payment.depositPercent} onChange={(event) => updatePayment("depositPercent", Math.min(100, Math.max(0, Number(event.target.value) || 0)))} /><small>Anticipo: {money(plan.deposit)}</small></label>}
+                {showDeposit && <label>Saldo restante<input type="text" value={money(plan.balance)} readOnly /></label>}
                 {showInstallments && <label>Número de mensualidades<input type="number" min={1} max={60} value={data.payment.installmentCount} onChange={(event) => updatePayment("installmentCount", Number(event.target.value))} /></label>}
-                {showInstallments && <label>Monto por mensualidad<input type="number" min={0} step="0.01" value={data.payment.monthlyAmount} onChange={(event) => updatePayment("monthlyAmount", Number(event.target.value))} /></label>}
+                {showInstallments && <label>Monto por mensualidad<input type="text" value={money(plan.installmentAmount)} readOnly /></label>}
                 {data.payment.method === "transfer" && <>
                   <label>Beneficiario<input value={data.payment.beneficiary} maxLength={160} onChange={(event) => updatePayment("beneficiary", event.target.value)} /></label>
                   <label>Banco<input value={data.payment.bankName} maxLength={120} onChange={(event) => updatePayment("bankName", event.target.value)} /></label>

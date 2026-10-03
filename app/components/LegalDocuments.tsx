@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { QuoteRow } from "../lib/quotesDb";
-import { DocumentSignature, QuoteDocumentsData, paymentMethodLabel, paymentScheduleLabel } from "../lib/quoteDocuments";
+import { DocumentSignature, QuoteDocumentsData, calculatePaymentPlan, paymentMethodLabel, paymentScheduleLabel, storedPricingBreakdown } from "../lib/quoteDocuments";
 import { DoorConfig, OVERLAY_FILL_OPACITY, PlacedEquipment, WALL_LABEL, WindowConfig, getEquipment, getPreset } from "../lib/quoteCatalog";
 
 type DocumentSpecialItem = { id?: string; name: string; widthCm: number; depthCm: number; comment?: string; mount?: "inside" | "outside" };
@@ -52,14 +52,38 @@ function Detail({ label, value }: { label: string; value: React.ReactNode }) {
 
 function PaymentSummary({ data, total }: { data: QuoteDocumentsData; total: number }) {
   const payment = data.payment;
+  const plan = calculatePaymentPlan(total, payment);
   return <div className="legal-payment-summary">
     <div><small>MÉTODO</small><strong>{paymentMethodLabel(payment.method)}</strong></div>
     <div><small>ESQUEMA</small><strong>{paymentScheduleLabel(payment.schedule)}</strong></div>
-    <div><small>TOTAL</small><strong>{money(total)}</strong></div>
-    {(payment.schedule === "deposit_balance" || payment.schedule === "deposit_installments") && <div><small>ANTICIPO</small><strong>{money(payment.depositAmount)}</strong></div>}
-    {(payment.schedule === "deposit_balance" || payment.schedule === "deposit_installments") && <div><small>SALDO</small><strong>{money(payment.balanceAmount)}</strong></div>}
-    {(payment.schedule === "deposit_installments" || payment.schedule === "installments") && <div><small>MENSUALIDADES</small><strong>{payment.installmentCount} × {money(payment.monthlyAmount)}</strong></div>}
+    <div><small>TOTAL</small><strong>{money(plan.total)}</strong></div>
+    {plan.hasDeposit && <div><small>ANTICIPO {plan.depositPercent.toLocaleString("es-MX")}%</small><strong>{money(plan.deposit)}</strong></div>}
+    {plan.hasDeposit && <div><small>SALDO</small><strong>{money(plan.balance)}</strong></div>}
+    {plan.hasInstallments && <div><small>MENSUALIDADES</small><strong>{plan.installmentCount} × {money(plan.installmentAmount)}</strong></div>}
   </div>;
+}
+
+// Desglose tal como se calculó y guardó con la cotización; el documento no recalcula precios.
+function PriceBreakdown({ quote, total }: { quote: QuoteRow; total: number }) {
+  const pricing = storedPricingBreakdown(quote.configuration, total);
+  if (!pricing) return null;
+  return <section className="legal-section legal-price-breakdown">
+    <h2>Desglose del precio</h2>
+    <dl>
+      <div><dt>Remolque base</dt><dd>{money(pricing.basePrice)}</dd></div>
+      {pricing.lines.map((line, index) => <div key={`${index}-${line.name}`} className="is-line"><dt>{line.name}</dt><dd>+{money(line.price)}</dd></div>)}
+      <div><dt>Total extras</dt><dd>{money(pricing.extras)}</dd></div>
+      {pricing.discountAmount > 0 && <>
+        <div><dt>Subtotal antes de descuento</dt><dd>{money(pricing.preDiscountSubtotal)}</dd></div>
+        <div><dt>Descuento</dt><dd>-{money(pricing.discountAmount)}</dd></div>
+      </>}
+      {pricing.iva > 0 && <>
+        <div><dt>Subtotal</dt><dd>{money(pricing.subtotal)}</dd></div>
+        <div><dt>IVA 16%</dt><dd>{money(pricing.iva)}</dd></div>
+      </>}
+      <div className="is-total"><dt>Total</dt><dd>{money(pricing.total)}</dd></div>
+    </dl>
+  </section>;
 }
 
 function PaymentInstructions({ data }: { data: QuoteDocumentsData }) {
@@ -200,6 +224,7 @@ export function ContractDocument({ quote, data }: { quote: QuoteRow; data: Quote
     <section className="legal-document-page">
       <LogoWatermark />
       <Header data={data} title="Condiciones comerciales" quoteNumber={quote.quote_number} />
+      <PriceBreakdown quote={quote} total={total} />
       <PaymentSummary data={data} total={total} />
       <PaymentInstructions data={data} />
       <section className="legal-section legal-clauses">

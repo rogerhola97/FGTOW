@@ -708,6 +708,13 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .vendor-discount-row select,.vendor-discount-row input,.vendor-discount-reason { box-sizing:border-box; height:40px; padding:0 11px; border:1px solid #cbd3d1; border-radius:0; background:#fff; color:var(--deep); font:500 13px Arial; }
 .vendor-discount-row select { flex:0 0 116px; min-width:0; }
 .vendor-discount-row input { flex:1 1 0%; min-width:0; }
+.vendor-charge-row { display:grid; grid-template-columns:minmax(0,1fr) 110px 40px; gap:8px; }
+.vendor-charge-row input { box-sizing:border-box; height:40px; min-width:0; padding:0 11px; border:1px solid #cbd3d1; border-radius:0; background:#fff; color:var(--deep); font:500 13px Arial; }
+.vendor-charge-row input:focus { border-color:var(--blue); outline:none; box-shadow:0 0 0 3px rgba(7,82,116,.08); }
+.vendor-charge-row button { height:40px; border:1px solid #cbd3d1; background:#fff; color:var(--deep); font:700 18px Arial; cursor:pointer; }
+.vendor-charge-row button:hover { border-color:#a8324a; color:#a8324a; }
+.vendor-charge-add { align-self:flex-start; padding:8px 12px; border:1px dashed var(--blue); background:transparent; color:var(--blue); font:800 11px Arial; letter-spacing:.04em; cursor:pointer; }
+.vendor-charge-add:hover { background:#fff; }
 .vendor-discount-row select:focus,.vendor-discount-row input:focus,.vendor-discount-reason:focus { border-color:var(--blue); outline:none; box-shadow:0 0 0 3px rgba(7,82,116,.08); }
 .vendor-discount-reason { width:100%; }
 .vendor-discount-applied { font-size:11px; color:#1f6b41; font-weight:700; }
@@ -863,6 +870,12 @@ select.pipeline-stage-select.stage-entregada { border-color:#b7ddc4; }
 .legal-description { padding:12px 14px; background:#f5f7f6; border-left:4px solid var(--gold); }
 .legal-description p,.legal-warranty p,.legal-letter-intro,.legal-fiscal-block p { margin:0 0 6px; color:#334c5a; font-size:9px; line-height:1.55; }
 .legal-description p:last-child { margin-bottom:0; }
+.legal-price-breakdown dl { margin:0; }
+.legal-price-breakdown dl div { display:flex; justify-content:space-between; gap:12px; padding:4px 0; border-bottom:1px solid #e3e8e6; color:#334c5a; font-size:10px; }
+.legal-price-breakdown dt,.legal-price-breakdown dd { margin:0; }
+.legal-price-breakdown dd { font-weight:700; white-space:nowrap; }
+.legal-price-breakdown .is-line { padding-left:12px; font-size:9.5px; }
+.legal-price-breakdown .is-total { border-bottom:0; color:var(--deep); font-size:12px; font-weight:900; }
 .legal-payment-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; margin:4px 0 16px; background:#35576a; }
 .legal-payment-summary>div { padding:9px 11px; background:var(--deep); color:#fff; }
 .legal-payment-summary small,.legal-payment-summary strong { display:block; }
