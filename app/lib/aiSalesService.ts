@@ -4,6 +4,7 @@ import { authorizeSalesOperation, VendorAuthorizationError } from "./vendorAutho
 import { AiValidationError, salesMessageArgs } from "./aiRequestValidation";
 import { AiToolError, safeToolFailure } from "./aiToolErrors";
 import { shouldForcePricingTool } from "./aiPricingIntent";
+import { resolveQuickModelMention } from "./aiQuickModelMention";
 
 export const MAX_TOOL_ROUNDS = 4;
 export const MAX_TOOL_CALLS_PER_ROUND = 8;
@@ -122,6 +123,7 @@ export async function runSalesAssistant(args: unknown, transport: ResponsesTrans
   await authorizeSalesOperation("get_quote_summary");
   const request = salesMessageArgs(args);
   const forcePricing = shouldForcePricingTool(request.message, request.quoteId);
+  const resolvedQuickModel = forcePricing ? resolveQuickModelMention(request.message) : null;
   const input: Record<string, unknown>[] = [
     { role: "user", content: JSON.stringify({ message: request.message, context: { quoteId: request.quoteId } }) },
   ];
@@ -149,7 +151,13 @@ export async function runSalesAssistant(args: unknown, transport: ResponsesTrans
       try {
         const definition = SALES_FUNCTION_TOOLS.find(tool => tool.name === call.name)!;
         if (!matchesSchema(call.args, definition.parameters)) throw new AiValidationError("Estructura de argumentos inválida.");
-        result = await executeTool(call.name, call.args);
+        // Strategy B: the original message + real catalog own these two fields
+        // for every calculation round. Keep all other fields, including dimensions,
+        // so the existing resolver rejects contradictions rather than discarding them.
+        const effectiveArgs = call.name === "calculate_trailer_price" && resolvedQuickModel
+          ? { ...call.args as Record<string, unknown>, ...resolvedQuickModel }
+          : call.args;
+        result = await executeTool(call.name, effectiveArgs);
       }
       catch (error) {
         if (error instanceof VendorAuthorizationError || error instanceof AiSalesServiceError || error instanceof OpenAIServerError) throw error;
