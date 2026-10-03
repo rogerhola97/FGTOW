@@ -43,7 +43,7 @@ h1 em,h2 em { color:var(--gold); font-style:normal; }
 .hero-social { display:flex; align-items:center; gap:16px; margin-top:16px; }
 .hero-social a { display:inline-flex; color:var(--deep); opacity:.4; transition:.2s; }
 .hero-social a:hover { color:var(--blue); opacity:.9; }
-.hero-social-icon { width:20px; height:20px; }
+.hero-social-icon { width:24px; height:24px; }
 .text-link { padding:12px 0; border-bottom:1px solid var(--ink); font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
 .trust-row { margin-top:auto; padding-top:56px; display:flex; gap:30px; flex-wrap:wrap; color:#657178; font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
 .trust-row span:before { content:"✓"; color:var(--gold); margin-right:7px; }
