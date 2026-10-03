@@ -205,4 +205,64 @@ test("invalid quote IDs and array payloads fail before HTTP", async () => {
   for (const quoteId of [0, -1, 1.2, "07", "1e2", "bad", {}, true]) assert.equal((await POST(request({ message: "Hola", quoteId }))).status, 400);
   assert.equal((await POST(request([]))).status, 400);
 });
+test("400 logs only safe upstream metadata and sends a unique client request ID", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const ids = [];
+  const privateInput = { instructions: "PRIVATE_INSTRUCTIONS", input: [{ role: "user", content: "PRIVATE_MESSAGE" }], tools: [] };
+  const upstreamBody = { error: { code: "invalid_json_schema", type: "invalid_request_error", param: "tools[0].parameters", message: `${fakeKey} Authorization PRIVATE_MESSAGE PRIVATE_BANK` }, extra: "PRIVATE_RESPONSE" };
+  const send = createResponsesClient({ readKey: () => fakeKey, fetch: async (url, options) => {
+    const id = new Headers(options.headers).get("X-Client-Request-Id");
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    ids.push(id);
+    return Response.json(upstreamBody, { status: 400, headers: { "x-request-id": "req_safe", "retry-after": "30" } });
+  } });
+  for (let i = 0; i < 2; i++) await assert.rejects(send(privateInput), error => {
+    assert.equal(error.code, "AI_HTTP_ERROR"); assert.equal(error.status, 502);
+    assert.equal(error.clientRequestId, ids.at(-1)); return true;
+  });
+  assert.notEqual(ids[0], ids[1]);
+  logs.forEach(([label, metadata], index) => {
+    assert.equal(label, "OPENAI_UPSTREAM_ERROR");
+    assert.deepEqual(metadata, { status: 400, requestId: "req_safe", clientRequestId: ids[index], retryAfter: "30", code: "invalid_json_schema", type: "invalid_request_error", param: "tools[0].parameters" });
+  });
+  assert.doesNotMatch(JSON.stringify(logs), /test-credential|OPENAI_API_KEY|Authorization|PRIVATE_|instructions|arguments/);
+  assert.ok(!JSON.stringify(logs).includes(JSON.stringify(upstreamBody)));
+});
+
+test("diagnostic metadata rejects secrets, arbitrary text, objects and oversized bodies", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const bodies = [
+    Response.json({ error: { code: fakeKey, type: { private: "PRIVATE_NAME" }, param: "name@example.test" } }, { status: 400, headers: { "x-request-id": fakeKey, "retry-after": "PRIVATE_BANK" } }),
+    Response.json({ error: { code: "x".repeat(101), type: "Bearer_secret", param: "sk-test" } }, { status: 400 }),
+    new Response("PRIVATE_NON_JSON", { status: 400 }),
+    Response.json({ error: { code: "invalid_request_error" }, extra: "x".repeat(17000) }, { status: 400 }),
+  ];
+  for (const response of bodies) {
+    await assert.rejects(createResponsesClient({ readKey: () => fakeKey, fetch: async () => response })(clientInput), error => error.code === "AI_HTTP_ERROR");
+  }
+  assert.equal(logs.length, bodies.length);
+  for (const [, metadata] of logs) {
+    assert.equal(metadata.status, 400);
+    for (const field of ["requestId", "retryAfter", "code", "type", "param"]) assert.equal(metadata[field], null);
+  }
+  assert.doesNotMatch(JSON.stringify(logs), /test-credential|PRIVATE_|Bearer|sk-test|example/);
+});
+
+test("401, 403, 429 and 500 preserve public mapping and hide all diagnostic IDs", async t => {
+  t.mock.method(console, "error", () => {});
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const [status, code, publicStatus] of [[401, "AI_UPSTREAM_AUTH", 502], [403, "AI_UPSTREAM_AUTH", 502], [429, "AI_RATE_LIMITED", 429], [500, "AI_HTTP_ERROR", 502]]) {
+      globalThis.fetch = async () => Response.json({ error: { code: "upstream_code", type: "upstream_type", param: "model", message: "PRIVATE_MESSAGE" } }, { status, headers: { "x-request-id": "req_private" } });
+      const response = await POST(request({ message: "Hola" }));
+      assert.equal(response.status, publicStatus);
+      const body = await response.json();
+      assert.deepEqual(body, { ok: false, error: { code, message: "El servicio de IA no está disponible. Intenta más tarde." } });
+      assert.doesNotMatch(JSON.stringify(body), /upstream_|requestId|clientRequestId|PRIVATE_|req_private/);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test.after(() => { hook.deregister(); delete globalThis.__salesServiceTests; });
