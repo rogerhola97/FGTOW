@@ -3,6 +3,7 @@ import { parseCharges, parseDiscount } from "./quoteSubmissionVendor";
 import { parseDoor, parseItems, parseSpecialItems, type SpecialItem } from "./quoteSubmission";
 import type { VendorCharge, VendorDiscount } from "./vendorPricing";
 import type { QuoteDocumentsData } from "./quoteDocuments";
+import { AiToolError } from "./aiToolErrors";
 
 export class AiValidationError extends Error {
   constructor(message: string) { super(message); this.name = "AiValidationError"; }
@@ -52,9 +53,9 @@ export function currentPriceArgs(value: unknown): CurrentPriceInput {
   const raw = objectArgs(value, ["model", "presetId", "items", "specialItems", "includeIva", "discount", "charges", "payment", "door"]);
   const model = modelArg(raw.model);
   const presetId = textArg(raw.presetId, 60);
-  if (!isValidPresetId(presetId)) throw new AiValidationError("Medidas o ejes inválidos.");
+  if (!isValidPresetId(presetId)) throw new AiToolError("INVALID_TRAILER_CONFIGURATION", "trailer-configuration");
   const preset = getPreset(presetId);
-  if (preset.model !== model) throw new AiValidationError("El preset no corresponde al modelo.");
+  if (preset.model !== model) throw new AiToolError("INVALID_TRAILER_CONFIGURATION", "trailer-configuration");
   const equipment = new Map(EQUIPMENT.filter(entry => entry.model === model).map(entry => [entry.id, entry]));
   const itemsRaw = arrayArg(raw.items, 40);
   for (const entry of itemsRaw) {
@@ -64,9 +65,9 @@ export function currentPriceArgs(value: unknown): CurrentPriceInput {
     if (!definition) throw new AiValidationError("Accesorio inválido para el modelo.");
     for (const key of ["xCm", "yCm", "widthCm", "depthCm"]) numberArg(item[key], key.startsWith("x") || key.startsWith("y") ? -1000 : 1, 2000, true);
     if (item.rotation !== 0 && item.rotation !== 90) throw new AiValidationError("Rotación inválida.");
-    if (item.specialId !== undefined) textArg(item.specialId, 80);
+    if (item.specialId != null) textArg(item.specialId, 80);
     if (Boolean(definition.special) !== Boolean(item.specialId)) throw new AiValidationError("Enlace de accesorio especial inválido.");
-    if (item.note !== undefined) textArg(item.note, 500);
+    if (item.note != null) textArg(item.note, 500);
     if (item.customPrice != null) {
       if (!definition.vendorPriceEditable) throw new AiValidationError("Este accesorio no admite precio manual.");
       numberArg(item.customPrice, 0, 1_000_000);
@@ -77,14 +78,14 @@ export function currentPriceArgs(value: unknown): CurrentPriceInput {
   const specialsRaw = arrayArg(raw.specialItems ?? [], 20);
   for (const entry of specialsRaw) {
     const special = objectArgs(entry, ["id", "name", "widthCm", "depthCm", "heightCm", "price", "comment", "mount", "customPrice"]);
-    if (special.id !== undefined) textArg(special.id, 80);
+    if (special.id != null) textArg(special.id, 80);
     textArg(special.name, 120);
     numberArg(special.widthCm, 1, 2000, true); numberArg(special.depthCm, 1, 2000, true);
     if (special.heightCm != null) numberArg(special.heightCm, 1, 500, true);
-    if (special.price !== undefined) numberArg(special.price, 0, 1_000_000);
+    if (special.price != null) numberArg(special.price, 0, 1_000_000);
     if (special.customPrice != null) numberArg(special.customPrice, 0, 1_000_000);
-    if (special.comment !== undefined) textArg(special.comment, 500);
-    if (special.mount !== undefined && special.mount !== "inside" && special.mount !== "outside") throw new AiValidationError("Montaje inválido.");
+    if (special.comment != null) textArg(special.comment, 500);
+    if (special.mount != null && special.mount !== "inside" && special.mount !== "outside") throw new AiValidationError("Montaje inválido.");
   }
   const specialItems = parseSpecialItems(specialsRaw.map(entry => ({ ...(entry as object), price: (entry as Record<string, unknown>).price ?? 0 })), { vendor: true });
   const specialIds = new Set(specialItems.map(item => item.id));
@@ -93,7 +94,7 @@ export function currentPriceArgs(value: unknown): CurrentPriceInput {
   const chargesRaw = arrayArg(raw.charges ?? [], 20);
   for (const entry of chargesRaw) {
     const charge = objectArgs(entry, ["id", "name", "price"]);
-    if (charge.id !== undefined) textArg(charge.id, 40);
+    if (charge.id != null) textArg(charge.id, 40);
     textArg(charge.name, 120); numberArg(charge.price, 0, 1_000_000);
   }
   if (raw.discount != null) {
@@ -104,20 +105,29 @@ export function currentPriceArgs(value: unknown): CurrentPriceInput {
   }
   let payment: CurrentPriceInput["payment"];
   if (raw.payment === "default_deposit") payment = "default_deposit";
-  else if (raw.payment !== undefined) {
-    const pay = objectArgs(raw.payment, ["schedule", "depositPercent", "installmentCount"]);
-    if (pay.schedule !== "full" && pay.schedule !== "deposit_balance" && pay.schedule !== "deposit_installments" && pay.schedule !== "installments") throw new AiValidationError("Esquema de pago inválido.");
-    payment = { schedule: pay.schedule, depositPercent: numberArg(pay.depositPercent, 0, 100), installmentCount: numberArg(pay.installmentCount, 1, 100, true) };
+  else if (raw.payment != null) {
+    try {
+      const pay = objectArgs(raw.payment, ["schedule", "depositPercent", "installmentCount"]);
+      const missing = (["schedule", "depositPercent", "installmentCount"] as const).filter(field => pay[field] == null);
+      if (missing.length) throw new AiToolError("PAYMENT_CONFIGURATION_ERROR", "payment-configuration", missing);
+      if (pay.schedule !== "full" && pay.schedule !== "deposit_balance" && pay.schedule !== "deposit_installments" && pay.schedule !== "installments") throw new AiValidationError("Esquema de pago inválido.");
+      payment = { schedule: pay.schedule, depositPercent: numberArg(pay.depositPercent, 0, 100), installmentCount: numberArg(pay.installmentCount, 1, 100, true) };
+    } catch (error) {
+      if (error instanceof AiToolError) throw error;
+      throw new AiToolError("PAYMENT_CONFIGURATION_ERROR", "payment-configuration");
+    }
   }
   let door;
-  if (raw.door !== undefined) {
-    const d = objectArgs(raw.door, ["wall", "offsetCm", "widthCm"]);
-    if (!["front", "back", "left", "right"].includes(d.wall as string)) throw new AiValidationError("Puerta inválida.");
-    numberArg(d.offsetCm, 0, 900); numberArg(d.widthCm, 60, 150);
-    door = parseDoor(d, preset.widthCm, preset.lengthCm);
-    if (door.widthCm !== d.widthCm || door.offsetCm !== d.offsetCm) throw new AiValidationError("Puerta fuera de rango.");
+  if (raw.door != null) {
+    try {
+      const d = objectArgs(raw.door, ["wall", "offsetCm", "widthCm"]);
+      if (!["front", "back", "left", "right"].includes(d.wall as string)) throw new AiValidationError("Puerta inválida.");
+      numberArg(d.offsetCm, 0, 900); numberArg(d.widthCm, 60, 150);
+      door = parseDoor(d, preset.widthCm, preset.lengthCm);
+      if (door.widthCm !== d.widthCm || door.offsetCm !== d.offsetCm) throw new AiValidationError("Puerta fuera de rango.");
+    } catch { throw new AiToolError("INVALID_TRAILER_CONFIGURATION", "trailer-configuration"); }
   }
   const errors = validateLayout(preset, items, door);
-  if (errors.length) throw new AiValidationError(errors[0]);
+  if (errors.length) throw new AiToolError("INVALID_TRAILER_CONFIGURATION", "trailer-configuration");
   return { model, presetId, items, specialItems, includeIva: raw.includeIva, discount: parseDiscount(raw.discount), charges: parseCharges(chargesRaw), payment };
 }

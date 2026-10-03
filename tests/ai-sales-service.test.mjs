@@ -8,14 +8,14 @@ const fakeKey = "test-credential-not-a-real-key";
 const state = globalThis.__salesServiceTests = {
   session: { id: "v1", email: "sales@example.test", name: "Sales", exp: Date.now() + 10000 },
   account: { id: "v1", email: "sales@example.test", name: "Sales", active: true },
-  settings: DEFAULT_PRICING_SETTINGS, quoteReads: 0, pricingReads: 0,
+  settings: DEFAULT_PRICING_SETTINGS, quoteReads: 0, pricingReads: 0, failPricing: false,
   quote: { id: 7, quote_number: "FGT-TEST", version: 1, model: "food", trailer_preset: "custom-food-200-300-210-1", subtotal: 100, iva: 0, total: 100, include_iva: false, name: "PRIVATE_NAME", phone: "PRIVATE_PHONE", email: "PRIVATE_EMAIL", city: "City", state: "State", vendor_email: "PRIVATE_VENDOR", document_data: { fiscal: { rfc: "PRIVATE_RFC" }, payment: { accountNumber: "PRIVATE_BANK", schedule: "deposit_balance", depositPercent: 50 }, signatures: { customer: { image: "PRIVATE_SIGNATURE" } } }, configuration: { pricing: { basePrice: 100, lines: [{ name: injection, price: 0 }], extras: 0, preDiscountSubtotal: 100, discountAmount: 0, subtotal: 100, iva: 0, total: 100 } } },
 };
 const hook = registerHooks({ load(url, context, nextLoad) {
   const prefix = "const state = globalThis.__salesServiceTests;";
   let source;
   if (url.endsWith("/vendorAuth.ts")) source = prefix + `export async function getVendor(){return state.session;} export async function findVendorByEmail(){return state.account;} export function readEnv(){return ${JSON.stringify(fakeKey)};}`;
-  if (url.endsWith("/pricingSettingsDb.ts")) source = prefix + "export async function getPricingSettings(){state.pricingReads++; return state.settings;}";
+  if (url.endsWith("/pricingSettingsDb.ts")) source = prefix + "export async function getPricingSettings(){state.pricingReads++; if(state.failPricing) throw new Error('PRIVATE_PRICING_ERROR test-credential-not-a-real-key'); return state.settings;}";
   if (url.endsWith("/quotesDb.ts")) source = prefix + "export async function getQuoteById(){state.quoteReads++; return state.quote;}";
   return source ? { format: "module", source, shortCircuit: true } : nextLoad(url, context);
 } });
@@ -28,6 +28,8 @@ const message = text => ({ type: "message", role: "assistant", content: [{ type:
 const call = (name, args, id = "call_1") => ({ type: "function_call", name, call_id: id, arguments: JSON.stringify(args) });
 const request = (body, headers = {}, url = "https://fgtow.com/api/ai/sales") => new Request(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
 const clientInput = { instructions: "test", input: [{ role: "user", content: "test" }], tools: [] };
+const priceArgs = (overrides = {}) => ({ model: "food", quickModelId: null, widthCm: 200, lengthCm: 300, heightCm: 210, axles: 1, items: [], specialItems: [], charges: [], includeIva: false, discount: null, payment: null, door: null, ...overrides });
+const compactPriceArgs = (overrides = {}) => priceArgs({ quickModelId: "compact-250", widthCm: null, lengthCm: null, heightCm: null, axles: null, includeIva: true, payment: "default_deposit", ...overrides });
 
 test("endpoint rejects absent and inactive sessions before any OpenAI request", async () => {
   const session = state.session;
@@ -72,6 +74,9 @@ test("five strict function schemas have required properties and no extra fields 
     if (schema.anyOf) schema.anyOf.forEach(inspect);
   }
   for (const tool of SALES_FUNCTION_TOOLS) { assert.equal(tool.type, "function"); assert.equal(tool.strict, true); inspect(tool.parameters); }
+  const calculation = SALES_FUNCTION_TOOLS.find(tool => tool.name === "calculate_trailer_price");
+  assert.equal(Object.hasOwn(calculation.parameters.properties, "presetId"), false);
+  assert.deepEqual(calculation.parameters.required, ["model", "quickModelId", "widthCm", "lengthCm", "heightCm", "axles", "includeIva", "items", "specialItems", "charges", "discount", "payment", "door"]);
 });
 test("unknown tool in a batch prevents every tool execution", async () => {
   const before = state.quoteReads;
@@ -81,7 +86,7 @@ test("unknown tool in a batch prevents every tool execution", async () => {
 test("real calculate adapter runs, call IDs and encrypted reasoning replay correctly, usage sums", async () => {
   let requests = 0;
   const pricingReads = state.pricingReads;
-  const args = { model: "food", presetId: "custom-food-200-300-210-1", items: [], specialItems: [], charges: [], includeIva: false, discount: null, payment: null, door: null };
+  const args = priceArgs();
   const output = await runSalesAssistant({ message: "Calcula cotización" }, async payload => {
     requests++;
     assert.equal(payload.instructions, SALES_AI_INSTRUCTIONS);
@@ -120,7 +125,7 @@ test("invalid JSON and duplicate call IDs never execute tools", async () => {
 test("strict schema rejects unknown null fields before normalization and adapter execution", async () => {
   const before = state.pricingReads;
   let requests = 0;
-  const args = { model: "food", presetId: "custom-food-200-300-210-1", items: [], specialItems: [], charges: [], includeIva: false, discount: null, payment: null, door: null, vendorId: null };
+  const args = priceArgs({ vendorId: null });
   await runSalesAssistant({ message: "Consulta" }, async payload => {
     if (++requests === 1) return result([call("calculate_trailer_price", args)]);
     const output = payload.input.find(item => item.type === "function_call_output");
@@ -272,7 +277,7 @@ test("authenticated endpoint completes real Responses transport and calculation 
   const before = state.pricingReads;
   let requests = 0;
   const ids = [];
-  const args = { model: "food", presetId: "custom-food-200-300-210-1", items: [], specialItems: [], charges: [], includeIva: false, discount: null, payment: null, door: null };
+  const args = priceArgs();
   globalThis.fetch = async (url, options) => {
     requests++;
     assert.equal(url, "https://api.openai.com/v1/responses");
@@ -335,7 +340,7 @@ test("endpoint never makes more than five Responses requests or four tool rounds
 test("deposit request returns server-calculated payment through the existing tool loop", async () => {
   const before = state.pricingReads;
   let rounds = 0;
-  const args = { model: "food", presetId: "custom-food-180-250-210-1", items: [], specialItems: [], charges: [], includeIva: true, discount: null, payment: "default_deposit", door: null };
+  const args = compactPriceArgs();
   const response = await runSalesAssistant({ message: "Dame precio base, subtotal, IVA, total, anticipo y saldo" }, async payload => {
     assert.equal(payload.instructions, SALES_AI_INSTRUCTIONS);
     assert.deepEqual(payload.tools.map(tool => tool.name), ["calculate_trailer_price", "get_quote", "get_quote_summary", "get_trailer_catalog", "get_accessories"]);
@@ -350,11 +355,102 @@ test("deposit request returns server-calculated payment through the existing too
     assert.equal(calculated.payment.depositPercent, 50);
     assert.equal(calculated.payment.deposit, 31610);
     assert.equal(calculated.payment.balance, 31610);
+    assert.equal(Object.hasOwn(calculated, "presetId"), false);
     return result([message("Total: $63,220. Anticipo: $31,610. Saldo: $31,610.")]);
   });
   assert.equal(rounds, 2);
   assert.equal(state.pricingReads, before + 1);
   assert.equal(response.message, "Total: $63,220. Anticipo: $31,610. Saldo: $31,610.");
+});
+
+test("tool loop returns typed safe errors and logs only fixed metadata for each failure stage", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const exactArgs = compactPriceArgs();
+  const cases = [
+    { args: { ...exactArgs, quickModelId: "unknown" }, code: "INVALID_TRAILER_CONFIGURATION", stage: "trailer-configuration", pricingReads: 0 },
+    { args: { ...exactArgs, presetId: "compact-250" }, code: "INVALID_TOOL_ARGUMENTS", stage: "arguments", pricingReads: 0 },
+    { args: { ...exactArgs, specialItems: undefined }, code: "INVALID_TOOL_ARGUMENTS", stage: "arguments", pricingReads: 0 },
+    { args: { ...exactArgs, payment: { schedule: "deposit_installments", depositPercent: 30, installmentCount: null } }, code: "PAYMENT_CONFIGURATION_ERROR", stage: "payment-configuration", missingFields: ["installmentCount"], pricingReads: 0 },
+    { args: exactArgs, code: "PRICING_ERROR", stage: "pricing-settings", pricingReads: 1, failPricing: true },
+  ];
+  for (const entry of cases) {
+    const before = state.pricingReads;
+    let rounds = 0;
+    state.failPricing = Boolean(entry.failPricing);
+    try {
+      const response = await runSalesAssistant({ message: "Calcula Compact 250 con anticipo y saldo" }, async payload => {
+        if (++rounds === 1) return result([call("calculate_trailer_price", entry.args, "diagnostic_call")]);
+        const output = payload.input.find(item => item.type === "function_call_output");
+        assert.equal(output.call_id, "diagnostic_call");
+        const failure = JSON.parse(output.output);
+        assert.equal(failure.ok, false);
+        assert.equal(failure.error.code, entry.code);
+        assert.equal(failure.error.retryable, entry.code !== "PRICING_ERROR");
+        assert.equal(typeof failure.error.hint, "string");
+        assert.deepEqual(failure.error.missingFields, entry.missingFields);
+        assert.doesNotMatch(output.output, /PRIVATE_|test-credential|stack|Medidas o ejes/);
+        return result([message("Necesito revisar la configuración o consultar tarifas.")]);
+      });
+      assert.equal(rounds, 2);
+      assert.equal(state.pricingReads - before, entry.pricingReads);
+      assert.equal(response.ok, true);
+      assert.equal(response.message, "Necesito revisar la configuración o consultar tarifas.");
+    } finally { state.failPricing = false; }
+  }
+  assert.deepEqual(logs, cases.map(entry => ["AI_TOOL_ERROR", { tool: "calculate_trailer_price", code: entry.code, stage: entry.stage }]));
+  assert.doesNotMatch(JSON.stringify(logs), /test-credential|Authorization|Bearer|PRIVATE_|SQL|stack|prompt|instructions|compact-250/);
+});
+
+test("simulated model repairs an invalid quick model through catalog and recalculates within existing round limits", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const before = state.pricingReads;
+  let requests = 0;
+  const response = await runSalesAssistant({ message: "Precio, anticipo y saldo del FG Compact 250 sin extras" }, async payload => {
+    requests++;
+    assert.equal(payload.instructions, SALES_AI_INSTRUCTIONS);
+    assert.equal(payload.tools.length, 5);
+    const outputs = payload.input.filter(item => item.type === "function_call_output");
+    if (requests === 1) return result([call("calculate_trailer_price", compactPriceArgs({ quickModelId: "not-a-model" }), "bad_configuration")]);
+    if (requests === 2) {
+      const failure = JSON.parse(outputs[0].output);
+      assert.equal(failure.error.code, "INVALID_TRAILER_CONFIGURATION");
+      assert.equal(failure.error.retryable, true);
+      return result([call("get_trailer_catalog", { model: "food" }, "catalog_call")]);
+    }
+    if (requests === 3) {
+      const catalog = JSON.parse(outputs.find(item => item.call_id === "catalog_call").output);
+      const compact = catalog.quickModels.find(entry => entry.name === "FG Compact 250");
+      assert.ok(compact);
+      assert.doesNotMatch(JSON.stringify(catalog), /custom-food-|presetId/);
+      return result([call("calculate_trailer_price", compactPriceArgs({ quickModelId: compact.id }), "repaired_price")]);
+    }
+    assert.equal(requests, 4);
+    const calculated = JSON.parse(outputs.find(item => item.call_id === "repaired_price").output);
+    assert.deepEqual([calculated.basePrice, calculated.iva, calculated.total, calculated.payment.depositPercent, calculated.payment.deposit, calculated.payment.balance], [54500, 8720, 63220, 50, 31610, 31610]);
+    assert.equal(outputs.length, 3);
+    return result([message("Total $63,220; anticipo $31,610 y saldo $31,610.")]);
+  });
+  assert.equal(requests, 4);
+  assert.ok(requests <= MAX_TOOL_ROUNDS + 1);
+  assert.equal(state.pricingReads, before + 1);
+  assert.equal(response.message, "Total $63,220; anticipo $31,610 y saldo $31,610.");
+  assert.deepEqual(logs, [["AI_TOOL_ERROR", { tool: "calculate_trailer_price", code: "INVALID_TRAILER_CONFIGURATION", stage: "trailer-configuration" }]]);
+});
+
+test("missing dimensions reach the model as safe missingFields rather than invented values", async t => {
+  t.mock.method(console, "error", () => {});
+  const before = state.pricingReads;
+  let requests = 0;
+  await runSalesAssistant({ message: "Precio de food con ancho conocido" }, async payload => {
+    if (++requests === 1) return result([call("calculate_trailer_price", priceArgs({ widthCm: 180, lengthCm: null, heightCm: null, axles: null }))]);
+    const failure = JSON.parse(payload.input.find(item => item.type === "function_call_output").output);
+    assert.equal(failure.error.code, "INVALID_TRAILER_CONFIGURATION");
+    assert.deepEqual(failure.error.missingFields, ["lengthCm", "heightCm", "axles"]);
+    return result([message("Indica largo, altura y número de ejes.")]);
+  });
+  assert.equal(state.pricingReads, before);
 });
 
 test.after(() => { hook.deregister(); delete globalThis.__salesServiceTests; });

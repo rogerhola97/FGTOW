@@ -16,8 +16,8 @@ export async function get_trailer_catalog(args: unknown) {
   const { model } = modelArgs(args);
   return {
     model, label: MODEL_META[model].label,
-    presets: getPresetsForModel(model).map(preset => ({ id: preset.id, widthCm: preset.widthCm, lengthCm: preset.lengthCm, heightCm: preset.heightCm, axles: preset.axles, basePrice: preset.basePrice })),
-    quickModels: model === "food" ? FOOD_QUICK_MODELS.map(entry => ({ id: entry.id, name: entry.name, widthCm: entry.widthCm, lengthCm: entry.lengthCm, heightCm: entry.heightCm })) : [],
+    presets: getPresetsForModel(model).map(preset => ({ widthCm: preset.widthCm, lengthCm: preset.lengthCm, heightCm: preset.heightCm, axles: preset.axles, basePrice: preset.basePrice })),
+    quickModels: model === "food" ? FOOD_QUICK_MODELS.map(entry => ({ id: entry.id, name: entry.name, widthCm: entry.widthCm, lengthCm: entry.lengthCm, heightCm: entry.heightCm, axles: getAllowedAxles(entry.lengthCm)[0] })) : [],
     dimensions: model === "rzr" ? [] : getCustomLengthOptions().map(lengthCm => ({ lengthCm, widthsCm: getAllowedWidths(lengthCm), axles: getAllowedAxles(lengthCm), minHeightCm: CUSTOM_HEIGHT_MIN_CM, maxHeightCm: getMaxHeightCm(lengthCm), heightStepCm: CUSTOM_HEIGHT_STEP_CM })),
   };
 }
