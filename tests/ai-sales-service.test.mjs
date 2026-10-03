@@ -174,13 +174,16 @@ test("client distinguishes missing key, malformed JSON, incomplete response, net
   ];
   for (const [send, code] of cases) await assert.rejects(send(clientInput), error => error instanceof OpenAIServerError && error.code === code && !error.message.includes(fakeKey));
 });
-test("endpoint returns only stable final fields and quote context, without prefetching records", async () => {
+test("temporary endpoint probe sends only fixed model/input without prefetching records", async () => {
   const originalFetch = globalThis.fetch;
   const before = state.quoteReads;
   globalThis.fetch = async (url, options) => {
     const body = JSON.parse(options.body);
-    const context = JSON.parse(body.input[0].content);
-    assert.deepEqual(context, { message: "Hola vendedor", context: { quoteId: 7 } });
+    assert.deepEqual(body, { model: "gpt-6-luna", input: "Responde únicamente: FG TOW IA OK" });
+    const headers = new Headers(options.headers);
+    assert.deepEqual([...headers.keys()].sort(), ["authorization", "content-type"]);
+    assert.equal(headers.get("content-type"), "application/json");
+    assert.equal(headers.get("authorization"), `Bearer ${fakeKey}`);
     assert.doesNotMatch(JSON.stringify(body), /PRIVATE_|test-credential/);
     return Response.json({ status: "completed", output: [message("Hola FG TOW")], usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 } });
   };
@@ -315,6 +318,33 @@ test("upstream message remains exclusively in server logs, never the browser res
     assert.deepEqual(body, { ok: false, error: { code: "AI_HTTP_ERROR", message: "El servicio de IA no está disponible. Intenta más tarde." } });
     assert.doesNotMatch(JSON.stringify(body), /upstreamMessage|Invalid example|contentType|requestId/);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("minimal production probe uses server key, requires session and logs only safe result", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const originalFetch = globalThis.fetch, session = state.session;
+  let calls = 0;
+  globalThis.fetch = async (url, options) => {
+    calls++;
+    assert.equal(url, "https://api.openai.com/v1/responses");
+    assert.deepEqual(JSON.parse(options.body), { model: "gpt-6-luna", input: "Responde únicamente: FG TOW IA OK" });
+    assert.deepEqual([...new Headers(options.headers).keys()].sort(), ["authorization", "content-type"]);
+    assert.equal(new Headers(options.headers).get("authorization"), `Bearer ${fakeKey}`);
+    return Response.json({ status: "completed", output: [message("FG TOW IA OK")], usage: { input_tokens: 4, output_tokens: 5, total_tokens: 9 }, extra: "PRIVATE_RESPONSE" }, { headers: { "x-request-id": "req_minimal" } });
+  };
+  try {
+    state.session = null;
+    assert.equal((await POST(request({ message: "PRIVATE_MESSAGE" }))).status, 401);
+    assert.equal(calls, 0);
+    state.session = session;
+    const response = await POST(request({ message: "PRIVATE_MESSAGE" }));
+    assert.equal(response.status, 200);
+    assert.equal(calls, 1);
+    assert.deepEqual(logs, [["OPENAI_MINIMAL_DIAGNOSTIC", { status: 200, contentType: "application/json", requestId: "req_minimal", responseOk: true, hasOutputText: true, text: "FG TOW IA OK", usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 } }]]);
+    assert.doesNotMatch(JSON.stringify(logs), /test-credential|Authorization|PRIVATE_|cookie|instructions|arguments/);
+    assert.doesNotMatch(JSON.stringify(await response.json()), /test-credential|requestId|req_minimal|PRIVATE_/);
+  } finally { state.session = session; globalThis.fetch = originalFetch; }
 });
 
 test.after(() => { hook.deregister(); delete globalThis.__salesServiceTests; });
