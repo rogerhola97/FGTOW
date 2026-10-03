@@ -2,7 +2,7 @@
 // (TrailerConfigurator con isVendor=true). Compartido por POST /api/vendedor/quotes y
 // PATCH /api/vendedor/quotes/[id].
 import { clean } from "./quoteSubmission";
-import { VendorCharge, VendorDiscount } from "./vendorPricing";
+import type { VendorCharge, VendorDiscount } from "./vendorPricing";
 
 const MAX_CHARGES = 20;
 

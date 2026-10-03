@@ -4,6 +4,7 @@
 // in sync by hand with what worker/index.ts and db/index.ts actually read off `env`.
 declare namespace Cloudflare {
   interface Env {
+    OPENAI_API_KEY?: string;
     ASSETS: Fetcher;
     DB: D1Database;
     IMAGES: {

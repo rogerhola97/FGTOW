@@ -27,7 +27,7 @@ const localBindingConfig = {
   // silently missing from `env` in `npm run dev` even if it's in the dotenv file, so every var
   // readEnv() might read has to be listed here, even ones that are optional at the app level (like
   // the Turnstile pair, which the app tolerates being unset) or not secret in the strict sense.
-  secrets: { required: ["SUPABASE_SERVICE_ROLE_KEY", "VENDOR_SESSION_SECRET", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "RESEND_API_KEY", "TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"] },
+  secrets: { required: ["SUPABASE_SERVICE_ROLE_KEY", "VENDOR_SESSION_SECRET", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "RESEND_API_KEY", "TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY", "OPENAI_API_KEY"] },
   d1_databases: d1
     ? [
         {

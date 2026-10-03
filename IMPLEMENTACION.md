@@ -1,5 +1,50 @@
 # Implementación de FG TOW
 
+## Backend del asistente de ventas (sin interfaz)
+
+`POST /api/ai/sales` acepta exclusivamente `{ "message": "...", "quoteId": null }`.
+`quoteId` puede omitirse o ser un entero positivo / su representación decimal canónica.
+El mensaje tiene entre 2 y 4000 caracteres después de trim; el cuerpo se limita a 20,000 bytes,
+incluidos envíos sin Content-Length. Se exige application/json, sesión de vendedor y cuenta activa.
+Cuando se recibe Origin se compara con el origen de la URL pública del request del Worker;
+se rechaza también Sec-Fetch-Site cross-site. No se confía en Host ni X-Forwarded-Host.
+Requests sin Origin siguen requiriendo sesión. Verificar esta comparación con los dominios y
+previews reales antes de publicar, especialmente si un proxy reescribe la URL del request.
+
+La única integración externa de IA utiliza fetch a Responses API con gpt-6-luna, razonamiento
+low, store:false, 1500 tokens máximos de salida y timeout de 30 segundos POR llamada.
+No hay reintentos automáticos. Se permiten hasta cuatro rondas de herramientas, ocho llamadas
+a herramientas por ronda como límite defensivo y como máximo cinco requests a OpenAI por POST
+(el quinto puede terminar con texto o provocar error de límite sin ejecutar más herramientas).
+Cada petición es independiente: no hay historial de conversación persistido.
+
+Solo se exponen calculate_trailer_price, get_quote, get_quote_summary, get_trailer_catalog y
+get_accessories. Los schemas son strict, sin propiedades adicionales; los opcionales se expresan
+con null. El backend valida además estructura y reglas existentes antes de ejecutar el switch.
+Se conservan los output items y razonamiento cifrado entre requests stateless, y los resultados
+se devuelven como function_call_output con su call_id. Los datos de herramientas nunca se
+promueven a instrucciones. No se envían registros completos ni datos fiscales, bancarios, firmas
+o URLs de archivos. El modelo puede recibir solamente el mensaje, quoteId y proyecciones
+comerciales necesarias; el vendedor debe evitar incluir información sensible en el texto libre.
+
+OPENAI_API_KEY se lee en servidor mediante readEnv; no se imprime ni devuelve. Los errores
+upstream se convierten en mensajes fijos y no se registran bodies, prompts o credenciales.
+El request id se captura internamente si está disponible y no se envía al navegador.
+La respuesta incluye exclusivamente ok, message y usage agregado; los errores usan ok:false
+y error:{code,message}. Se responde Cache-Control:no-store.
+
+**Pendiente obligatorio antes de apertura amplia:** rate limit y cuotas de gasto persistentes.
+Los límites anteriores no sustituyen un control de frecuencia entre solicitudes. No se ha
+añadido un Map en memoria, tablas ni bindings nuevos para simular esa protección.
+También deben comprobarse acceso al modelo, binding del secret, permisos reales de Supabase,
+tiempos del Worker y evaluaciones de prompt injection e importes en el entorno objetivo.
+Las instrucciones del modelo no garantizan por sí solas que reproduzca correctamente todos los
+importes: la futura interfaz debe presentar el resultado numérico autorizado del backend.
+
+La prueba real inicial, cuando exista una variable segura configurada manualmente en un
+entorno autorizado, debe limitarse a UNA petición sin tools con “Responde únicamente: FG TOW IA OK”.
+Nunca extraer el secret de Cloudflare, imprimirlo o guardarlo en código para hacer esa prueba.
+
 ## Qué incluye
 
 - Inicio y catálogo adaptables a celular, tableta y computadora.
