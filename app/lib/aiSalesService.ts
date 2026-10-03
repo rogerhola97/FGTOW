@@ -3,6 +3,7 @@ import * as salesTools from "./aiSalesTools";
 import { authorizeSalesOperation, VendorAuthorizationError } from "./vendorAuthorization";
 import { AiValidationError, salesMessageArgs } from "./aiRequestValidation";
 import { AiToolError, safeToolFailure } from "./aiToolErrors";
+import { shouldForcePricingTool } from "./aiPricingIntent";
 
 export const MAX_TOOL_ROUNDS = 4;
 export const MAX_TOOL_CALLS_PER_ROUND = 8;
@@ -120,17 +121,25 @@ function finalText(output: ResponseItem[]) {
 export async function runSalesAssistant(args: unknown, transport: ResponsesTransport = sendSalesResponse) {
   await authorizeSalesOperation("get_quote_summary");
   const request = salesMessageArgs(args);
+  const forcePricing = shouldForcePricingTool(request.message, request.quoteId);
   const input: Record<string, unknown>[] = [
     { role: "user", content: JSON.stringify({ message: request.message, context: { quoteId: request.quoteId } }) },
   ];
   const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   let rounds = 0;
   for (;;) {
-    const response = await transport({ instructions: SALES_AI_INSTRUCTIONS, input: [...input], tools: SALES_FUNCTION_TOOLS });
+    const forceFirstCall = forcePricing && rounds === 0;
+    const response = await transport({
+      instructions: SALES_AI_INSTRUCTIONS, input: [...input], tools: SALES_FUNCTION_TOOLS,
+      toolChoice: forceFirstCall ? { type: "function", name: "calculate_trailer_price" } : "auto",
+    });
     for (const key of ["inputTokens", "outputTokens", "totalTokens"] as const) usage[key] += response.usage[key];
     // Keep reasoning (encrypted content), messages and function calls in order for store:false.
     if (response.output.some(item => !["message", "reasoning", "function_call"].includes(item.type))) throw new AiSalesServiceError("AI_INVALID_RESPONSE", "La IA devolvió un tipo de respuesta no permitido.");
     const calls = functionCalls(response.output);
+    if (forceFirstCall && (calls.length !== 1 || calls[0].name !== "calculate_trailer_price")) {
+      throw new AiSalesServiceError("AI_INVALID_TOOL_CALL", "La IA no ejecutó el cálculo solicitado.");
+    }
     if (!calls.length) return { ok: true as const, message: finalText(response.output), usage };
     if (rounds >= MAX_TOOL_ROUNDS) throw new AiSalesServiceError("AI_TOOL_ROUND_LIMIT", "El asistente alcanzó el límite de consultas. Simplifica la pregunta.");
     rounds++;

@@ -11,7 +11,8 @@ export type FunctionTool = {
   parameters: Record<string, unknown>;
 };
 export type ResponseItem = Record<string, unknown> & { type: string };
-export type ResponsesInput = { instructions: string; input: Record<string, unknown>[]; tools: readonly FunctionTool[] };
+export type SalesToolChoice = "auto" | { type: "function"; name: "calculate_trailer_price" };
+export type ResponsesInput = { instructions: string; input: Record<string, unknown>[]; tools: readonly FunctionTool[]; toolChoice?: SalesToolChoice };
 export type ResponsesResult = {
   output: ResponseItem[]; requestId: string | null;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number };
@@ -62,7 +63,7 @@ async function readErrorMetadata(response: Response): Promise<Record<string, unk
 export function createResponsesClient(dependencies: {
   fetch?: typeof fetch; readKey?: () => string | undefined; timeoutMs?: number;
 } = {}): ResponsesTransport {
-  return async ({ instructions, input, tools }) => {
+  return async ({ instructions, input, tools, toolChoice = "auto" }) => {
     const key = (dependencies.readKey ?? (() => readEnv("OPENAI_API_KEY")))();
     if (!key) throw new OpenAIServerError("AI_NOT_CONFIGURED", 503, "El asistente no está configurado.");
     const clientRequestId = crypto.randomUUID();
@@ -76,7 +77,7 @@ export function createResponsesClient(dependencies: {
         body: JSON.stringify({
           model: SALES_AI_MODEL, reasoning: { effort: "low" }, store: false,
           max_output_tokens: MAX_OUTPUT_TOKENS, instructions, input, tools,
-          parallel_tool_calls: false, include: ["reasoning.encrypted_content"],
+          parallel_tool_calls: false, include: ["reasoning.encrypted_content"], tool_choice: toolChoice,
         }),
       });
       const header = response.headers.get("x-request-id");
