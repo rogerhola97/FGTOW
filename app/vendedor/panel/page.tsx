@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { VendorLogoutButton } from "../../components/VendorLogoutButton";
+import { VendorAiAssistant } from "../../components/VendorAiAssistant";
 import { requireVendor } from "../../lib/vendorAuth";
 
 export const metadata = { title: "Panel de vendedor", robots: { index: false, follow: false } };
@@ -37,5 +38,6 @@ export default async function VendedorPanelPage() {
         </Link>
       </div>
     </section>
+    <VendorAiAssistant />
   </main>;
 }
