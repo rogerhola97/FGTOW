@@ -77,10 +77,6 @@ export default function Home() {
             <a className="button button-whatsapp" href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />Escríbenos por WhatsApp</a>
           </div>
           <div className="hero-contact" aria-label="Contacto directo">
-            <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="hero-contact-card is-whatsapp">
-              <WhatsAppIcon className="hero-contact-icon" />
-              <span><small>WhatsApp · atención directa</small><strong>{WHATSAPP_NUMBER}</strong></span>
-            </a>
             <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer" className="hero-contact-card">
               <LocationIcon className="hero-contact-icon" />
               <span><small>Visítanos en planta · Cómo llegar →</small><strong>{FABRICATION_ADDRESS}</strong></span>
