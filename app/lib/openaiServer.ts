@@ -1,5 +1,6 @@
 // Server-only: the environment helper imports cloudflare:workers and next/headers.
 import { readEnv } from "./vendorAuth";
+import { env as workerEnv } from "cloudflare:workers";
 
 export const SALES_AI_MODEL = "gpt-6-luna";
 export const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -31,6 +32,43 @@ export class OpenAIServerError extends Error {
   }
 }
 const tokenCount = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+
+async function secretMetadata(value: unknown) {
+  const isString = typeof value === "string";
+  const fingerprint = isString && value.length > 0
+    ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), byte => byte.toString(16).padStart(2, "0")).join("").slice(0, 12)
+    : undefined;
+  return {
+    exists: Boolean(value), type: typeof value, length: isString ? value.length : 0,
+    startsWithSk: isString && value.startsWith("sk-"), equalsTrimmed: isString && value === value.trim(),
+    containsWhitespace: isString && /\s/.test(value), ...(fingerprint ? { fingerprint } : {}),
+  };
+}
+async function logSecretMetadata(key: string | undefined, injected: boolean) {
+  const binding = (workerEnv as unknown as Record<string, unknown> | undefined)?.OPENAI_API_KEY;
+  const fromProcess = process.env.OPENAI_API_KEY;
+  const source = injected ? "server-dependency"
+    : typeof binding === "string" && binding.trim() ? "cloudflare-binding"
+    : typeof fromProcess === "string" && fromProcess.trim() ? "process.env" : "missing";
+  console.error("OPENAI_SECRET_DIAGNOSTIC", {
+    source, ...await secretMetadata(key),
+    candidates: [
+      { source: "cloudflare-binding", ...await secretMetadata(binding) },
+      { source: "process.env", ...await secretMetadata(fromProcess) },
+    ],
+  });
+}
+function modelResponseHeaders(response: Response, key: string) {
+  const header = (name: string) => {
+    const value = response.headers.get(name);
+    return value === null ? null : value.split(key).join("[REDACTED]")
+      .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").slice(0, 300);
+  };
+  return {
+    contentLength: header("content-length"), server: header("server"), cfRay: header("cf-ray"),
+    openaiVersion: header("openai-version"), wwwAuthenticate: header("www-authenticate"),
+  };
+}
 
 // Reject invalid metadata entirely rather than logging fragments of arbitrary text.
 function safeMetadata(value: unknown, pattern: RegExp, limit: number, key: string): string | null {
@@ -84,8 +122,9 @@ export function createResponsesClient(dependencies: {
 } = {}): ResponsesTransport {
   return async ({ instructions, input, tools }) => {
     const key = (dependencies.readKey ?? (() => readEnv("OPENAI_API_KEY")))();
-    if (!key) throw new OpenAIServerError("AI_NOT_CONFIGURED", 503, "El asistente no está configurado.");
     const modelAccessDiagnostic = dependencies.modelAccessDiagnostic === true;
+    if (modelAccessDiagnostic) await logSecretMetadata(key, Boolean(dependencies.readKey));
+    if (!key) throw new OpenAIServerError("AI_NOT_CONFIGURED", 503, "El asistente no está configurado.");
     const clientRequestId = modelAccessDiagnostic ? null : crypto.randomUUID();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), dependencies.timeoutMs ?? OPENAI_TIMEOUT_MS);
@@ -112,7 +151,7 @@ export function createResponsesClient(dependencies: {
         const retry = response.headers.get("retry-after");
         console.error(modelAccessDiagnostic ? "OPENAI_MODEL_DIAGNOSTIC" : "OPENAI_UPSTREAM_ERROR", {
           status: response.status, contentType, requestId,
-          ...(modelAccessDiagnostic ? { responseOk: response.ok } : { clientRequestId }),
+          ...(modelAccessDiagnostic ? { responseOk: response.ok, ...modelResponseHeaders(response, key) } : { clientRequestId }),
           ...(upstream ? {
           ...(modelAccessDiagnostic ? {} : { retryAfter: safeMetadata(retry, /^(?:\d{1,10}|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT)$/, 64, key) }),
           code: safeMetadata(upstream.code, /^[A-Za-z][A-Za-z0-9_-]*$/, 100, key),
@@ -137,6 +176,7 @@ export function createResponsesClient(dependencies: {
           status: response.status, responseOk: response.ok,
           contentType: safeMetadata(response.headers.get("content-type"), /^[A-Za-z0-9!#$&^_.+\/;= -]+$/, 120, key),
           requestId,
+          ...modelResponseHeaders(response, key),
           object: safeMetadata(raw.object, /^[A-Za-z][A-Za-z0-9_-]*$/, 100, key),
           id: safeMetadata(raw.id, /^[A-Za-z][A-Za-z0-9_.-]*$/, 200, key),
           owned_by: safeMetadata(raw.owned_by, /^[A-Za-z][A-Za-z0-9_.-]*$/, 100, key),
