@@ -34,9 +34,26 @@ function safeMetadata(value: unknown, pattern: RegExp, limit: number, key: strin
   return typeof value === "string" && value.length <= limit && pattern.test(value)
     && !value.includes(key) && !/authorization|bearer|sk-|sb_secret_|ghp_/i.test(value) ? value : null;
 }
-async function readErrorMetadata(response: Response): Promise<Record<string, unknown>> {
+function safeUpstreamMessage(value: unknown, key: string, instructions: string, input: Record<string, unknown>[]): string | null {
+  if (typeof value !== "string") return null;
+  const sensitive = new Set<string>([key, instructions]);
+  function collect(item: unknown): void {
+    if (typeof item === "string") {
+      sensitive.add(item);
+      try { collect(JSON.parse(item)); } catch { /* Plain strings are already covered. */ }
+    } else if (Array.isArray(item)) item.forEach(collect);
+    else if (item && typeof item === "object") Object.values(item).forEach(collect);
+  }
+  collect(input);
+  let message = value;
+  for (const secret of [...sensitive].filter(Boolean).sort((a, b) => b.length - a.length)) message = message.split(secret).join("[REDACTED]");
+  // Do not retain a message that appears to contain authentication headers.
+  if (/authorization|\bbearer\b/i.test(message)) return null;
+  return message.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").slice(0, 500);
+}
+async function readErrorMetadata(response: Response): Promise<Record<string, unknown> | null> {
   const reader = response.body?.getReader();
-  if (!reader) return {};
+  if (!reader) return null;
   try {
     const chunks: Uint8Array[] = [];
     let size = 0;
@@ -44,7 +61,7 @@ async function readErrorMetadata(response: Response): Promise<Record<string, unk
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 16_384) return {};
+      if (size > 16_384) return null;
       chunks.push(value);
     }
     const bytes = new Uint8Array(size);
@@ -54,7 +71,7 @@ async function readErrorMetadata(response: Response): Promise<Record<string, unk
     if (!body || typeof body !== "object" || Array.isArray(body)) return {};
     const error = (body as Record<string, unknown>).error;
     return error && typeof error === "object" && !Array.isArray(error) ? error as Record<string, unknown> : {};
-  } catch { return {}; }
+  } catch { return null; }
   finally { try { await reader.cancel(); } catch { /* Never log parser/body errors. */ } }
 }
 
@@ -82,14 +99,20 @@ export function createResponsesClient(dependencies: {
       const header = response.headers.get("x-request-id");
       requestId = safeMetadata(header, /^[A-Za-z0-9_-]+$/, 200, key);
       if (!response.ok) {
-        const upstream = await readErrorMetadata(response);
+        const rawContentType = response.headers.get("content-type");
+        const contentType = safeMetadata(rawContentType, /^[A-Za-z0-9!#$&^_.+\/;= -]+$/, 120, key);
+        const isJson = /^application\/(?:json|[a-z0-9!#$&^_.+-]+\+json)(?:\s*;|\s*$)/i.test(rawContentType ?? "");
+        const upstream = isJson ? await readErrorMetadata(response) : null;
         const retry = response.headers.get("retry-after");
         console.error("OPENAI_UPSTREAM_ERROR", {
-          status: response.status, requestId, clientRequestId,
+          status: response.status, contentType, requestId, clientRequestId,
+          ...(upstream ? {
           retryAfter: safeMetadata(retry, /^(?:\d{1,10}|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT)$/, 64, key),
           code: safeMetadata(upstream.code, /^[A-Za-z][A-Za-z0-9_-]*$/, 100, key),
           type: safeMetadata(upstream.type, /^[A-Za-z][A-Za-z0-9_-]*$/, 100, key),
           param: safeMetadata(upstream.param, /^[A-Za-z_][A-Za-z0-9_.\[\]-]*$/, 200, key),
+          upstreamMessage: safeUpstreamMessage(upstream.message, key, instructions, input),
+          } : {}),
         });
         const code = response.status === 429 ? "AI_RATE_LIMITED" : response.status === 401 || response.status === 403 ? "AI_UPSTREAM_AUTH" : "AI_HTTP_ERROR";
         throw new OpenAIServerError(code, response.status === 429 ? 429 : 502, "El servicio de IA no está disponible. Intenta más tarde.", requestId);

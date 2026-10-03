@@ -224,7 +224,7 @@ test("400 logs only safe upstream metadata and sends a unique client request ID"
   assert.notEqual(ids[0], ids[1]);
   logs.forEach(([label, metadata], index) => {
     assert.equal(label, "OPENAI_UPSTREAM_ERROR");
-    assert.deepEqual(metadata, { status: 400, requestId: "req_safe", clientRequestId: ids[index], retryAfter: "30", code: "invalid_json_schema", type: "invalid_request_error", param: "tools[0].parameters" });
+    assert.deepEqual(metadata, { status: 400, contentType: "application/json", requestId: "req_safe", clientRequestId: ids[index], retryAfter: "30", code: "invalid_json_schema", type: "invalid_request_error", param: "tools[0].parameters", upstreamMessage: null });
   });
   assert.doesNotMatch(JSON.stringify(logs), /test-credential|OPENAI_API_KEY|Authorization|PRIVATE_|instructions|arguments/);
   assert.ok(!JSON.stringify(logs).includes(JSON.stringify(upstreamBody)));
@@ -245,7 +245,8 @@ test("diagnostic metadata rejects secrets, arbitrary text, objects and oversized
   assert.equal(logs.length, bodies.length);
   for (const [, metadata] of logs) {
     assert.equal(metadata.status, 400);
-    for (const field of ["requestId", "retryAfter", "code", "type", "param"]) assert.equal(metadata[field], null);
+    assert.equal(metadata.requestId, null);
+    for (const field of ["retryAfter", "code", "type", "param"]) assert.ok(metadata[field] == null);
   }
   assert.doesNotMatch(JSON.stringify(logs), /test-credential|PRIVATE_|Bearer|sk-test|example/);
 });
@@ -262,6 +263,57 @@ test("401, 403, 429 and 500 preserve public mapping and hide all diagnostic IDs"
       assert.deepEqual(body, { ok: false, error: { code, message: "El servicio de IA no está disponible. Intenta más tarde." } });
       assert.doesNotMatch(JSON.stringify(body), /upstream_|requestId|clientRequestId|PRIVATE_|req_private/);
     }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("upstream messages are bounded, single-line and redact credentials and request content", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const privateInput = { instructions: "PRIVATE_PROMPT", input: [{ role: "user", content: JSON.stringify({ message: "PRIVATE_MESSAGE" }) }, { type: "function_call", arguments: JSON.stringify({ note: "PRIVATE_ARGUMENT" }) }], tools: [] };
+  const cases = [
+    ["Invalid example", "Invalid example"],
+    ["x".repeat(600), "x".repeat(500)],
+    ["Invalid\nexample\r\t\u0000\u007f\u0085\u2028", "Invalid example      "],
+    [`Invalid ${fakeKey} ${fakeKey}`, "Invalid [REDACTED] [REDACTED]"],
+    ["PRIVATE_PROMPT PRIVATE_MESSAGE PRIVATE_ARGUMENT", "[REDACTED] [REDACTED] [REDACTED]"],
+    [{ message: "PRIVATE_OBJECT" }, null],
+    ["Authorization: Bearer PRIVATE_TOKEN", null],
+  ];
+  for (const [upstreamMessage, expected] of cases) {
+    const send = createResponsesClient({ readKey: () => fakeKey, fetch: async () => Response.json({ error: { message: upstreamMessage }, extra: "PRIVATE_BODY" }, { status: 400 }) });
+    await assert.rejects(send(privateInput), error => error.code === "AI_HTTP_ERROR");
+    const metadata = logs.at(-1)[1];
+    assert.equal(metadata.upstreamMessage, expected);
+    assert.equal(metadata.contentType, "application/json");
+    assert.doesNotMatch(JSON.stringify(metadata), /test-credential|PRIVATE_|Authorization|Bearer/);
+  }
+});
+
+test("non-JSON or malformed upstream bodies log only status and header metadata", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  for (const [body, contentType] of [[JSON.stringify({ error: { message: "PRIVATE_MESSAGE" } }), "text/plain"], ["<html>PRIVATE_HTML</html>", "text/html"], ["PRIVATE_INVALID_JSON", "application/json"]]) {
+    const send = createResponsesClient({ readKey: () => fakeKey, fetch: async () => new Response(body, { status: 400, headers: { "content-type": contentType, "x-request-id": "req_safe" } }) });
+    await assert.rejects(send(clientInput), error => error.code === "AI_HTTP_ERROR");
+    const metadata = logs.at(-1)[1];
+    assert.deepEqual(Object.keys(metadata).sort(), ["status", "contentType", "requestId", "clientRequestId"].sort());
+    assert.equal(metadata.contentType, contentType);
+    assert.doesNotMatch(JSON.stringify(metadata), /PRIVATE_|html>/);
+  }
+});
+
+test("upstream message remains exclusively in server logs, never the browser response", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ error: { message: "Invalid example" } }, { status: 400 });
+  try {
+    const response = await POST(request({ message: "Hola" }));
+    assert.equal(response.status, 502);
+    assert.equal(logs.at(-1)[1].upstreamMessage, "Invalid example");
+    const body = await response.json();
+    assert.deepEqual(body, { ok: false, error: { code: "AI_HTTP_ERROR", message: "El servicio de IA no está disponible. Intenta más tarde." } });
+    assert.doesNotMatch(JSON.stringify(body), /upstreamMessage|Invalid example|contentType|requestId/);
   } finally { globalThis.fetch = originalFetch; }
 });
 
