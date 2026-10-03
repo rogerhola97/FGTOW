@@ -10,7 +10,7 @@ const state = globalThis.__salesTestState = {
   session: { id: "vendor-1", email: "sales@example.test", name: "Sales", exp: Date.now() + 10000 },
   account: { id: "vendor-1", email: "sales@example.test", name: "Sales", active: true },
   settings: { ...DEFAULT_PRICING_SETTINGS, equipment_price_overrides: {}, extra_equipment_price: 3100 },
-  settingsCalls: 0, quoteCalls: 0, failSettings: false, failPayment: false, paymentCalls: [],
+  settingsCalls: 0, quoteCalls: 0, failSettings: false, failPayment: false, failPaymentTotal: null, paymentCalls: [],
   quote: { id: 7, quote_number: "FGT-HISTORICAL", version: 1, model: "food", trailer_preset: "custom-food-200-300-210-1", subtotal: 111, iva: 0, total: 111, include_iva: false, configuration: {}, document_data: { payment: { schedule: "deposit_balance", depositPercent: 50 }, signatures: { customer: { image: "SENSITIVE" } }, fiscal: { rfc: "SENSITIVE" }, bank: "SENSITIVE" }, name: "SENSITIVE", phone: "SENSITIVE", email: "SENSITIVE", city: "City", state: "State", vendor_email: "SENSITIVE", reference_image_files: [{ path: "SENSITIVE" }] },
 };
 const hook = registerHooks({ load(url, context, nextLoad) {
@@ -21,7 +21,7 @@ const hook = registerHooks({ load(url, context, nextLoad) {
   if (url.endsWith("/quotesDb.ts")) source = prelude + "export async function getQuoteById(){state.quoteCalls++; return state.quote;}";
   if (url.endsWith("/quoteDocuments.ts")) {
     const actual = JSON.stringify(`${url}?actual-payment-rules`);
-    source = `export * from ${actual}; import { DEFAULT_DEPOSIT_PERCENT as actualDefault, calculatePaymentPlan as actualCalculatePaymentPlan } from ${actual}; ${prelude} export let DEFAULT_DEPOSIT_PERCENT = actualDefault; export function setTestDefault(value){DEFAULT_DEPOSIT_PERCENT=value;} export function calculatePaymentPlan(total,payment){state.paymentCalls.push({total,payment:structuredClone(payment)});if(state.failPayment)throw new Error('PRIVATE_PAYMENT SQL SECRET');return actualCalculatePaymentPlan(total,payment);}`;
+    source = `export * from ${actual}; import { DEFAULT_DEPOSIT_PERCENT as actualDefault, calculatePaymentPlan as actualCalculatePaymentPlan } from ${actual}; ${prelude} export let DEFAULT_DEPOSIT_PERCENT = actualDefault; export function setTestDefault(value){DEFAULT_DEPOSIT_PERCENT=value;} export function calculatePaymentPlan(total,payment){state.paymentCalls.push({total,payment:structuredClone(payment)});if(state.failPayment || state.failPaymentTotal===total)throw new Error('PRIVATE_PAYMENT SQL SECRET');return actualCalculatePaymentPlan(total,payment);}`;
   }
   return source ? { format: "module", source, shortCircuit: true } : nextLoad(url, context);
 } });
@@ -279,6 +279,78 @@ test("historical payment percentage and amounts stay saved rather than using cur
     assert.equal(result.payment.balance, 83.25);
     assert.equal(state.settingsCalls, before);
   } finally { state.quote.document_data.payment = original; }
+});
+
+test("both IVA scenarios share settings and calculate their own real default payment plans", async () => {
+  const before = state.paymentCalls.length;
+  const settingsBefore = state.settingsCalls;
+  const result = await tools.calculate_trailer_price({ ...compactInput(), payment: "default_deposit" }, "both");
+  assert.equal(result.taxMode, "both");
+  assert.deepEqual([result.withoutIva.basePrice, result.withoutIva.iva, result.withoutIva.total, result.withoutIva.payment.deposit, result.withoutIva.payment.balance], [54500, 0, 54500, 27250, 27250]);
+  assert.deepEqual([result.withIva.basePrice, result.withIva.iva, result.withIva.total, result.withIva.payment.deposit, result.withIva.payment.balance], [54500, 8720, 63220, 31610, 31610]);
+  assert.deepEqual(state.paymentCalls.slice(before), [54500, 63220].map(total => ({ total, payment: { schedule: "deposit_balance", depositPercent: paymentRules.DEFAULT_DEPOSIT_PERCENT, installmentCount: 1 } })));
+  assert.equal(state.settingsCalls, settingsBefore + 1);
+  assert.deepEqual(result.withoutIva.configuration, result.withIva.configuration);
+});
+
+test("both IVA price-only scenarios never add a payment plan", async () => {
+  const before = state.paymentCalls.length;
+  const result = await tools.calculate_trailer_price(compactInput(), "both");
+  assert.equal(result.withoutIva.total, 54500); assert.equal(result.withIva.total, 63220);
+  assert.equal(result.withoutIva.payment, null); assert.equal(result.withIva.payment, null);
+  assert.equal(state.paymentCalls.length, before);
+});
+
+test("explicit tax modes execute one existing payment calculation regardless of the input boolean", async () => {
+  for (const [mode, total] of [["without_iva", 54500], ["with_iva", 63220]]) {
+    const before = state.paymentCalls.length;
+    const result = await tools.calculate_trailer_price({ ...compactInput(), includeIva: mode !== "with_iva", payment: "default_deposit" }, mode);
+    assert.equal(result.total, total);
+    assert.equal(state.paymentCalls.length, before + 1);
+    assert.equal(state.paymentCalls.at(-1).total, total);
+    assert.equal(Object.hasOwn(result, "taxMode"), false);
+  }
+});
+
+test("both scenarios preserve extras, charges and discount and match the real pricing engine", async () => {
+  const { getEquipmentForModel } = await import("../app/lib/quoteCatalog.ts");
+  const equipment = getEquipmentForModel("food");
+  const fryer = equipment.find(entry => entry.id === "freidora");
+  const fridge = equipment.find(entry => entry.id === "refrigerador");
+  assert.ok(fryer); assert.ok(fridge);
+  const args = { ...compactInput(),
+    items: [fryer, fridge].map((entry, index) => ({ instanceId: `item_${index}`, typeId: entry.id, xCm: 10 + index * 90, yCm: 10, widthCm: entry.widthCm, depthCm: entry.depthCm, rotation: 0 })),
+    specialItems: [{ id: "custom", name: "Extra especial", widthCm: 30, depthCm: 30, price: 1000 }],
+    charges: [{ id: "freight", name: "Flete", price: 2000 }], discount: { type: "amount", value: 500 }, payment: "default_deposit",
+  };
+  const resolved = resolveCurrentPriceConfiguration(args);
+  const validated = currentPriceArgs(resolved);
+  const before = state.settingsCalls;
+  const result = await tools.calculate_trailer_price(args, "both");
+  for (const [scenario, includeIva] of [[result.withoutIva, false], [result.withIva, true]]) {
+    const expected = calculateVendorQuote(validated.presetId, validated.items, validated.specialItems, includeIva, state.settings, validated.discount, validated.charges);
+    assert.equal(scenario.total, expected.total); assert.equal(scenario.iva, expected.iva);
+    assert.equal(scenario.payment.deposit + scenario.payment.balance, expected.total);
+  }
+  assert.deepEqual(result.withoutIva.configuration, result.withIva.configuration);
+  assert.deepEqual(result.withoutIva.accessories, result.withIva.accessories);
+  assert.deepEqual(result.withoutIva.charges, result.withIva.charges);
+  assert.equal(result.withoutIva.discountAmount, result.withIva.discountAmount);
+  assert.equal(state.settingsCalls, before + 1);
+});
+
+test("a failed second payment scenario rejects the whole comparison without returning partial prices or raw errors", async () => {
+  state.failPaymentTotal = 63220;
+  const before = state.paymentCalls.length;
+  try {
+    await assert.rejects(tools.calculate_trailer_price({ ...compactInput(), payment: "default_deposit" }, "both"), error => {
+      assert.equal(error.code, "PAYMENT_CONFIGURATION_ERROR");
+      assert.equal(error.stage, "payment-calculation");
+      assert.doesNotMatch(JSON.stringify(safeToolFailure(error)), /PRIVATE_|SQL|SECRET|withoutIva|withIva|54500|63220/);
+      return true;
+    });
+    assert.deepEqual(state.paymentCalls.slice(before).map(call => call.total), [54500, 63220]);
+  } finally { state.failPaymentTotal = null; }
 });
 
 test.after(() => { hook.deregister(); delete globalThis.__salesTestState; });

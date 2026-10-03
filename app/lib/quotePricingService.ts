@@ -7,8 +7,10 @@ import { AiValidationError, currentPriceArgs, quoteIdArgs, type CurrentPriceInpu
 import { authorizeSalesOperation } from "./vendorAuthorization";
 import { resolveCurrentPriceConfiguration } from "./aiTrailerConfiguration";
 import { AiToolError } from "./aiToolErrors";
+import type { PricingTaxMode } from "./aiPricingTaxMode";
 
-export async function calculateCurrentVendorTrailerPrice(args: unknown) {
+// taxMode is internal server context, never a field accepted in tool arguments.
+export async function calculateCurrentVendorTrailerPrice(args: unknown, taxMode?: PricingTaxMode) {
   await authorizeSalesOperation("calculate_trailer_price");
   let input: CurrentPriceInput;
   try { input = currentPriceArgs(resolveCurrentPriceConfiguration(args)); }
@@ -26,9 +28,25 @@ export async function calculateCurrentVendorTrailerPrice(args: unknown) {
   let settings: Awaited<ReturnType<typeof getPricingSettings>>;
   try { settings = await getPricingSettings(); } // Never silently substitute defaults on fetch errors.
   catch { throw new AiToolError("PRICING_ERROR", "pricing-settings"); }
+  // Resolve configuration, payment terms and settings once. Both scenarios use
+  // the same validated input and settings snapshot; only includeIva differs.
+  if (taxMode === "both") return {
+    ok: true as const, taxMode,
+    withoutIva: calculateScenario(input, settings, payment, false),
+    withIva: calculateScenario(input, settings, payment, true),
+  };
+  return calculateScenario(input, settings, payment, taxMode === undefined ? input.includeIva : taxMode === "with_iva");
+}
+
+function calculateScenario(
+  input: CurrentPriceInput,
+  settings: Awaited<ReturnType<typeof getPricingSettings>>,
+  payment: Exclude<CurrentPriceInput["payment"], "default_deposit">,
+  includeIva: boolean,
+) {
   let quote: ReturnType<typeof calculateVendorQuote<CurrentPriceInput["specialItems"][number]>>;
   try {
-    quote = calculateVendorQuote(input.presetId, input.items, input.specialItems, input.includeIva, settings, input.discount, input.charges);
+    quote = calculateVendorQuote(input.presetId, input.items, input.specialItems, includeIva, settings, input.discount, input.charges);
     if (!Object.values(pricingSnapshot(quote)).filter(value => typeof value === "number").every(Number.isFinite)) throw new Error("Invalid calculation");
   } catch { throw new AiToolError("PRICING_ERROR", "pricing-calculation"); }
   let paymentPlan: ReturnType<typeof calculatePaymentPlan> | null = null;
