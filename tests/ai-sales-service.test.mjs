@@ -453,4 +453,49 @@ test("missing dimensions reach the model as safe missingFields rather than inven
   assert.equal(state.pricingReads, before);
 });
 
+test("exact Compact 250 sales message calculates with null dimensions and axles without asking for confirmation", async () => {
+  const salesMessage = "Calcula el precio vigente de un FG Compact 250, sin extras, sin descuento y sin cargos. Incluye IVA y dime anticipo y saldo.";
+  const before = state.pricingReads;
+  let requests = 0;
+  const args = { model: "food", quickModelId: "compact-250", widthCm: null, lengthCm: null, heightCm: null, axles: null, items: [], specialItems: [], charges: [], discount: null, includeIva: true, payment: "default_deposit", door: null };
+  const response = await runSalesAssistant({ message: salesMessage }, async payload => {
+    assert.equal(payload.instructions, SALES_AI_INSTRUCTIONS);
+    assert.deepEqual(JSON.parse(payload.input[0].content), { message: salesMessage, context: { quoteId: null } });
+    if (++requests === 1) return result([call("calculate_trailer_price", args, "quick_price")]);
+    const output = payload.input.find(item => item.type === "function_call_output");
+    assert.equal(output.call_id, "quick_price");
+    const calculated = JSON.parse(output.output);
+    assert.deepEqual([calculated.basePrice, calculated.iva, calculated.total, calculated.payment.depositPercent, calculated.payment.deposit, calculated.payment.balance], [54500, 8720, 63220, 50, 31610, 31610]);
+    assert.deepEqual(calculated.configuration, { widthCm: 180, lengthCm: 250, heightCm: 210, axles: 1 });
+    return result([message("Base: $54,500. IVA: $8,720. Total: $63,220. Anticipo: $31,610. Saldo: $31,610.")]);
+  });
+  assert.equal(requests, 2);
+  assert.equal(state.pricingReads, before + 1);
+  assert.equal(response.message, "Base: $54,500. IVA: $8,720. Total: $63,220. Anticipo: $31,610. Saldo: $31,610.");
+  assert.doesNotMatch(response.message, /[¿?]|prefieres|confirmar|cuántos ejes/i);
+});
+
+test("custom dimensions without a quick model can ask for axles when catalog offers multiple options and resolver has no default", async t => {
+  t.mock.method(console, "error", () => {});
+  const before = state.pricingReads;
+  let requests = 0;
+  const response = await runSalesAssistant({ message: "Calcula un food personalizado de 200 x 300 x 210 cm, sin extras. No he elegido los ejes." }, async payload => {
+    requests++;
+    if (requests === 1) return result([call("get_trailer_catalog", { model: "food" }, "custom_catalog")]);
+    if (requests === 2) {
+      const catalog = JSON.parse(payload.input.find(item => item.type === "function_call_output" && item.call_id === "custom_catalog").output);
+      const sizing = catalog.dimensions.find(entry => entry.lengthCm === 300);
+      assert.ok(sizing.axles.length > 1);
+      return result([call("calculate_trailer_price", priceArgs({ axles: null }), "missing_axles")]);
+    }
+    const failure = JSON.parse(payload.input.find(item => item.type === "function_call_output" && item.call_id === "missing_axles").output);
+    assert.equal(failure.error.code, "INVALID_TRAILER_CONFIGURATION");
+    assert.deepEqual(failure.error.missingFields, ["axles"]);
+    return result([message("Para esa configuración personalizada hay varias opciones válidas. ¿Cuántos ejes deseas?")]);
+  });
+  assert.equal(requests, 3);
+  assert.equal(state.pricingReads, before);
+  assert.match(response.message, /¿Cuántos ejes/);
+});
+
 test.after(() => { hook.deregister(); delete globalThis.__salesServiceTests; });
