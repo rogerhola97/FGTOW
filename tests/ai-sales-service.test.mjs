@@ -174,23 +174,22 @@ test("client distinguishes missing key, malformed JSON, incomplete response, net
   ];
   for (const [send, code] of cases) await assert.rejects(send(clientInput), error => error instanceof OpenAIServerError && error.code === code && !error.message.includes(fakeKey));
 });
-test("temporary endpoint probe sends only fixed model/input without prefetching records", async () => {
+test("temporary endpoint probe retrieves fixed model without body or prefetching records", async () => {
   const originalFetch = globalThis.fetch;
   const before = state.quoteReads;
   globalThis.fetch = async (url, options) => {
-    const body = JSON.parse(options.body);
-    assert.deepEqual(body, { model: "gpt-6-luna", input: "Responde únicamente: FG TOW IA OK" });
+    assert.equal(url, "https://api.openai.com/v1/models/gpt-6-luna");
+    assert.equal(options.method, "GET");
+    assert.equal(Object.hasOwn(options, "body"), false);
     const headers = new Headers(options.headers);
-    assert.deepEqual([...headers.keys()].sort(), ["authorization", "content-type"]);
-    assert.equal(headers.get("content-type"), "application/json");
+    assert.deepEqual([...headers.keys()], ["authorization"]);
     assert.equal(headers.get("authorization"), `Bearer ${fakeKey}`);
-    assert.doesNotMatch(JSON.stringify(body), /PRIVATE_|test-credential/);
-    return Response.json({ status: "completed", output: [message("Hola FG TOW")], usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 } });
+    return Response.json({ object: "model", id: "gpt-6-luna", owned_by: "openai" });
   };
   try {
     const response = await POST(request({ message: "  Hola vendedor  ", quoteId: "7" }, { origin: "https://fgtow.com" }));
     assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "no-store");
-    assert.deepEqual(await response.json(), { ok: true, message: "Hola FG TOW", usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 } });
+    assert.deepEqual(await response.json(), { ok: true, message: "Diagnóstico de acceso al modelo completado.", usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } });
     assert.equal(state.quoteReads, before);
   } finally { globalThis.fetch = originalFetch; }
 });
@@ -320,18 +319,19 @@ test("upstream message remains exclusively in server logs, never the browser res
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test("minimal production probe uses server key, requires session and logs only safe result", async t => {
+test("model access probe uses server key, requires session and logs only allowed fields", async t => {
   const logs = [];
   t.mock.method(console, "error", (...args) => logs.push(args));
   const originalFetch = globalThis.fetch, session = state.session;
   let calls = 0;
   globalThis.fetch = async (url, options) => {
     calls++;
-    assert.equal(url, "https://api.openai.com/v1/responses");
-    assert.deepEqual(JSON.parse(options.body), { model: "gpt-6-luna", input: "Responde únicamente: FG TOW IA OK" });
-    assert.deepEqual([...new Headers(options.headers).keys()].sort(), ["authorization", "content-type"]);
+    assert.equal(url, "https://api.openai.com/v1/models/gpt-6-luna");
+    assert.equal(options.method, "GET");
+    assert.equal(Object.hasOwn(options, "body"), false);
+    assert.deepEqual([...new Headers(options.headers).keys()], ["authorization"]);
     assert.equal(new Headers(options.headers).get("authorization"), `Bearer ${fakeKey}`);
-    return Response.json({ status: "completed", output: [message("FG TOW IA OK")], usage: { input_tokens: 4, output_tokens: 5, total_tokens: 9 }, extra: "PRIVATE_RESPONSE" }, { headers: { "x-request-id": "req_minimal" } });
+    return Response.json({ object: "model", id: "gpt-6-luna", owned_by: "openai", shutdown_date: "2027-01-01", extra: "PRIVATE_RESPONSE", created: 123 }, { headers: { "x-request-id": "req_model" } });
   };
   try {
     state.session = null;
@@ -341,10 +341,27 @@ test("minimal production probe uses server key, requires session and logs only s
     const response = await POST(request({ message: "PRIVATE_MESSAGE" }));
     assert.equal(response.status, 200);
     assert.equal(calls, 1);
-    assert.deepEqual(logs, [["OPENAI_MINIMAL_DIAGNOSTIC", { status: 200, contentType: "application/json", requestId: "req_minimal", responseOk: true, hasOutputText: true, text: "FG TOW IA OK", usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9 } }]]);
+    assert.deepEqual(logs, [["OPENAI_MODEL_DIAGNOSTIC", { status: 200, contentType: "application/json", requestId: "req_model", responseOk: true, object: "model", id: "gpt-6-luna", owned_by: "openai", shutdown_date: "2027-01-01" }]]);
     assert.doesNotMatch(JSON.stringify(logs), /test-credential|Authorization|PRIVATE_|cookie|instructions|arguments/);
-    assert.doesNotMatch(JSON.stringify(await response.json()), /test-credential|requestId|req_minimal|PRIVATE_/);
+    assert.doesNotMatch(JSON.stringify(await response.json()), /test-credential|requestId|req_model|PRIVATE_|owned_by|shutdown_date/);
   } finally { state.session = session; globalThis.fetch = originalFetch; }
+});
+
+test("model probe logs only sanitized error fields for 401, 403 and 404", async t => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  for (const status of [401, 403, 404]) {
+    const send = createResponsesClient({ modelAccessDiagnostic: true, readKey: () => fakeKey, fetch: async (url, options) => {
+      assert.equal(url, "https://api.openai.com/v1/models/gpt-6-luna");
+      assert.equal(options.method, "GET");
+      assert.equal(Object.hasOwn(options, "body"), false);
+      assert.deepEqual([...new Headers(options.headers).keys()], ["authorization"]);
+      return Response.json({ error: { code: "model_not_found", type: "invalid_request_error", param: "model", message: `Invalid model ${fakeKey}\n` }, extra: "PRIVATE_RESPONSE" }, { status, headers: { "x-request-id": "req_model_error" } });
+    } });
+    await assert.rejects(send(clientInput), error => error.code === (status === 404 ? "AI_HTTP_ERROR" : "AI_UPSTREAM_AUTH"));
+    assert.deepEqual(logs.at(-1), ["OPENAI_MODEL_DIAGNOSTIC", { status, contentType: "application/json", requestId: "req_model_error", responseOk: false, code: "model_not_found", type: "invalid_request_error", param: "model", upstreamMessage: "Invalid model [REDACTED] " }]);
+  }
+  assert.doesNotMatch(JSON.stringify(logs), /test-credential|PRIVATE_|Authorization|cookie|instructions|retryAfter|clientRequestId/);
 });
 
 test.after(() => { hook.deregister(); delete globalThis.__salesServiceTests; });

@@ -6,8 +6,8 @@ export const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 export const OPENAI_TIMEOUT_MS = 30_000;
 export const MAX_OUTPUT_TOKENS = 1500;
 // TEMPORARY production isolation probe. Set to false to restore the validated payload.
-const MINIMAL_OPENAI_DIAGNOSTIC = true;
-const MINIMAL_DIAGNOSTIC_INPUT = "Responde únicamente: FG TOW IA OK";
+const MODEL_ACCESS_DIAGNOSTIC = true;
+const MODEL_ACCESS_URL = `https://api.openai.com/v1/models/${SALES_AI_MODEL}`;
 
 export type FunctionTool = {
   type: "function"; name: string; description: string; strict: true;
@@ -80,27 +80,27 @@ async function readErrorMetadata(response: Response): Promise<Record<string, unk
 
 // Dependencies are server code only, never accepted from an HTTP payload. No retries.
 export function createResponsesClient(dependencies: {
-  fetch?: typeof fetch; readKey?: () => string | undefined; timeoutMs?: number; minimalDiagnostic?: boolean;
+  fetch?: typeof fetch; readKey?: () => string | undefined; timeoutMs?: number; modelAccessDiagnostic?: boolean;
 } = {}): ResponsesTransport {
   return async ({ instructions, input, tools }) => {
     const key = (dependencies.readKey ?? (() => readEnv("OPENAI_API_KEY")))();
     if (!key) throw new OpenAIServerError("AI_NOT_CONFIGURED", 503, "El asistente no está configurado.");
-    const minimalDiagnostic = dependencies.minimalDiagnostic === true;
-    const clientRequestId = minimalDiagnostic ? null : crypto.randomUUID();
+    const modelAccessDiagnostic = dependencies.modelAccessDiagnostic === true;
+    const clientRequestId = modelAccessDiagnostic ? null : crypto.randomUUID();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), dependencies.timeoutMs ?? OPENAI_TIMEOUT_MS);
     let requestId: string | null = null;
     try {
-      const response = await (dependencies.fetch ?? fetch)(OPENAI_RESPONSES_URL, {
-        method: "POST", signal: controller.signal,
-        headers: minimalDiagnostic
-          ? { authorization: `Bearer ${key}`, "content-type": "application/json" }
+      const response = await (dependencies.fetch ?? fetch)(modelAccessDiagnostic ? MODEL_ACCESS_URL : OPENAI_RESPONSES_URL, {
+        method: modelAccessDiagnostic ? "GET" : "POST", signal: controller.signal,
+        headers: modelAccessDiagnostic
+          ? { authorization: `Bearer ${key}` }
           : { authorization: `Bearer ${key}`, "content-type": "application/json", "X-Client-Request-Id": clientRequestId! },
-        body: JSON.stringify(minimalDiagnostic ? { model: SALES_AI_MODEL, input: MINIMAL_DIAGNOSTIC_INPUT } : {
+        ...(modelAccessDiagnostic ? {} : { body: JSON.stringify({
           model: SALES_AI_MODEL, reasoning: { effort: "low" }, store: false,
           max_output_tokens: MAX_OUTPUT_TOKENS, instructions, input, tools,
           parallel_tool_calls: false, include: ["reasoning.encrypted_content"],
-        }),
+        }) }),
       });
       const header = response.headers.get("x-request-id");
       requestId = safeMetadata(header, /^[A-Za-z0-9_-]+$/, 200, key);
@@ -110,11 +110,11 @@ export function createResponsesClient(dependencies: {
         const isJson = /^application\/(?:json|[a-z0-9!#$&^_.+-]+\+json)(?:\s*;|\s*$)/i.test(rawContentType ?? "");
         const upstream = isJson ? await readErrorMetadata(response) : null;
         const retry = response.headers.get("retry-after");
-        console.error("OPENAI_UPSTREAM_ERROR", {
-          status: response.status, contentType, requestId, clientRequestId,
-          ...(minimalDiagnostic ? { responseOk: response.ok, text: null, usage: null } : {}),
+        console.error(modelAccessDiagnostic ? "OPENAI_MODEL_DIAGNOSTIC" : "OPENAI_UPSTREAM_ERROR", {
+          status: response.status, contentType, requestId,
+          ...(modelAccessDiagnostic ? { responseOk: response.ok } : { clientRequestId }),
           ...(upstream ? {
-          retryAfter: safeMetadata(retry, /^(?:\d{1,10}|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT)$/, 64, key),
+          ...(modelAccessDiagnostic ? {} : { retryAfter: safeMetadata(retry, /^(?:\d{1,10}|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT)$/, 64, key) }),
           code: safeMetadata(upstream.code, /^[A-Za-z][A-Za-z0-9_-]*$/, 100, key),
           type: safeMetadata(upstream.type, /^[A-Za-z][A-Za-z0-9_-]*$/, 100, key),
           param: safeMetadata(upstream.param, /^[A-Za-z_][A-Za-z0-9_.\[\]-]*$/, 200, key),
@@ -132,23 +132,26 @@ export function createResponsesClient(dependencies: {
       }
       if (!data || typeof data !== "object" || Array.isArray(data)) throw new OpenAIServerError("AI_INVALID_RESPONSE", 502, "Respuesta de IA inválida.", requestId);
       const raw = data as Record<string, unknown>;
+      if (modelAccessDiagnostic) {
+        console.error("OPENAI_MODEL_DIAGNOSTIC", {
+          status: response.status, responseOk: response.ok,
+          contentType: safeMetadata(response.headers.get("content-type"), /^[A-Za-z0-9!#$&^_.+\/;= -]+$/, 120, key),
+          requestId,
+          object: safeMetadata(raw.object, /^[A-Za-z][A-Za-z0-9_-]*$/, 100, key),
+          id: safeMetadata(raw.id, /^[A-Za-z][A-Za-z0-9_.-]*$/, 200, key),
+          owned_by: safeMetadata(raw.owned_by, /^[A-Za-z][A-Za-z0-9_.-]*$/, 100, key),
+          ...(Object.hasOwn(raw, "shutdown_date") ? { shutdown_date: safeMetadata(raw.shutdown_date, /^\d{4}-\d{2}-\d{2}$/, 10, key) } : {}),
+        });
+        return {
+          output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Diagnóstico de acceso al modelo completado." }] }],
+          requestId, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        };
+      }
       if (raw.status === "incomplete") throw new OpenAIServerError("AI_INCOMPLETE", 502, "La respuesta de IA quedó incompleta. Simplifica la pregunta.", requestId);
       if (raw.status !== "completed" || !Array.isArray(raw.output) || raw.output.length > 32 || raw.output.some(item => !item || typeof item !== "object" || typeof item.type !== "string")) throw new OpenAIServerError("AI_INVALID_RESPONSE", 502, "Respuesta de IA inválida.", requestId);
       const usage = raw.usage && typeof raw.usage === "object" ? raw.usage as Record<string, unknown> : {};
       const inputTokens = tokenCount(usage.input_tokens), outputTokens = tokenCount(usage.output_tokens);
       const normalizedUsage = { inputTokens, outputTokens, totalTokens: tokenCount(usage.total_tokens) || inputTokens + outputTokens };
-      if (minimalDiagnostic) {
-        const text = (raw.output as ResponseItem[]).filter(item => item.type === "message")
-          .flatMap(item => Array.isArray(item.content) ? item.content : [])
-          .filter(item => item?.type === "output_text" && typeof item.text === "string")
-          .map(item => item.text).join("\n");
-        console.error("OPENAI_MINIMAL_DIAGNOSTIC", {
-          status: response.status,
-          contentType: safeMetadata(response.headers.get("content-type"), /^[A-Za-z0-9!#$&^_.+\/;= -]+$/, 120, key),
-          requestId, responseOk: response.ok, hasOutputText: Boolean(text),
-          text: safeUpstreamMessage(text, key, "", []), usage: raw.usage ? normalizedUsage : null,
-        });
-      }
       return { output: raw.output as ResponseItem[], requestId, usage: normalizedUsage };
     } catch (error) {
       if (error instanceof OpenAIServerError) { error.clientRequestId = clientRequestId; throw error; }
@@ -160,4 +163,4 @@ export function createResponsesClient(dependencies: {
     } finally { clearTimeout(timer); }
   };
 }
-export const sendSalesResponse = createResponsesClient({ minimalDiagnostic: MINIMAL_OPENAI_DIAGNOSTIC });
+export const sendSalesResponse = createResponsesClient({ modelAccessDiagnostic: MODEL_ACCESS_DIAGNOSTIC });
