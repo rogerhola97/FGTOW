@@ -47,15 +47,6 @@ const reasons = [
 export default function Home() {
   return (
     <main>
-      <div className="topbar">
-        <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer" className="topbar-location"><LocationIcon className="topbar-icon" />{FABRICATION_ADDRESS}</a>
-        <div className="topbar-social" aria-label="Redes sociales de FG TOW">
-          <a href={WHATSAPP_URL} target="_blank" rel="noreferrer" className="topbar-whatsapp" aria-label={`WhatsApp ${WHATSAPP_NUMBER}`}><WhatsAppIcon className="topbar-icon" /><span>{WHATSAPP_NUMBER}</span></a>
-          <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="Instagram"><InstagramIcon className="topbar-icon" /></a>
-          <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="Facebook"><FacebookIcon className="topbar-icon" /></a>
-        </div>
-      </div>
-
       <header className="nav-shell">
         <Link href="/" className="brand" aria-label="FG TOW, inicio">
           <Image src="/fg-tow-logo.png" alt="FG TOW" width={190} height={58} priority unoptimized />
@@ -75,6 +66,10 @@ export default function Home() {
           <div className="hero-actions">
             <a className="button" href="#modelos">Ver modelos</a>
             <a className="button button-whatsapp" href={WHATSAPP_URL} target="_blank" rel="noreferrer"><WhatsAppIcon className="inline-icon" />Escríbenos por WhatsApp</a>
+          </div>
+          <div className="hero-social" aria-label="Redes sociales de FG TOW">
+            <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="Instagram"><InstagramIcon className="hero-social-icon" /></a>
+            <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="Facebook"><FacebookIcon className="hero-social-icon" /></a>
           </div>
           <div className="hero-contact" aria-label="Contacto directo">
             <a href={FABRICATION_MAPS_URL} target="_blank" rel="noreferrer" className="hero-contact-card">
